@@ -1,0 +1,86 @@
+import type { ReactNode } from "react";
+import Link from "next/link";
+import {
+  Bell,
+  BookOpenText,
+  BriefcaseBusiness,
+  CalendarDays,
+  ChevronDown,
+  Gift,
+  Grid2X2,
+  HeartHandshake,
+  LayoutDashboard,
+  LogOut,
+  Menu,
+  MessageSquareText,
+  Search,
+  SunMedium,
+  UserRound,
+  WalletCards,
+} from "lucide-react";
+import { BrandMark } from "@/components/brand-mark";
+import type { MemberIdentity } from "@/lib/member-auth";
+import { getMemberUnreadCount } from "@/lib/messaging";
+
+const navItems = [
+  { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
+  { label: "Birth Chart", icon: Grid2X2, href: "/dashboard" },
+  { label: "My Consultations", icon: BookOpenText, href: "/dashboard/consultations" },
+  { label: "Studio Inbox", icon: MessageSquareText, href: "/dashboard/messages" },
+  { label: "Billing & Receipts", icon: WalletCards, href: "/dashboard/billing" },
+  { label: "Daily Horoscope", icon: SunMedium, href: "/dashboard#insights" },
+  { label: "Panchang", icon: CalendarDays, href: "/dashboard#insights" },
+  { label: "Connections", icon: HeartHandshake, href: "/dashboard#services-list" },
+  { label: "Career & Dharma", icon: BriefcaseBusiness, href: "/book" },
+  { label: "Your Rewards", icon: Gift, href: "/dashboard#services-list" },
+];
+
+function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing" }) {
+  const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <>
+      <div className="dashboard-brand"><BrandMark /></div>
+      <nav className="app-nav" aria-label="Member navigation">
+        <p>My cosmos</p>
+        {navItems.map(({ label, icon: Icon, href }) => {
+          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart");
+          return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
+        })}
+        <p className="app-nav__lower">Account</p>
+        <Link href="/onboarding"><UserRound size={18} strokeWidth={1.5} /><span>Birth profile</span></Link>
+      </nav>
+      <div className="profile-chip">
+        <span className="profile-avatar">{initials}</span>
+        <span><strong>{member.name}</strong><small>{member.plan} plan</small></span>
+        <form action="/api/member/logout" method="post"><button aria-label="Sign out" title="Sign out"><LogOut size={16} /></button></form>
+      </div>
+    </>
+  );
+}
+
+export async function MemberAppShell({ member, active, children }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing"; children: ReactNode }) {
+  const unreadCount = await getMemberUnreadCount(member.id);
+  const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
+  return (
+    <main className="app-background">
+      <div className="app-frame">
+        <aside className="app-sidebar"><MemberNav member={member} active={active} /></aside>
+        <div className="mobile-app-nav">
+          <BrandMark />
+          <details><summary aria-label="Open member navigation"><Menu size={22} /></summary><div className="mobile-drawer"><MemberNav member={member} active={active} /></div></details>
+        </div>
+        <section className="app-content">
+          <header className="app-topbar">
+            <nav><Link className={active === "Dashboard" ? "active" : ""} href="/dashboard">Dashboard</Link><Link className={active === "Consultations" ? "active" : ""} href="/dashboard/consultations">My consultations</Link><Link className={active === "Messages" ? "active" : ""} href="/dashboard/messages">Inbox</Link><Link className={active === "Billing" ? "active" : ""} href="/dashboard/billing">Billing</Link></nav>
+            <div className="topbar-tools">
+              <label><Search size={16} /><input aria-label="Search dashboard" placeholder="Search" /></label>
+              <Link className="notification-button" href="/dashboard/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <span />}</Link>
+              <span className="top-avatar">{initials}</span>
+            </div>
+          </header>
+          <div className="dashboard-scroll">{children}</div>
+        </section>
+      </div>
+    </main>
+  );
+}
