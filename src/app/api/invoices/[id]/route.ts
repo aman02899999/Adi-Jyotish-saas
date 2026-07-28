@@ -3,7 +3,7 @@ import { db } from "@/db";
 import { bookings, invoices, payments } from "@/db/schema";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { sendBookingNotification } from "@/lib/messaging";
-import { getStripe } from "@/lib/stripe";
+import { getRazorpay } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 
@@ -102,11 +102,17 @@ async function refundInvoice(id: number) {
   let refundStatus = "succeeded";
   try {
     if (claimed.payment.provider === "stripe") {
-      const stripe = getStripe();
+      const stripe = getRazorpay();
       if (!stripe || !claimed.payment.paymentIntentId) throw new Error("Stripe refund is unavailable for this payment.");
-      const refund = await stripe.refunds.create({ payment_intent: claimed.payment.paymentIntentId, reason: "requested_by_customer", metadata: { invoiceId: String(claimed.invoice.id), bookingId: String(claimed.booking.id) } }, { idempotencyKey: `invoice-refund-${claimed.invoice.id}` });
+      const refund = await stripe.payments.refund(claimed.payment.paymentIntentId, {
+        amount: Math.round(claimed.invoice.amount * 100),
+        notes: {
+          invoiceId: String(claimed.invoice.id),
+          bookingId: String(claimed.booking.id),
+        },
+      });
       refundId = refund.id;
-      refundStatus = refund.status ?? "pending";
+      refundStatus = refund.status ?? "processed";
     } else {
       refundId = `manual_${crypto.randomUUID()}`;
     }

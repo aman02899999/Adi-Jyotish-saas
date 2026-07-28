@@ -3,7 +3,7 @@ import { NextResponse, type NextRequest } from "next/server";
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function proxy(request: NextRequest) {
-  if (!unsafeMethods.has(request.method) || request.nextUrl.pathname === "/api/webhooks/stripe") {
+  if (!unsafeMethods.has(request.method) || request.nextUrl.pathname === "/api/webhooks/razorpay") {
     return NextResponse.next();
   }
 

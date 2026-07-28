@@ -221,9 +221,9 @@ export const payments = pgTable("payments", {
   index("payments_payment_intent_idx").on(table.paymentIntentId),
 ]);
 
-export const stripeEvents = pgTable("stripe_events", {
+export const razorpayEvents = pgTable("razorpay_events", {
   id: serial("id").primaryKey(),
-  stripeEventId: varchar("stripe_event_id", { length: 180 }).notNull().unique(),
+  razorpayEventId: varchar("razorpay_event_id", { length: 180 }).notNull().unique(),
   type: varchar("type", { length: 100 }).notNull(),
   processedAt: timestamp("processed_at", { withTimezone: true }).notNull().defaultNow(),
 });
