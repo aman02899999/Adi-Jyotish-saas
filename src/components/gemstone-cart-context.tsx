@@ -47,7 +47,11 @@ export function GemstoneCartProvider({ children }: { children: ReactNode }) {
   // Reading localStorage during the initial render (instead of here) would mismatch the server-rendered empty cart and trigger a hydration error.
   // eslint-disable-next-line react-hooks/set-state-in-effect
   useEffect(() => { setLines(readStoredCart()); setHydrated(true); }, []);
-  useEffect(() => { if (hydrated) window.localStorage.setItem(STORAGE_KEY, JSON.stringify(lines)); }, [lines, hydrated]);
+  useEffect(() => {
+    if (!hydrated) return;
+    window.localStorage.setItem(STORAGE_KEY, JSON.stringify(lines));
+    window.dispatchEvent(new CustomEvent("gemstone-cart-updated"));
+  }, [lines, hydrated]);
 
   const addLine = useCallback((line: Omit<CartLine, "quantity">, quantity = 1) => {
     setLines((current) => {

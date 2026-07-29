@@ -2,15 +2,17 @@
 
 import Link from "next/link";
 import { useRouter } from "next/navigation";
-import { useState } from "react";
-import { Scale, Search, SlidersHorizontal, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { ChevronDown, Scale, Search, SlidersHorizontal, X } from "lucide-react";
 import { GemstoneProductCard } from "@/components/gemstone-product-card";
 import type { ProductListItem } from "@/lib/gemstones";
 
 type CategorySummary = { slug: string; name: string; productCount: number };
+type FilterState = Record<string, string | undefined>;
 
 const ZODIAC_SIGNS = ["Aries", "Taurus", "Gemini", "Cancer", "Leo", "Virgo", "Libra", "Scorpio", "Sagittarius", "Capricorn", "Aquarius", "Pisces"];
 const PLANETS = ["Sun", "Moon", "Mars", "Mercury", "Jupiter", "Venus", "Saturn", "Rahu", "Ketu"];
+const FILTER_KEYS = ["category", "minPrice", "maxPrice", "zodiac", "planet", "featured", "trending", "bestseller"] as const;
 
 export function GemstoneShopExplorer({ initialItems, total, page, pageSize, categories, initialFilters, wishlistIds, signedIn }: {
   initialItems: ProductListItem[];
@@ -18,14 +20,25 @@ export function GemstoneShopExplorer({ initialItems, total, page, pageSize, cate
   page: number;
   pageSize: number;
   categories: CategorySummary[];
-  initialFilters: Record<string, string | undefined>;
+  initialFilters: FilterState;
   wishlistIds: number[];
   signedIn: boolean;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState(initialFilters.search ?? "");
   const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [filtersOpen, setFiltersOpen] = useState(false);
+  const [draft, setDraft] = useState<FilterState>(initialFilters);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
+  const activeFilterCount = FILTER_KEYS.filter((key) => initialFilters[key]).length;
+
+  useEffect(() => {
+    // Resyncs local search/draft state when the URL-driven filters change from outside this
+    // component's own apply/clear calls (e.g. browser back/forward), so the panel never drifts from the URL.
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setSearch(initialFilters.search ?? "");
+    setDraft(initialFilters);
+  }, [initialFilters]);
 
   function updateParam(key: string, value: string | null) {
     const params = new URLSearchParams(initialFilters as Record<string, string>);
@@ -34,66 +47,46 @@ export function GemstoneShopExplorer({ initialItems, total, page, pageSize, cate
     router.push(`/gemstones/shop?${params.toString()}`);
   }
 
+  function setDraftValue(key: string, value: string | undefined) {
+    setDraft((current) => ({ ...current, [key]: value }));
+  }
+
+  function applyFilters() {
+    const params = new URLSearchParams();
+    Object.entries({ ...initialFilters, ...draft }).forEach(([key, value]) => {
+      if (key === "page") return;
+      if (value) params.set(key, value);
+    });
+    router.push(`/gemstones/shop?${params.toString()}`);
+    setFiltersOpen(false);
+  }
+
+  function clearFilters() {
+    const params = new URLSearchParams();
+    if (initialFilters.search) params.set("search", initialFilters.search);
+    if (initialFilters.sort) params.set("sort", initialFilters.sort);
+    router.push(`/gemstones/shop${params.toString() ? `?${params.toString()}` : ""}`);
+    setFiltersOpen(false);
+  }
+
   function toggleCompare(id: number) {
     setCompareIds((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 3 ? [...current, id] : current);
   }
 
   return (
     <section className="shop-layout shell">
-      <aside className="shop-filters">
-        <div className="shop-filters__head"><SlidersHorizontal size={15} /> Filters</div>
+      <div className="shop-toolbar">
+        <button type="button" className={`shop-filter-toggle${filtersOpen ? " active" : ""}`} aria-expanded={filtersOpen} onClick={() => setFiltersOpen((open) => !open)}>
+          <SlidersHorizontal size={15} /> Filters
+          {activeFilterCount > 0 && <span className="shop-filter-toggle__count">{activeFilterCount}</span>}
+          <ChevronDown size={14} />
+        </button>
 
         <form className="shop-search" onSubmit={(event) => { event.preventDefault(); updateParam("search", search || null); }}>
           <Search size={15} /><input value={search} onChange={(event) => setSearch(event.target.value)} placeholder="Search gemstones…" />
         </form>
 
-        <div className="shop-filter-group">
-          <h4>Category</h4>
-          <button className={!initialFilters.category ? "active" : ""} onClick={() => updateParam("category", null)}>All categories</button>
-          {categories.map((category) => (
-            <button key={category.slug} className={initialFilters.category === category.slug ? "active" : ""} onClick={() => updateParam("category", category.slug)}>{category.name} <small>({category.productCount})</small></button>
-          ))}
-        </div>
-
-        <div className="shop-filter-group">
-          <h4>Price range</h4>
-          <div className="shop-price-range">
-            <input type="number" min="0" placeholder="Min" defaultValue={initialFilters.minPrice ?? ""} onBlur={(event) => updateParam("minPrice", event.target.value || null)} />
-            <span>–</span>
-            <input type="number" min="0" placeholder="Max" defaultValue={initialFilters.maxPrice ?? ""} onBlur={(event) => updateParam("maxPrice", event.target.value || null)} />
-          </div>
-        </div>
-
-        <div className="shop-filter-group">
-          <h4>Zodiac sign</h4>
-          <select value={initialFilters.zodiac ?? ""} onChange={(event) => updateParam("zodiac", event.target.value || null)}>
-            <option value="">Any sign</option>
-            {ZODIAC_SIGNS.map((sign) => <option key={sign} value={sign}>{sign}</option>)}
-          </select>
-        </div>
-
-        <div className="shop-filter-group">
-          <h4>Planet</h4>
-          <select value={initialFilters.planet ?? ""} onChange={(event) => updateParam("planet", event.target.value || null)}>
-            <option value="">Any planet</option>
-            {PLANETS.map((planet) => <option key={planet} value={planet}>{planet}</option>)}
-          </select>
-        </div>
-
-        <div className="shop-filter-group">
-          <h4>Collections</h4>
-          <label><input type="checkbox" checked={initialFilters.featured === "1"} onChange={(event) => updateParam("featured", event.target.checked ? "1" : null)} /> Featured</label>
-          <label><input type="checkbox" checked={initialFilters.trending === "1"} onChange={(event) => updateParam("trending", event.target.checked ? "1" : null)} /> Trending</label>
-          <label><input type="checkbox" checked={initialFilters.bestseller === "1"} onChange={(event) => updateParam("bestseller", event.target.checked ? "1" : null)} /> Bestseller</label>
-        </div>
-
-        {(initialFilters.category || initialFilters.search || initialFilters.minPrice || initialFilters.maxPrice || initialFilters.zodiac || initialFilters.planet || initialFilters.featured || initialFilters.trending || initialFilters.bestseller) && (
-          <Link href="/gemstones/shop" className="shop-clear-filters"><X size={13} /> Clear all filters</Link>
-        )}
-      </aside>
-
-      <div className="shop-results">
-        <div className="shop-results__head">
+        <div className="shop-toolbar__meta">
           <span>{total} gemstone{total === 1 ? "" : "s"}</span>
           <div className="filter-select">
             <select value={initialFilters.sort ?? "newest"} onChange={(event) => updateParam("sort", event.target.value)}>
@@ -106,7 +99,60 @@ export function GemstoneShopExplorer({ initialItems, total, page, pageSize, cate
             </select>
           </div>
         </div>
+      </div>
 
+      {filtersOpen && (
+        <div className="shop-filters">
+          <div className="shop-filter-group">
+            <h4>Category</h4>
+            <div className="shop-filter-group__scroll">
+              <button type="button" className={!draft.category ? "active" : ""} onClick={() => setDraftValue("category", undefined)}>All categories</button>
+              {categories.map((category) => (
+                <button type="button" key={category.slug} className={draft.category === category.slug ? "active" : ""} onClick={() => setDraftValue("category", category.slug)}>{category.name} <small>({category.productCount})</small></button>
+              ))}
+            </div>
+          </div>
+
+          <div className="shop-filter-group">
+            <h4>Price range</h4>
+            <div className="shop-price-range">
+              <input type="number" min="0" placeholder="Min" value={draft.minPrice ?? ""} onChange={(event) => setDraftValue("minPrice", event.target.value || undefined)} />
+              <span>–</span>
+              <input type="number" min="0" placeholder="Max" value={draft.maxPrice ?? ""} onChange={(event) => setDraftValue("maxPrice", event.target.value || undefined)} />
+            </div>
+          </div>
+
+          <div className="shop-filter-group">
+            <h4>Zodiac sign</h4>
+            <select value={draft.zodiac ?? ""} onChange={(event) => setDraftValue("zodiac", event.target.value || undefined)}>
+              <option value="">Any sign</option>
+              {ZODIAC_SIGNS.map((sign) => <option key={sign} value={sign}>{sign}</option>)}
+            </select>
+          </div>
+
+          <div className="shop-filter-group">
+            <h4>Planet</h4>
+            <select value={draft.planet ?? ""} onChange={(event) => setDraftValue("planet", event.target.value || undefined)}>
+              <option value="">Any planet</option>
+              {PLANETS.map((planet) => <option key={planet} value={planet}>{planet}</option>)}
+            </select>
+          </div>
+
+          <div className="shop-filter-group">
+            <h4>Collections</h4>
+            <label><input type="checkbox" checked={draft.featured === "1"} onChange={(event) => setDraftValue("featured", event.target.checked ? "1" : undefined)} /> Featured</label>
+            <label><input type="checkbox" checked={draft.trending === "1"} onChange={(event) => setDraftValue("trending", event.target.checked ? "1" : undefined)} /> Trending</label>
+            <label><input type="checkbox" checked={draft.bestseller === "1"} onChange={(event) => setDraftValue("bestseller", event.target.checked ? "1" : undefined)} /> Bestseller</label>
+          </div>
+
+          <div className="shop-filters__actions">
+            <button type="button" className="shop-clear-filters" onClick={clearFilters}><X size={13} /> Clear all filters</button>
+            <button type="button" className="button button--small" onClick={applyFilters}>Apply filters</button>
+          </div>
+        </div>
+      )}
+
+      <div className="shop-results">
         <div className="product-grid">
           {initialItems.map((product) => (
             <div className="product-card-wrap" key={product.id}>
