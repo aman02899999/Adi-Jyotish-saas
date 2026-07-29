@@ -40,7 +40,7 @@ export const practitioners = pgTable("practitioners", {
   verificationLevel: varchar("verification_level", { length: 40 }).notNull().default("reviewed"),
   photoUrl: text("photo_url"),
   online: boolean("online").notNull().default(false),
-  chatRatePerMinute: integer("chat_rate_per_minute").notNull().default(5),
+  chatRatePerMinute: integer("chat_rate_per_minute").notNull().default(15),
   active: boolean("active").notNull().default(true),
   featured: boolean("featured").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),

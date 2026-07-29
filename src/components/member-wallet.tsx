@@ -6,7 +6,7 @@ import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 export type WalletEntryRow = { id: number; type: string; amount: number; balanceAfter: number; referenceType: string | null; createdAt: Date | string };
 
-const PRESETS = [10, 25, 50, 100];
+const PRESETS = [100, 250, 500, 1000];
 
 export function MemberWallet({ balance, currency, entries, onlinePaymentsAvailable, member }: {
   balance: number;
@@ -15,7 +15,7 @@ export function MemberWallet({ balance, currency, entries, onlinePaymentsAvailab
   onlinePaymentsAvailable: boolean;
   member: { name: string; email: string };
 }) {
-  const [amount, setAmount] = useState(25);
+  const [amount, setAmount] = useState(250);
   const [loading, setLoading] = useState(false);
   const [notice, setNotice] = useState("");
   const [liveBalance, setLiveBalance] = useState(balance);
@@ -63,7 +63,7 @@ export function MemberWallet({ balance, currency, entries, onlinePaymentsAvailab
         <header><div><p>Add funds</p><h2>Recharge your wallet</h2></div></header>
         <div className="wallet-recharge">
           <div className="wallet-presets">{PRESETS.map((value) => <button key={value} className={value === amount ? "active" : ""} onClick={() => setAmount(value)}>{currency} {value}</button>)}</div>
-          <div className="wallet-custom"><label>Custom amount<div className="input-prefix"><b>{currency}</b><input type="number" min={5} max={1000} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div></label>
+          <div className="wallet-custom"><label>Custom amount<div className="input-prefix"><b>{currency}</b><input type="number" min={50} max={50000} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div></label>
             <button className="button" disabled={loading || !onlinePaymentsAvailable} onClick={recharge}><PlusCircle size={16} />{loading ? "Opening…" : `Add ${currency} ${amount}`}</button>
           </div>
         </div>

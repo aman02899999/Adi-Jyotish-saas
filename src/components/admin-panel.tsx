@@ -46,7 +46,7 @@ const emptyForm: FormState = {
   title: "",
   category: "Foundations",
   description: "",
-  price: "49",
+  price: "1499",
   duration: "45",
   icon: "sparkles",
   active: true,

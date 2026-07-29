@@ -51,7 +51,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
       verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
       photoUrl:photoUrl?photoUrl.slice(0,500):null,
       online:body.online??false,
-      chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||5),
+      chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||15),
       active:body.active??true,
       featured:body.featured??false,
       updatedAt:new Date(),

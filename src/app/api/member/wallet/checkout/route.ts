@@ -3,8 +3,8 @@ import { getRazorpay } from "@/lib/razorpay";
 import { getOrCreateWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
-const MIN_RECHARGE = 5;
-const MAX_RECHARGE = 1000;
+const MIN_RECHARGE = 50;
+const MAX_RECHARGE = 50000;
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();

@@ -36,6 +36,13 @@
       "when": 1785290690650,
       "tag": "0004_default_currency_inr",
       "breakpoints": true
+    },
+    {
+      "idx": 5,
+      "version": "7",
+      "when": 1785291332409,
+      "tag": "0005_realistic_inr_defaults",
+      "breakpoints": true
     }
   ]
 }

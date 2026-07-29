@@ -18,6 +18,7 @@ const starterPractitioners = [
     experienceYears: 14,
     verified: true,
     verificationLevel: "senior-panel",
+    chatRatePerMinute: 19,
     active: true,
     featured: true,
   },
@@ -33,6 +34,7 @@ const starterPractitioners = [
     experienceYears: 10,
     verified: true,
     verificationLevel: "verified-panel",
+    chatRatePerMinute: 15,
     active: true,
     featured: false,
   },
@@ -50,6 +52,7 @@ export async function seedPractitioners() {
       experienceYears: starter.experienceYears,
       verified: starter.verified,
       verificationLevel: starter.verificationLevel,
+      chatRatePerMinute: starter.chatRatePerMinute,
       featured: starter.featured,
     }).where(eq(practitioners.slug, starter.slug));
   }
