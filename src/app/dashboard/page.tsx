@@ -41,7 +41,7 @@ export default async function DashboardPage() {
         <article className="glass-card kundli-card">
           <div className="card-heading"><div><p>Birth chart <span className="mini-tag">Raman</span></p><h2>Kundli</h2></div><button aria-label="More options"><MoreHorizontal size={19} /></button></div>
           <div className="kundli-art">
-            <Image src="/images/orbital-system.png" alt="Your Vedic planetary chart" fill priority sizes="(max-width: 900px) 90vw, 48vw" />
+            <Image src="/images/orbital-system.jpg" alt="Your Vedic planetary chart" fill priority sizes="(max-width: 900px) 90vw, 48vw" />
             <div className="chart-constellation chart-constellation--one">✦ · ─ · ✦</div>
             <div className="chart-constellation chart-constellation--two">· ✦<br />╲ · ✦</div>
           </div>

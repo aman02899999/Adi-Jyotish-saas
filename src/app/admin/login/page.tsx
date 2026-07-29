@@ -15,7 +15,7 @@ export default async function AdminLoginPage() {
   return (
     <main className="admin-auth-page">
       <section className="admin-auth-art">
-        <Image src="/images/orbital-system.png" fill priority sizes="(max-width: 800px) 100vw, 50vw" alt="Celestial orbital system" />
+        <Image src="/images/orbital-system.jpg" fill priority sizes="(max-width: 800px) 100vw, 50vw" alt="Celestial orbital system" />
         <div className="admin-auth-art__veil" />
         <div className="admin-auth-art__brand"><BrandMark /></div>
         <div className="admin-auth-quote">

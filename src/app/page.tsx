@@ -101,7 +101,7 @@ export default async function HomePage() {
       <section className="method-section" id="method">
         <div className="shell method-grid">
           <div className="method-visual reveal">
-            <Image src="/images/orbital-system.png" alt="Celestial planetary system" fill sizes="(max-width: 800px) 90vw, 44vw" />
+            <Image src="/images/orbital-system.jpg" alt="Celestial planetary system" fill sizes="(max-width: 800px) 90vw, 44vw" />
             <div className="orbit-label orbit-label--one"><span /> Moon sign<br /><strong>Taurus</strong></div>
             <div className="orbit-label orbit-label--two"><span /> Current dasha<br /><strong>Jupiter</strong></div>
           </div>
@@ -149,7 +149,7 @@ export default async function HomePage() {
       <footer className="footer shell">
         <BrandMark />
         <p>Ancient wisdom for modern life.<br />Made thoughtfully in the present.</p>
-        <div><Link href="#services">Readings</Link><Link href="/dashboard">Dashboard</Link><Link href="/admin">Admin</Link></div>
+        <div><Link href="#services">Readings</Link><Link href="/blog">Journal</Link><Link href="/dashboard">Dashboard</Link><Link href="/admin">Admin</Link></div>
         <small>© 2026 Jyotish Studio</small>
       </footer>
     </main>

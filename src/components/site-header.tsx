@@ -13,6 +13,7 @@ export async function SiteHeader() {
           <Link href="/astrologers">Practitioners</Link>
           <Link href="/#services">Readings</Link>
           <Link href="/#method">Our method</Link>
+          <Link href="/blog">Journal</Link>
           <Link href="/book">Book</Link>
         </nav>
         <div className="header-actions">
@@ -27,6 +28,7 @@ export async function SiteHeader() {
             <Link href="/astrologers">Practitioners</Link>
             <Link href="/#services">Readings</Link>
             <Link href="/#method">Our method</Link>
+            <Link href="/blog">Journal</Link>
             <Link href="/book">Book a reading</Link>
             <Link href={member ? "/dashboard" : "/account"}>{member ? "My account" : "Sign in"}</Link>
           </nav>
