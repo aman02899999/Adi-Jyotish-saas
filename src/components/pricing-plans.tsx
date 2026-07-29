@@ -71,7 +71,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
       <div className="pricing-grid">
         <article className="pricing-card">
           <header><h3>Free</h3><p>Explore the studio and book individual readings</p></header>
-          <div className="pricing-price"><strong>$0</strong><span>/forever</span></div>
+          <div className="pricing-price"><strong>₹0</strong><span>/forever</span></div>
           <ul><li><Check size={14} /> Full practitioner marketplace</li><li><Check size={14} /> Daily horoscope preview</li><li><Check size={14} /> Pay-as-you-go consultations</li></ul>
           <Link href={memberSignedIn ? "/astrologers" : "/account?mode=register"} className="button button--ghost pricing-cta">{memberSignedIn ? "Browse practitioners" : "Create your chart"}</Link>
         </article>
@@ -84,7 +84,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
             <article className={`pricing-card ${plan.highlighted ? "pricing-card--highlight" : ""}`} key={plan.id}>
               {plan.highlighted && <span className="pricing-badge">Most chosen</span>}
               <header><h3>{plan.name}</h3><p>{plan.tagline}</p></header>
-              <div className="pricing-price"><strong>${price ?? plan.priceMonthly}</strong><span>/{interval === "yearly" ? "year" : "month"}</span></div>
+              <div className="pricing-price"><strong>₹{price ?? plan.priceMonthly}</strong><span>/{interval === "yearly" ? "year" : "month"}</span></div>
               <ul>{plan.features.split("\n").filter(Boolean).map((feature) => <li key={feature}><Check size={14} /> {feature}</li>)}</ul>
               {isCurrent
                 ? <Link href="/dashboard/billing" className="button pricing-cta">Manage in Billing</Link>

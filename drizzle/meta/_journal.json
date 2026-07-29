@@ -29,6 +29,13 @@
       "when": 1785289151490,
       "tag": "0003_wallet_and_chat",
       "breakpoints": true
+    },
+    {
+      "idx": 4,
+      "version": "7",
+      "when": 1785290690650,
+      "tag": "0004_default_currency_inr",
+      "breakpoints": true
     }
   ]
 }

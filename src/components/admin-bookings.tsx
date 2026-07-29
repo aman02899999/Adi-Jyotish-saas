@@ -124,7 +124,7 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
       <section className="admin-stats booking-admin-stats" aria-label="Booking summary">
         <article><span><CalendarCheck2 size={20} /></span><div><small>Upcoming</small><strong>{stats.upcoming}</strong><p>Scheduled consultations</p></div></article>
         <article><span><Clock3 size={20} /></span><div><small>Awaiting confirmation</small><strong>{stats.pending}</strong><p><b>Needs attention</b></p></div></article>
-        <article><span><CircleDollarSign size={20} /></span><div><small>Collected revenue</small><strong>${stats.paid.toLocaleString()}</strong><p>Paid bookings</p></div></article>
+        <article><span><CircleDollarSign size={20} /></span><div><small>Collected revenue</small><strong>₹{stats.paid.toLocaleString()}</strong><p>Paid bookings</p></div></article>
         <article><span><Check size={20} /></span><div><small>Completion rate</small><strong>{stats.completion}%</strong><p>All-time sessions</p></div></article>
       </section>
 
@@ -162,7 +162,7 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
         <div className="modal-backdrop" role="presentation" onMouseDown={() => setSelected(null)}>
           <section className="admin-modal booking-detail-modal" role="dialog" aria-modal="true" aria-labelledby="booking-detail-title" onMouseDown={(event) => event.stopPropagation()}>
             <div className="modal-header"><div><p>{selected.reference}</p><h2 id="booking-detail-title">Booking details</h2></div><button onClick={() => setSelected(null)} aria-label="Close"><X size={20} /></button></div>
-            <div className="booking-detail-hero"><span>{selected.clientName.charAt(0)}</span><div><h3>{selected.clientName}</h3><p>{selected.serviceTitle}</p></div><strong>${selected.servicePrice}</strong></div>
+            <div className="booking-detail-hero"><span>{selected.clientName.charAt(0)}</span><div><h3>{selected.clientName}</h3><p>{selected.serviceTitle}</p></div><strong>₹{selected.servicePrice}</strong></div>
             <div className="booking-detail-grid">
               <div><Mail size={15} /><span><small>Email</small><strong>{selected.clientEmail}</strong></span></div>
               <div><UserRound size={15} /><span><small>Phone</small><strong>{selected.clientPhone || "Not provided"}</strong></span></div>

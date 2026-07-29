@@ -70,7 +70,7 @@ export function MemberConsultations({ initialBookings, cancellationHours = 24 }:
         <article><CalendarCheck2 size={19} /><span><small>All readings</small><strong>{items.length}</strong></span></article>
         <article><Clock3 size={19} /><span><small>Upcoming</small><strong>{items.filter((item) => new Date(item.scheduledAt) > now && item.status !== "cancelled").length}</strong></span></article>
         <article><Check size={19} /><span><small>Completed</small><strong>{completed}</strong></span></article>
-        <article><CreditCard size={19} /><span><small>Invested in clarity</small><strong>${invested}</strong></span></article>
+        <article><CreditCard size={19} /><span><small>Invested in clarity</small><strong>₹{invested}</strong></span></article>
       </section>
 
       {next && <section className="next-consultation glass-card">

@@ -33,11 +33,11 @@ export default async function AdminInsightsPage({ searchParams }: { searchParams
     <div className="admin-heading insights-heading"><div><p>Jyotish / Intelligence</p><h1>Insights</h1><span>Understand growth, demand, and the health of your studio.</span></div><div className="insight-actions"><nav>{ranges.map(item=><Link className={range===item.key?"active":""} href={`/admin/insights?range=${item.key}`} key={item.key}>{item.label}</Link>)}</nav><a className="button button--small" href={`/api/reports/bookings?range=${range}`}><Download size={14}/> Export CSV</a></div></div>
 
     <section className="insight-metrics">
-      <article><span><CircleDollarSign size={19}/></span><div><small>Revenue · {analytics.rangeLabel}</small><strong>${metrics.revenue.toLocaleString()}</strong><em className={metrics.revenueChange>=0?"up":"down"}>{metrics.revenueChange>=0?<ArrowUpRight size={12}/>:<ArrowDownRight size={12}/>} {Math.abs(metrics.revenueChange)}%</em></div></article>
-      <article><span><Target size={19}/></span><div><small>Average order</small><strong>${metrics.averageOrder}</strong><em>Paid consultations</em></div></article>
-      <article><span><CalendarClock size={19}/></span><div><small>Open forecast</small><strong>${metrics.forecast.toLocaleString()}</strong><em>Upcoming unpaid value</em></div></article>
+      <article><span><CircleDollarSign size={19}/></span><div><small>Revenue · {analytics.rangeLabel}</small><strong>₹{metrics.revenue.toLocaleString()}</strong><em className={metrics.revenueChange>=0?"up":"down"}>{metrics.revenueChange>=0?<ArrowUpRight size={12}/>:<ArrowDownRight size={12}/>} {Math.abs(metrics.revenueChange)}%</em></div></article>
+      <article><span><Target size={19}/></span><div><small>Average order</small><strong>₹{metrics.averageOrder}</strong><em>Paid consultations</em></div></article>
+      <article><span><CalendarClock size={19}/></span><div><small>Open forecast</small><strong>₹{metrics.forecast.toLocaleString()}</strong><em>Upcoming unpaid value</em></div></article>
       <article><span><Users size={19}/></span><div><small>Active members</small><strong>{metrics.activeMembers}</strong><em>{metrics.onboardingRate}% chart complete</em></div></article>
-      <article><span><Sparkles size={19}/></span><div><small>Lifetime revenue</small><strong>${metrics.lifetimeRevenue.toLocaleString()}</strong><em>{metrics.publishedServices} services live</em></div></article>
+      <article><span><Sparkles size={19}/></span><div><small>Lifetime revenue</small><strong>₹{metrics.lifetimeRevenue.toLocaleString()}</strong><em>{metrics.publishedServices} services live</em></div></article>
     </section>
 
     <div className="insights-grid">
@@ -59,7 +59,7 @@ export default async function AdminInsightsPage({ searchParams }: { searchParams
       <section className="insight-card-large service-report">
         <header><div><p>Demand & quality</p><h2>Service performance</h2></div><Link href="/admin/services">Catalogue <ArrowRightIcon/></Link></header>
         <div className="service-report-head"><span>Service</span><span>Bookings</span><span>Revenue</span><span>Completion</span></div>
-        {analytics.topServices.map((service,index)=><div className="service-report-row" key={service.title}><div><span>0{index+1}</span><strong>{service.title}</strong></div><span>{service.bookings}</span><strong>${service.revenue}</strong><div><i><b style={{width:`${service.completion}%`}}/></i><small>{service.completion}%</small></div></div>)}
+        {analytics.topServices.map((service,index)=><div className="service-report-row" key={service.title}><div><span>0{index+1}</span><strong>{service.title}</strong></div><span>{service.bookings}</span><strong>₹{service.revenue}</strong><div><i><b style={{width:`${service.completion}%`}}/></i><small>{service.completion}%</small></div></div>)}
         {!analytics.topServices.length&&<div className="overview-empty overview-empty--large"><Sparkles size={21}/><span><strong>No service data in this range</strong><small>Try a longer reporting period.</small></span></div>}
       </section>
 

@@ -152,8 +152,8 @@ export function AdminPanel({ initialServices }: { initialServices: AdminService[
       <section className="admin-stats" aria-label="Service summary">
         <article><span><Sparkles size={20} /></span><div><small>All services</small><strong>{items.length}</strong><p><b>+2</b> this month</p></div></article>
         <article><span><Eye size={20} /></span><div><small>Published</small><strong>{stats.active}</strong><p>{items.length - stats.active} drafts hidden</p></div></article>
-        <article><span><CircleDollarSign size={20} /></span><div><small>Est. revenue</small><strong>${stats.revenue.toLocaleString()}</strong><p><b>+12.4%</b> vs last month</p></div></article>
-        <article><span><Star size={20} /></span><div><small>Average price</small><strong>${stats.average}</strong><p>Across the catalogue</p></div></article>
+        <article><span><CircleDollarSign size={20} /></span><div><small>Est. revenue</small><strong>₹{stats.revenue.toLocaleString()}</strong><p><b>+12.4%</b> vs last month</p></div></article>
+        <article><span><Star size={20} /></span><div><small>Average price</small><strong>₹{stats.average}</strong><p>Across the catalogue</p></div></article>
       </section>
 
       <section className="admin-table-card">
@@ -173,7 +173,7 @@ export function AdminPanel({ initialServices }: { initialServices: AdminService[
             <div className="service-table__row" role="row" key={item.id}>
               <div className="table-service"><span className="table-service__icon"><Sparkles size={17} /></span><div><strong>{item.title}</strong><small>{item.duration} min · Updated {new Date(item.updatedAt).toLocaleDateString("en", { month: "short", day: "numeric" })}</small></div></div>
               <span className="category-tag">{item.category}</span>
-              <strong>${item.price}</strong>
+              <strong>₹{item.price}</strong>
               <button className={`status-toggle ${item.active ? "is-active" : ""}`} onClick={() => toggle(item, "active")}><i>{item.active ? <Check size={10} /> : null}</i>{item.active ? "Published" : "Draft"}</button>
               <button className={`star-toggle ${item.featured ? "is-featured" : ""}`} onClick={() => toggle(item, "featured")} aria-label={`${item.featured ? "Remove" : "Add"} featured status`}><Star size={17} fill={item.featured ? "currentColor" : "none"} /></button>
               <div className="row-actions"><button onClick={() => startEdit(item)} aria-label={`Edit ${item.title}`}><Edit3 size={16} /></button><button className="danger" onClick={() => remove(item)} aria-label={`Delete ${item.title}`}><Trash2 size={16} /></button></div>
@@ -193,7 +193,7 @@ export function AdminPanel({ initialServices }: { initialServices: AdminService[
               <label className="field field--full"><span>Service title</span><input required maxLength={120} value={form.title} onChange={(event) => setForm({ ...form, title: event.target.value })} placeholder="e.g. Solar Return Reading" /></label>
               <label className="field"><span>Category</span><select value={form.category} onChange={(event) => setForm({ ...form, category: event.target.value })}>{categories.map((category) => <option key={category}>{category}</option>)}</select></label>
               <label className="field"><span>Visual icon</span><select value={form.icon} onChange={(event) => setForm({ ...form, icon: event.target.value })}>{icons.map((icon) => <option key={icon} value={icon}>{icon.charAt(0).toUpperCase() + icon.slice(1)}</option>)}</select></label>
-              <label className="field"><span>Price (USD)</span><div className="input-prefix"><b>$</b><input required min="0" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></div></label>
+              <label className="field"><span>Price (USD)</span><div className="input-prefix"><b>₹</b><input required min="0" type="number" value={form.price} onChange={(event) => setForm({ ...form, price: event.target.value })} /></div></label>
               <label className="field"><span>Duration</span><div className="input-suffix"><input required min="5" step="5" type="number" value={form.duration} onChange={(event) => setForm({ ...form, duration: event.target.value })} /><b>min</b></div></label>
               <label className="field field--full"><span>Description</span><textarea required rows={4} maxLength={500} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} placeholder="Describe the clarity this reading offers…" /><small>{form.description.length}/500</small></label>
               <div className="form-options field--full">

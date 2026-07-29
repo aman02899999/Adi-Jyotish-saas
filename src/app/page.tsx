@@ -91,7 +91,7 @@ export default async function HomePage() {
                 <p>{service.category} · {service.duration} min</p>
                 <h3>{service.title}</h3>
                 <p className="service-description">{service.description}</p>
-                <div className="service-card__footer"><span>From <strong>${service.price}</strong></span><Link href={`/book?service=${service.id}`} aria-label={`Book ${service.title}`}><ArrowRight size={18} /></Link></div>
+                <div className="service-card__footer"><span>From <strong>₹{service.price}</strong></span><Link href={`/book?service=${service.id}`} aria-label={`Book ${service.title}`}><ArrowRight size={18} /></Link></div>
               </article>
             );
           })}

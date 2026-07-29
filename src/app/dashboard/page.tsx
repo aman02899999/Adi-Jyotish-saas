@@ -88,7 +88,7 @@ export default async function DashboardPage() {
       <section className="reading-strip" id="services-list">
         <div className="strip-heading"><div><p>Continue exploring</p><h2>Your readings</h2></div><Link href="/onboarding">Update birth profile <ArrowRight size={15} /></Link></div>
         <div className="reading-list">
-          {services.slice(0,4).map((service,index)=><article key={service.id}><span>0{index+1}</span><div><small>{service.category} · {service.duration} min</small><h3>{service.title}</h3></div><strong>${service.price}</strong><Link href={`/book?service=${service.id}`} aria-label={`Book ${service.title}`}><ArrowUpRight size={17} /></Link></article>)}
+          {services.slice(0,4).map((service,index)=><article key={service.id}><span>0{index+1}</span><div><small>{service.category} · {service.duration} min</small><h3>{service.title}</h3></div><strong>₹{service.price}</strong><Link href={`/book?service=${service.id}`} aria-label={`Book ${service.title}`}><ArrowUpRight size={17} /></Link></article>)}
         </div>
       </section>
     </MemberAppShell>
