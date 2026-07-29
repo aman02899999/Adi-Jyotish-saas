@@ -407,6 +407,27 @@ export const chatMessages = pgTable("chat_messages", {
   index("chat_messages_session_created_idx").on(table.sessionId, table.createdAt),
 ]);
 
+export const aiReadings = pgTable("ai_readings", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }),
+  clientName: varchar("client_name", { length: 120 }).notNull(),
+  birthDate: varchar("birth_date", { length: 20 }).notNull(),
+  birthTime: varchar("birth_time", { length: 20 }).notNull(),
+  birthPlace: varchar("birth_place", { length: 160 }).notNull(),
+  question: text("question").notNull(),
+  price: integer("price").notNull(),
+  currency: varchar("currency", { length: 8 }).notNull().default("INR"),
+  status: varchar("status", { length: 20 }).notNull().default("pending_payment"),
+  razorpayOrderId: varchar("razorpay_order_id", { length: 80 }),
+  razorpayPaymentId: varchar("razorpay_payment_id", { length: 80 }),
+  answer: text("answer"),
+  answeredAt: timestamp("answered_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("ai_readings_member_idx").on(table.memberId, table.createdAt),
+  uniqueIndex("ai_readings_razorpay_payment_id_unique").on(table.razorpayPaymentId),
+]);
+
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   adminId: integer("admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
@@ -448,3 +469,5 @@ export type WalletEntry = typeof walletEntries.$inferSelect;
 export type WalletHold = typeof walletHolds.$inferSelect;
 export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
+export type AiReading = typeof aiReadings.$inferSelect;
+export type NewAiReading = typeof aiReadings.$inferInsert;

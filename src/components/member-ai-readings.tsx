@@ -1,0 +1,75 @@
+"use client";
+
+import { useState } from "react";
+import Link from "next/link";
+import { Check, Clock3, RefreshCw, Sparkles, X } from "lucide-react";
+
+export type MemberAiReading = {
+  id: number;
+  clientName: string;
+  question: string;
+  answer: string | null;
+  status: string;
+  price: number;
+  currency: string;
+  createdAt: string | Date;
+  answeredAt: string | Date | null;
+};
+
+export function MemberAiReadings({ initialReadings }: { initialReadings: MemberAiReading[] }) {
+  const [readings, setReadings] = useState(initialReadings);
+  const [retrying, setRetrying] = useState<number | null>(null);
+  const [notice, setNotice] = useState("");
+
+  const answered = readings.filter((r) => r.status === "answered").length;
+
+  async function retry(id: number) {
+    setRetrying(id);
+    setNotice("");
+    try {
+      const response = await fetch(`/api/ai-readings/${id}/retry`, { method: "POST" });
+      const data = await response.json();
+      if (response.ok && data.answer) {
+        setReadings((current) => current.map((item) => item.id === id ? { ...item, status: "answered", answer: data.answer } : item));
+      } else {
+        setNotice(data.error || "Your reading is still being prepared. Try again shortly.");
+      }
+    } finally {
+      setRetrying(null);
+    }
+  }
+
+  return (
+    <>
+      <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>AI Answers</h1><span>Every question you&apos;ve asked our AI Jyotish guide, and the answers you received.</span></div><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link></div>
+      <section className="member-billing-summary">
+        <article><span><Sparkles size={19} /></span><div><small>Readings answered</small><strong>{answered} of {readings.length}</strong></div></article>
+      </section>
+      <section className="member-invoice-card">
+        <header><div><p>History</p><h2>Your questions</h2></div><span>{readings.length} total</span></header>
+        <div className="member-invoice-list ai-reading-list">
+          {readings.map((reading) => (
+            <article key={reading.id} className="ai-reading-item">
+              <div className="member-invoice-icon"><Sparkles size={16} /></div>
+              <div className="member-invoice-name ai-reading-item__body">
+                <small>{new Date(reading.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</small>
+                <h3>{reading.question}</h3>
+                {reading.status === "answered" && reading.answer
+                  ? <p className="ai-reading-item__answer">{reading.answer}</p>
+                  : <p className="ai-reading-item__pending"><Clock3 size={13} /> Your payment is confirmed — the reading is still being prepared.</p>}
+              </div>
+              <div className="member-invoice-amount">
+                <strong>{reading.currency} {reading.price}</strong>
+                {reading.status === "answered"
+                  ? <span className="invoice-status invoice-status--paid">answered</span>
+                  : <button type="button" className="ai-reading-item__retry" disabled={retrying === reading.id} onClick={() => retry(reading.id)}><RefreshCw size={13} className={retrying === reading.id ? "spin" : ""} /> {retrying === reading.id ? "Checking…" : "Check again"}</button>}
+              </div>
+            </article>
+          ))}
+          {!readings.length && <div className="consultation-empty"><Sparkles size={26} /><h3>No AI readings yet</h3><p>Ask your first question to receive an instant, personal answer.</p><Link href="/ask" className="button button--small">Ask now</Link></div>}
+        </div>
+      </section>
+      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
+    </>
+  );
+}

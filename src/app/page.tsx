@@ -160,6 +160,16 @@ export default async function HomePage() {
         <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
       </section>
 
+      <div className="shell" style={{ paddingBlock: "10px 20px" }}>
+        <div className="promo-banner promo-banner--dark reveal">
+          <div className="promo-banner__copy">
+            <strong>Or ask Shree Santram Shashtri instantly.</strong>
+            <span>Our AI Jyotish guide answers one focused question in under a minute — pay once, get your reading right away.</span>
+          </div>
+          <Link href="/ask" className="button button--light">Ask now <ArrowRight size={16} /></Link>
+        </div>
+      </div>
+
       <section className="section shell" id="services">
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> Find your clarity</p><h2>Guidance for every<br /><em>chapter of life.</em></h2></div>

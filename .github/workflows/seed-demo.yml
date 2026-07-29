@@ -18,7 +18,8 @@ jobs:
                    drizzle/0002_practitioner_photo_url.sql \
                    drizzle/0003_wallet_and_chat.sql \
                    drizzle/0004_default_currency_inr.sql \
-                   drizzle/0005_realistic_inr_defaults.sql; do
+                   drizzle/0005_realistic_inr_defaults.sql \
+                   drizzle/0006_ai_readings.sql; do
             echo "Applying $f"
             psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
           done
