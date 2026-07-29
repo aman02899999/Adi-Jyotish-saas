@@ -3,9 +3,9 @@ import { and, asc, eq, gt, isNull } from "drizzle-orm";
 import { db } from "@/db";
 import { adminInvites, adminUsers } from "@/db/schema";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
+import { roleSlugExists } from "@/lib/admin-roles";
 
 export const dynamic = "force-dynamic";
-const roles = ["manager", "support", "analyst"];
 
 export async function GET() {
   const admin = await getCurrentAdmin();
@@ -24,7 +24,8 @@ export async function POST(request: Request) {
   if (!hasAdminPermission(admin, "team")) return Response.json({ error: "Owner access required." }, { status: 403 });
   const body = await request.json() as { email?: string; role?: string };
   const email = normalizeEmail(body.email ?? "");
-  const role = roles.includes(body.role ?? "") ? body.role! : "support";
+  const requestedRole = body.role ?? "";
+  const role = requestedRole !== "owner" && await roleSlugExists(requestedRole) ? requestedRole : "support";
   if (!/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "Enter a valid team email." }, { status: 400 });
   const [existing] = await db.select({id:adminUsers.id}).from(adminUsers).where(eq(adminUsers.email,email)).limit(1);
   if (existing) return Response.json({ error: "This person already has an administrator account." }, { status: 409 });

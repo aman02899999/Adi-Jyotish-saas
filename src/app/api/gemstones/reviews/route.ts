@@ -1,10 +1,14 @@
 import { createReview, ReviewError } from "@/lib/gemstone-reviews";
 import { getCurrentMember } from "@/lib/member-auth";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();
+  const throttle = await checkRateLimit("gemstone-review", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 5, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const body = (await request.json()) as { productId?: number; orderId?: number; reviewerName?: string; rating?: number; title?: string; body?: string };
   const productId = Number(body.productId);
   if (!Number.isInteger(productId) || productId <= 0) return Response.json({ error: "Invalid product." }, { status: 400 });

@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   serial,
   text,
@@ -247,10 +248,23 @@ export const adminUsers = pgTable("admin_users", {
   passwordHash: text("password_hash").notNull(),
   role: varchar("role", { length: 30 }).notNull().default("owner"),
   active: boolean("active").notNull().default(true),
+  totpSecret: text("totp_secret"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  totpBackupCodes: jsonb("totp_backup_codes").$type<string[]>(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const admin2faChallenges = pgTable("admin_2fa_challenges", {
+  id: serial("id").primaryKey(),
+  adminId: integer("admin_id").notNull().references(() => adminUsers.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("admin_2fa_challenges_admin_id_idx").on(table.adminId),
+]);
 
 export const adminSessions = pgTable("admin_sessions", {
   id: serial("id").primaryKey(),
@@ -275,6 +289,16 @@ export const adminInvites = pgTable("admin_invites", {
   index("admin_invites_email_idx").on(table.email),
   index("admin_invites_expiry_idx").on(table.expiresAt, table.acceptedAt),
 ]);
+
+export const adminRoles = pgTable("admin_roles", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 40 }).notNull().unique(),
+  name: varchar("name", { length: 80 }).notNull(),
+  isSystem: boolean("is_system").notNull().default(false),
+  permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const studioSettings = pgTable("studio_settings", {
   id: integer("id").primaryKey().default(1),
@@ -594,6 +618,30 @@ export const gemstoneCoupons = pgTable("gemstone_coupons", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  id: serial("id").primaryKey(),
+  bucketKey: varchar("bucket_key", { length: 160 }).notNull().unique(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+  count: integer("count").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("rate_limit_buckets_window_idx").on(table.windowStartedAt),
+]);
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  recipientType: varchar("recipient_type", { length: 10 }).notNull(),
+  recipientId: integer("recipient_id").notNull(),
+  type: varchar("type", { length: 60 }).notNull(),
+  title: varchar("title", { length: 160 }).notNull(),
+  body: text("body"),
+  link: varchar("link", { length: 300 }),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("notifications_recipient_idx").on(table.recipientType, table.recipientId, table.createdAt),
+]);
+
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   adminId: integer("admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
@@ -623,8 +671,14 @@ export type ThreadMessage = typeof threadMessages.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type AdminUser = typeof adminUsers.$inferSelect;
+export type Admin2faChallenge = typeof admin2faChallenges.$inferSelect;
+export type AdminRole = typeof adminRoles.$inferSelect;
+export type NewAdminRole = typeof adminRoles.$inferInsert;
 export type AdminInvite = typeof adminInvites.$inferSelect;
 export type StudioSettings = typeof studioSettings.$inferSelect;
+export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type MembershipPlan = typeof membershipPlans.$inferSelect;
 export type NewMembershipPlan = typeof membershipPlans.$inferInsert;

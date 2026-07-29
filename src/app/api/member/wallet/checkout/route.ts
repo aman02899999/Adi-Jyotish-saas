@@ -1,5 +1,6 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay } from "@/lib/razorpay";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { getOrCreateWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
@@ -12,6 +13,9 @@ export async function POST(request: Request) {
 
   const razorpay = getRazorpay();
   if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
+
+  const throttle = await checkRateLimit("wallet-recharge", `member:${member.id}`, 10, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as { amount?: number };
   const amount = Math.round(Number(body.amount));

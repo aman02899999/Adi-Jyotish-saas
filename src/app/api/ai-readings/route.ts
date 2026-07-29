@@ -1,6 +1,7 @@
 import { AI_READING_CURRENCY, AI_READING_PRICE, attachRazorpayOrder, createPendingReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay } from "@/lib/razorpay";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -18,6 +19,9 @@ export async function POST(request: Request) {
 
   const razorpay = getRazorpay();
   if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
+
+  const throttle = await checkRateLimit("ai-reading-create", `member:${member.id}`, 5, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as CreatePayload;
   const clientName = body.clientName?.trim() ?? "";

@@ -1,6 +1,7 @@
 import { attachRazorpayOrder, CartValidationError, createPendingOrder } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay } from "@/lib/razorpay";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +18,9 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   const razorpay = getRazorpay();
   if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
+
+  const throttle = await checkRateLimit("gemstone-order", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 10, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as CheckoutPayload;
   const lines = (body.lines ?? []).filter((line) => line.variantId && line.quantity > 0);

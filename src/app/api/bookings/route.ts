@@ -8,6 +8,9 @@ import { sendBookingNotification } from "@/lib/messaging";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { ensureInvoiceForBooking } from "@/lib/billing";
 import { validateAvailableSlot } from "@/lib/scheduling";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { notifyAdmins } from "@/lib/notifications";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +46,9 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = (await request.json()) as BookingPayload;
   const [member, settings] = await Promise.all([getCurrentMember(), getStudioSettings()]);
+
+  const throttle = await checkRateLimit("booking-create", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 8, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
   const serviceId = Number(body.serviceId);
   const practitionerId = Number(body.practitionerId);
   const bookingDate = body.bookingDate?.trim() ?? "";
@@ -125,6 +131,12 @@ export async function POST(request: Request) {
   }
 
   await ensureInvoiceForBooking(created, member?.id);
+  getAdminIdsWithPermission("bookings").then((adminIds) => notifyAdmins(adminIds, {
+    type: "booking.created",
+    title: `New booking · ${created.serviceTitle}`,
+    body: `${created.clientName} with ${created.practitionerName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric" })}.`,
+    link: "/admin/bookings",
+  })).catch(() => {});
   if (member) {
     await sendBookingNotification({
       memberEmail: member.email,

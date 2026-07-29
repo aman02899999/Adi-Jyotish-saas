@@ -24,6 +24,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { NotificationBell } from "@/components/notification-bell";
 import { getCurrentAdmin, hasAdminPermission, type AdminPermission } from "@/lib/admin-auth";
 import { getAdminUnreadCount } from "@/lib/messaging";
 
@@ -73,7 +74,7 @@ export async function AdminShell({ active, children }: { active: "Overview" | "S
           <header className="admin-topbar">
             <div className="admin-mobile-brand"><BrandMark compact /><Menu size={21} /></div>
             <label><Search size={16} /><input placeholder="Search anything…" aria-label="Search admin" /><kbd>⌘ K</kbd></label>
-            <div><Link href="/dashboard">Preview site <ExternalLink size={14} /></Link><Link className="notification-button" href="/admin/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <i />}</Link><span className="top-avatar" title={admin?.email}>{initials}</span></div>
+            <div><Link href="/dashboard">Preview site <ExternalLink size={14} /></Link><Link className="notification-button" href="/admin/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <i />}</Link><NotificationBell apiBase="/api/admin/notifications" /><span className="top-avatar" title={admin?.email}>{initials}</span></div>
           </header>
           {children}
         </section>

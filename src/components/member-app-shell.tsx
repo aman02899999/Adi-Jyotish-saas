@@ -23,6 +23,7 @@ import {
   WalletCards,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { NotificationBell } from "@/components/notification-bell";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getMemberUnreadCount } from "@/lib/messaging";
 
@@ -83,6 +84,7 @@ export async function MemberAppShell({ member, active, children }: { member: Mem
             <div className="topbar-tools">
               <label><Search size={16} /><input aria-label="Search dashboard" placeholder="Search" /></label>
               <Link className="notification-button" href="/dashboard/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <span />}</Link>
+              <NotificationBell apiBase="/api/member/notifications" />
               <span className="top-avatar">{initials}</span>
             </div>
           </header>
