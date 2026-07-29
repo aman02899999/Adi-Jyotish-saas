@@ -12,6 +12,14 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - name: Debug - inspect database state
+        run: |
+          echo "--- public tables ---"
+          psql "$DATABASE_URL" -c "\dt public.*"
+          echo "--- drizzle migrations tracking table ---"
+          psql "$DATABASE_URL" -c "SELECT * FROM drizzle.__drizzle_migrations ORDER BY id;" || echo "(no drizzle.__drizzle_migrations table)"
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: npx drizzle-kit migrate
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
