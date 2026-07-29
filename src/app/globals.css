@@ -1226,6 +1226,12 @@ button { border: 0; }
 .finance-table__row > strong { font:400 11px var(--serif); }
 .invoice-status { width:max-content; padding:5px 7px; border-radius:999px; color:#92662d; background:rgba(181,132,65,.11); font-size:6px; text-transform:capitalize; }
 .invoice-status--paid { color:#60724e; background:rgba(112,137,82,.12); }.invoice-status--refunded { color:#566f7e; background:rgba(76,116,141,.1); }.invoice-status--void { color:#8a7464; background:rgba(115,95,78,.08); }.invoice-status--refund_pending { color:#8b663b; background:rgba(181,132,65,.1); }
+.invoice-status--approved { color:#4c6f8d; background:rgba(76,116,141,.12); }.invoice-status--rejected { color:#965147; background:rgba(150,81,71,.1); }
+.payout-table__head,.payout-table__row { display:grid; grid-template-columns:minmax(140px,1.2fr) 90px minmax(90px,1fr) minmax(110px,1.3fr) 85px 130px; align-items:center; gap:9px; padding-inline:19px; }
+.payout-table__head { min-height:39px; border-bottom:1px solid var(--line); color:var(--faint); background:rgba(227,219,207,.3); font-size:6px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.payout-table__row { min-height:72px; border-bottom:1px solid rgba(100,75,55,.09); }
+.payout-table__row > strong { font:400 11px var(--serif); }
+.payout-table__row > small { overflow:hidden; color:var(--muted); font-size:7px; text-overflow:ellipsis; white-space:nowrap; }
 .payment-provider { color:var(--muted); font-size:7px; text-transform:capitalize; }
 .finance-actions { display:flex; flex-wrap:wrap; gap:4px; }
 .finance-actions button { min-height:27px; padding:0 7px; border:1px solid var(--line); border-radius:5px; color:var(--copper); background:rgba(255,255,255,.3); font-size:6px; }
@@ -1583,6 +1589,9 @@ button { border: 0; }
   .finance-table__head { display:none; }
   .finance-table__row { display:grid; grid-template-columns:1fr auto; gap:8px; min-height:0; padding:14px 16px; }
   .finance-invoice { grid-column:1/-1; }.finance-customer { grid-column:1; }.finance-table__row > strong { grid-column:2; grid-row:2; }.finance-date { grid-column:1; }.finance-table__row > .invoice-status { grid-column:2; grid-row:3; justify-self:end; }.payment-provider { grid-column:1; }.finance-actions { grid-column:2; grid-row:4; justify-content:flex-end; }
+  .payout-table__head { display:none; }
+  .payout-table__row { display:grid; grid-template-columns:1fr auto; gap:8px; min-height:0; padding:14px 16px; }
+  .payout-table__row > .finance-customer { grid-column:1/-1; }.payout-table__row > strong { grid-column:2; grid-row:2; }.payout-table__row > .finance-date { grid-column:1; grid-row:2; }.payout-table__row > small { grid-column:1/-1; }.payout-table__row > .invoice-status { grid-column:2; justify-self:end; }.payout-table__row > .finance-actions { grid-column:1/-1; justify-content:flex-end; }
   .member-invoice-list article { grid-template-columns:38px 1fr auto; }.member-invoice-amount { grid-column:3; }.member-invoice-actions { grid-column:2/-1; flex-direction:row; justify-content:flex-end; padding-top:7px; border-top:1px solid var(--line); }
   .receipt-meta { grid-template-columns:1fr 1fr; }
   .settings-layout { grid-template-columns:1fr; }

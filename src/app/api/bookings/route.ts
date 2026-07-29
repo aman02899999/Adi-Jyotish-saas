@@ -9,7 +9,7 @@ import { getStudioSettings } from "@/lib/studio-settings";
 import { ensureInvoiceForBooking } from "@/lib/billing";
 import { validateAvailableSlot } from "@/lib/scheduling";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
-import { notifyAdmins } from "@/lib/notifications";
+import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -137,6 +137,16 @@ export async function POST(request: Request) {
     body: `${created.clientName} with ${created.practitionerName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric" })}.`,
     link: "/admin/bookings",
   })).catch(() => {});
+  if (created.practitionerId) {
+    createNotification({
+      recipientType: "practitioner",
+      recipientId: created.practitionerId,
+      type: "booking.created",
+      title: `New booking · ${created.serviceTitle}`,
+      body: `${created.clientName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric" })}.`,
+      link: "/practitioner/bookings",
+    }).catch(() => {});
+  }
   if (member) {
     await sendBookingNotification({
       memberEmail: member.email,

@@ -16,7 +16,7 @@ function timeAgo(iso: string) {
   return `${Math.floor(hours / 24)}d ago`;
 }
 
-export function NotificationBell({ apiBase }: { apiBase: "/api/member/notifications" | "/api/admin/notifications" }) {
+export function NotificationBell({ apiBase }: { apiBase: "/api/member/notifications" | "/api/admin/notifications" | "/api/practitioner/notifications" }) {
   const [open, setOpen] = useState(false);
   const [items, setItems] = useState<NotificationItem[]>([]);
   const [unreadCount, setUnreadCount] = useState(0);

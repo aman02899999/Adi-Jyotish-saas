@@ -40,12 +40,13 @@ const adminLinks: Array<{ label: string; icon: typeof LayoutDashboard; href: str
   { label: "Chat", icon: MessageCircle, href: "/admin/chat", permission: "messages" },
   { label: "Billing", icon: WalletCards, href: "/admin/billing", permission: "billing" },
   { label: "Wallets", icon: Coins, href: "/admin/wallets", permission: "billing" },
+  { label: "Payouts", icon: WalletCards, href: "/admin/payouts", permission: "billing" },
   { label: "Messages", icon: MessageSquareText, href: "/admin/messages", permission: "messages" },
   { label: "Insights", icon: BarChart3, href: "/admin/insights", permission: "insights" },
   { label: "Activity", icon: ScrollText, href: "/admin/activity", permission: "activity" },
 ];
 
-export async function AdminShell({ active, children }: { active: "Overview" | "Services" | "Plans" | "Gemstones" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Reviews" | "Chat" | "Wallets" | "Settings"; children: ReactNode }) {
+export async function AdminShell({ active, children }: { active: "Overview" | "Services" | "Plans" | "Gemstones" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Reviews" | "Chat" | "Wallets" | "Payouts" | "Settings"; children: ReactNode }) {
   const [admin, unreadCount] = await Promise.all([getCurrentAdmin(), getAdminUnreadCount()]);
   const initials = admin?.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "AD";
 

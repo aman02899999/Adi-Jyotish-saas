@@ -1,6 +1,6 @@
 import "server-only";
 
-import { and, asc, count, eq, gte, lt } from "drizzle-orm";
+import { and, asc, count, eq, gte, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { availabilityRules, bookings, practitioners, practitionerTimeOff } from "@/db/schema";
 import { getStudioSettings } from "@/lib/studio-settings";
@@ -106,11 +106,35 @@ export type AvailableSlot = {
   label: string;
 };
 
+const directoryColumns = {
+  id: practitioners.id,
+  name: practitioners.name,
+  slug: practitioners.slug,
+  email: practitioners.email,
+  title: practitioners.title,
+  bio: practitioners.bio,
+  specialties: practitioners.specialties,
+  languages: practitioners.languages,
+  consultationModes: practitioners.consultationModes,
+  experienceYears: practitioners.experienceYears,
+  verified: practitioners.verified,
+  verificationLevel: practitioners.verificationLevel,
+  photoUrl: practitioners.photoUrl,
+  online: practitioners.online,
+  chatRatePerMinute: practitioners.chatRatePerMinute,
+  active: practitioners.active,
+  featured: practitioners.featured,
+  hasPortalAccess: sql<boolean>`${practitioners.passwordHash} is not null`,
+  lastLoginAt: practitioners.lastLoginAt,
+  createdAt: practitioners.createdAt,
+  updatedAt: practitioners.updatedAt,
+};
+
 export async function getPractitionerDirectory(activeOnly = false) {
   await seedPractitioners();
   const people = activeOnly
-    ? await db.select().from(practitioners).where(eq(practitioners.active, true)).orderBy(asc(practitioners.name))
-    : await db.select().from(practitioners).orderBy(asc(practitioners.name));
+    ? await db.select(directoryColumns).from(practitioners).where(eq(practitioners.active, true)).orderBy(asc(practitioners.name))
+    : await db.select(directoryColumns).from(practitioners).orderBy(asc(practitioners.name));
   if (!people.length) return [];
   const rules = await db.select().from(availabilityRules).orderBy(asc(availabilityRules.weekday), asc(availabilityRules.startTime));
   const timeOff = await db.select().from(practitionerTimeOff).where(gte(practitionerTimeOff.endsAt, new Date())).orderBy(asc(practitionerTimeOff.startsAt));

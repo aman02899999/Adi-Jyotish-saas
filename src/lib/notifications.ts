@@ -4,7 +4,7 @@ import { and, desc, eq, isNull, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { notifications } from "@/db/schema";
 
-type RecipientType = "member" | "admin";
+type RecipientType = "member" | "admin" | "practitioner";
 
 export async function createNotification(input: { recipientType: RecipientType; recipientId: number; type: string; title: string; body?: string; link?: string }) {
   await db.insert(notifications).values({
