@@ -4,11 +4,21 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CalendarDays,
+  GraduationCap,
   Heart,
+  HeartHandshake,
+  HeartPulse,
+  Home,
+  MessageCircle,
   Orbit,
+  PhoneCall,
   Quote,
+  ScrollText,
+  Smartphone,
   Sparkles,
+  Star,
   Sun,
+  Users,
 } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { BrandMark } from "@/components/brand-mark";
@@ -24,6 +34,31 @@ const iconMap = {
   briefcase: BriefcaseBusiness,
   sparkles: Sparkles,
 };
+
+const categories = [
+  { icon: Heart, label: "Love & Relationships", note: "Understand the heart's timing" },
+  { icon: Users, label: "Marriage", note: "Compatibility & muhurat" },
+  { icon: BriefcaseBusiness, label: "Career & Business", note: "Growth cycles & timing" },
+  { icon: HeartPulse, label: "Health & Wellness", note: "Vitality through the chart" },
+  { icon: Home, label: "Family & Home", note: "Harmony & remedies" },
+  { icon: GraduationCap, label: "Education", note: "Focus & academic timing" },
+];
+
+const liveExperts = [
+  { name: "Acharya Devika Rao", specialty: "Vedic Astrology · Marriage", online: true, rating: 4.9, reviews: "2,340", price: 22, experience: 14 },
+  { name: "Pandit Rohan Mehta", specialty: "Career & Finance", online: true, rating: 4.8, reviews: "1,870", price: 18, experience: 11 },
+  { name: "Guruji Aditya Nair", specialty: "Vastu & Numerology", online: false, rating: 4.9, reviews: "3,120", price: 25, experience: 19 },
+  { name: "Smt. Kavita Iyer", specialty: "Love & Relationships", online: true, rating: 4.7, reviews: "980", price: 15, experience: 7 },
+  { name: "Acharya Manoj Tiwari", specialty: "Health & Wellness", online: true, rating: 4.9, reviews: "2,560", price: 20, experience: 16 },
+  { name: "Pandit Suresh Bhatt", specialty: "Family & Progeny", online: false, rating: 4.8, reviews: "1,430", price: 19, experience: 12 },
+];
+
+const freeTools = [
+  { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by moon sign" },
+  { icon: ScrollText, label: "Free Kundli", note: "Instant birth chart report" },
+  { icon: HeartHandshake, label: "Kundli Matching", note: "Compatibility for marriage" },
+  { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat" },
+];
 
 export default async function HomePage() {
   const services = await getPublishedServices();
@@ -74,6 +109,57 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <section className="category-strip shell" aria-label="Browse by concern">
+        <div className="section-heading reveal">
+          <div><p className="eyebrow"><span /> Browse by concern</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>What&apos;s on your<br /><em>mind today?</em></h2></div>
+        </div>
+        <div className="category-grid">
+          {categories.map(({ icon: Icon, label, note }) => (
+            <Link href="/astrologers" className="category-tile reveal" key={label}>
+              <span><Icon size={21} strokeWidth={1.4} /></span>
+              <strong>{label}</strong>
+              <small>{note}</small>
+            </Link>
+          ))}
+        </div>
+      </section>
+
+      <section className="live-strip shell" aria-label="Astrologers online now">
+        <div className="live-strip__head reveal">
+          <div>
+            <p className="live-pulse"><i /> {liveExperts.filter((e) => e.online).length} astrologers online now</p>
+            <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>Talk to a guide<br /><em style={{ color: "var(--copper)" }}>right now.</em></h2>
+          </div>
+          <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat or call instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
+        </div>
+        <div className="live-grid">
+          {liveExperts.map((expert) => (
+            <article className="live-card reveal" key={expert.name}>
+              <div className="live-card__top">
+                <div className="live-card__avatar">
+                  <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>
+                  <i className={`live-card__dot ${expert.online ? "" : "live-card__dot--off"}`} />
+                </div>
+                <div className="live-card__name">
+                  <strong>{expert.name}</strong>
+                  <span>{expert.online ? "Online now" : "Offline"}</span>
+                </div>
+              </div>
+              <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating}</strong><small>{expert.reviews} reviews · {expert.experience} yrs</small></div>
+              <div className="live-card__tags"><span>{expert.specialty}</span></div>
+              <div className="live-card__foot">
+                <div className="live-card__price"><strong>₹{expert.price}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong><small>Chat or call</small></div>
+                <div className="live-card__actions">
+                  <Link href="/astrologers" aria-label={`Chat with a guide like ${expert.name}`}><MessageCircle size={15} /></Link>
+                  <Link href="/astrologers" className="primary" aria-label={`Call a guide like ${expert.name}`}><PhoneCall size={15} /></Link>
+                </div>
+              </div>
+            </article>
+          ))}
+        </div>
+        <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
+      </section>
+
       <section className="section shell" id="services">
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> Find your clarity</p><h2>Guidance for every<br /><em>chapter of life.</em></h2></div>
@@ -98,6 +184,17 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <section className="tools-strip shell" aria-label="Free astrology tools">
+        <div className="tools-grid">
+          {freeTools.map(({ icon: Icon, label, note }) => (
+            <Link href="/dashboard" className="tool-card reveal" key={label}>
+              <span><Icon size={19} strokeWidth={1.5} /></span>
+              <div><strong>{label}</strong><small>{note}</small></div>
+            </Link>
+          ))}
+        </div>
+      </section>
+
       <section className="method-section" id="method">
         <div className="shell method-grid">
           <div className="method-visual reveal">
@@ -119,6 +216,16 @@ export default async function HomePage() {
         </div>
       </section>
 
+      <div className="shell" style={{ paddingTop: 70 }}>
+        <div className="promo-banner reveal">
+          <div className="promo-banner__copy">
+            <strong>Your first chat is on us.</strong>
+            <span>3 free minutes with any guide — no card required to start.</span>
+          </div>
+          <Link href="/astrologers" className="button button--light">Claim your free chat <ArrowRight size={16} /></Link>
+        </div>
+      </div>
+
       <section className="section shell stories" id="stories">
         <div className="section-heading section-heading--center reveal">
           <div><p className="eyebrow"><span /> From our community</p><h2>Clarity changes<br /><em>everything.</em></h2></div>
@@ -135,6 +242,21 @@ export default async function HomePage() {
               <footer><span className="story-avatar">{name.charAt(0)}</span><div><strong>{name}</strong><small>{city}</small></div></footer>
             </blockquote>
           ))}
+        </div>
+      </section>
+
+      <section className="app-strip shell" aria-label="Get the app">
+        <div className="app-strip__copy reveal">
+          <p className="eyebrow"><span /> Take it with you</p>
+          <h2>Your chart,<br /><em>in your pocket.</em></h2>
+          <p>Get daily transits, instant chat with your favorite guides, and wallet top-ups from wherever you are.</p>
+          <div className="app-strip__badges">
+            <span className="app-badge"><Smartphone size={18} /><span><small>Download on</small><strong>App Store</strong></span></span>
+            <span className="app-badge"><Smartphone size={18} /><span><small>Get it on</small><strong>Google Play</strong></span></span>
+          </div>
+        </div>
+        <div className="app-strip__visual reveal reveal--delay">
+          <div className="marketplace-orbit"><span><Smartphone size={26} /></span><i /><b /></div>
         </div>
       </section>
 

@@ -2,7 +2,7 @@
 
 **Research date:** July 2026  
 **Reference scope:** Publicly observable flows and indexed pages from Astrotalk. No proprietary source code, private APIs, visual assets, copy, or internal systems were used.  
-**Product direction:** A distinct premium Vedic intelligence platform combining a trusted expert marketplace, deterministic astrology computation, explainable AI, secure payments, and a calm Apple/Linear/Stripe-grade experience.
+**Product direction:** A distinct premium Vedic intelligence platform combining a trusted expert marketplace, deterministic astrology computation, explainable AI, secure payments, and a calm Apple/Linear-grade experience.
 
 ---
 
@@ -188,7 +188,7 @@ Already implemented: Overview, Services, Members, Bookings, Schedule, Billing, M
 | Instant chat | Wallet-funded per-minute chat | Spend uncertainty | Budget cap, queue ETA, transcript, AI handoff | P0 | H | 4 sprints | Very high |
 | Voice/video | Metered session | RTC and moderation complexity | Preflight, consent, quality recovery, recording controls | P0 | H | 4–6 sprints | Very high |
 | Wallet | Recharge and deductions | Refund/ledger complexity | Double-entry immutable wallet ledger and reserved holds | P0 | H | 3 sprints | Very high |
-| Payments | Recharge/payment gateway | Fragmented reconciliation | Stripe + Razorpay adapters, idempotent webhooks, invoice ledger | Partial | H | 2 sprints | High |
+| Payments | Recharge/payment gateway | Fragmented reconciliation | Razorpay adapter, idempotent webhooks, invoice ledger | Partial | H | 2 sprints | High |
 | Practitioner onboarding | Verification/interview/probation | Manual and opaque | Structured KYC, rubric, audit samples, progressive privileges | P0 | H | 3 sprints | High |
 | Reviews | Ratings and volume | Rating inflation | Verified-session reviews, dimensions, Bayesian ranking | P1 | M | 2 sprints | High |
 | Live sessions | Free/public live streams | Moderation and scale | Scheduled stage, reactions, paid questions, replay highlights | P1 | H | 5 sprints | High |
@@ -305,7 +305,7 @@ Only completed, paid consultations may create reviews. Dimensions: clarity, empa
 
 ### Current production core
 
-PostgreSQL + Drizzle already covers services, practitioners, schedules, time off, members, administrators, sessions, bookings, invoices, payments, messages, settings, invitations, Stripe events, and audit logs.
+PostgreSQL + Drizzle already covers services, practitioners, schedules, time off, members, administrators, sessions, bookings, invoices, payments, messages, settings, invitations, Razorpay events, and audit logs.
 
 ### Planned domain tables
 
@@ -364,7 +364,7 @@ Every mutation uses authentication, authorization, validation, idempotency where
 - **Auth:** Current secure session model or Firebase Auth/Auth.js for Google/OTP federation. Map external identities to PostgreSQL users.
 - **Push/analytics:** Firebase Cloud Messaging and Firebase/GA4 analytics are appropriate.
 - **AI:** OpenAI and Gemini behind a provider abstraction, with deterministic tools and evaluation gates.
-- **Payments:** Stripe globally; Razorpay for India/UPI; provider-neutral payment intent model.
+- **Payments:** Razorpay for India/UPI; provider-neutral payment intent model.
 - **RTC:** Daily, Twilio, Agora, or LiveKit Cloud; do not build media transport from scratch.
 - **Search:** PostgreSQL FTS initially; Algolia/OpenSearch at marketplace/content scale.
 - **Charts:** D3 for zodiac/timeline; Recharts for operations analytics.
@@ -597,7 +597,7 @@ Each sprint includes accessibility, observability, tests, security review, analy
 - Unit tests for money, timezones, Dasha/rule calculations, ranking, commissions, and permissions.
 - Property-based tests for wallet invariants and chart reproducibility.
 - Integration tests against ephemeral PostgreSQL and provider test environments.
-- Contract tests for Stripe/Razorpay/RTC/AI providers.
+- Contract tests for Razorpay/RTC/AI providers.
 - E2E tests for signup, profile, wallet, booking, chat/call, reviews, refunds, payouts.
 - Concurrency tests for slot booking, wallet holds, webhook replay, payout settlement.
 - Security tests for IDOR, role escalation, CSRF, XSS, upload abuse, webhook forgery.
@@ -615,7 +615,7 @@ Each sprint includes accessibility, observability, tests, security review, analy
 - Transactional migrations with backups and rollback runbooks.
 - Blue/green or canary for realtime, ephemeris, and AI services.
 - Queue dead-letter handling and replay tools.
-- Stripe/Razorpay reconciliation and webhook lag alerts.
+- Razorpay reconciliation and webhook lag alerts.
 - Sentry releases, source maps, traces, structured logs, uptime and synthetic checkout/session tests.
 - Database PITR, encrypted backups, restore drills, connection pooling.
 - Feature flags for wallet, calls, live, AI model versions, and pricing experiments.
@@ -682,7 +682,7 @@ The current application already provides a production foundation beyond a typica
 - Scheduled consultations, member cancellation, and history.
 - Practitioner profiles, weekly availability, time off, timezone-aware slots, and conflict prevention.
 - Admin CRM, bookings, schedule, billing, messaging, analytics, audit, settings, and RBAC.
-- Invoices, receipts, manual collection/refunds, optional Stripe Checkout, and verified webhook architecture.
+- Invoices, receipts, manual collection/refunds, optional Razorpay Checkout, and verified webhook architecture.
 - Secure team invitations and role-scoped workspaces.
 - In-app member/studio messaging and booking notifications.
 - Responsive parchment/copper design system.
