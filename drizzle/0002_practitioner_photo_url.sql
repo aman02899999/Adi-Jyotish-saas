@@ -1,0 +1,1 @@
+ALTER TABLE "practitioners" ADD COLUMN "photo_url" text;
