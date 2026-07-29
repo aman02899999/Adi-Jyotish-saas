@@ -12,15 +12,16 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
-      - name: Debug - inspect database state
+      - name: Apply pending migrations
         run: |
-          echo "--- public tables ---"
-          psql "$DATABASE_URL" -c "\dt public.*"
-          echo "--- drizzle migrations tracking table ---"
-          psql "$DATABASE_URL" -c "SELECT * FROM drizzle.__drizzle_migrations ORDER BY id;" || echo "(no drizzle.__drizzle_migrations table)"
-        env:
-          DATABASE_URL: ${{ secrets.DATABASE_URL }}
-      - run: npx drizzle-kit migrate
+          for f in drizzle/0001_membership_plans_subscriptions.sql \
+                   drizzle/0002_practitioner_photo_url.sql \
+                   drizzle/0003_wallet_and_chat.sql \
+                   drizzle/0004_default_currency_inr.sql \
+                   drizzle/0005_realistic_inr_defaults.sql; do
+            echo "Applying $f"
+            psql "$DATABASE_URL" -v ON_ERROR_STOP=1 -f "$f"
+          done
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: npm run seed:demo
