@@ -1,6 +1,6 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { ChatSessionConflictError, InsufficientBalanceError, PractitionerUnavailableError, startChatSession } from "@/lib/chat";
-import { chatChannelName } from "@/lib/pusher";
+import { chatChannelName } from "@/lib/ably";
 
 export const dynamic = "force-dynamic";
 

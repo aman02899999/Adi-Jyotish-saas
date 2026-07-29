@@ -3,7 +3,7 @@
 import { FormEvent, useEffect, useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Clock3, MessageCircle, Send, ShieldCheck, X } from "lucide-react";
-import { getPusherClient, isPusherClientConfigured } from "@/lib/pusher-client";
+import { createChatRealtimeClient } from "@/lib/ably-client";
 
 export type ChatMessageRow = { id: number; sessionId: number; senderType: string; senderName: string; body: string; createdAt: string | Date };
 
@@ -37,24 +37,35 @@ export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt,
   useEffect(() => { listRef.current?.scrollTo({ top: listRef.current.scrollHeight }); }, [messages]);
 
   useEffect(() => {
-    if (!isPusherClientConfigured()) {
-      if (status !== "active") return;
-      const poll = setInterval(async () => {
+    if (status !== "active") return;
+
+    let pollTimer: ReturnType<typeof setInterval> | null = null;
+    function startPolling() {
+      if (pollTimer) return;
+      pollTimer = setInterval(async () => {
         const response = await fetch(`/api/chat/sessions/${sessionId}`);
         if (!response.ok) return;
         const data = await response.json();
         setMessages(data.messages);
         setStatus(data.session.status);
       }, 4000);
-      return () => clearInterval(poll);
     }
 
-    const client = getPusherClient();
-    if (!client) return;
-    const channel = client.subscribe(`private-chat-${sessionId}`);
-    channel.bind("message", (message: ChatMessageRow) => setMessages((current) => current.some((item) => item.id === message.id) ? current : [...current, message]));
-    channel.bind("session-ended", () => setStatus("ended"));
-    return () => { client.unsubscribe(`private-chat-${sessionId}`); };
+    const client = createChatRealtimeClient(sessionId);
+    client.connection.on("failed", startPolling);
+    client.connection.on("suspended", startPolling);
+    client.connection.on("disconnected", startPolling);
+    const channel = client.channels.get(`chat-${sessionId}`);
+    channel.subscribe("message", (message) => {
+      const data = message.data as ChatMessageRow;
+      setMessages((current) => current.some((item) => item.id === data.id) ? current : [...current, data]);
+    });
+    channel.subscribe("session-ended", () => setStatus("ended"));
+
+    return () => {
+      if (pollTimer) clearInterval(pollTimer);
+      client.close();
+    };
   }, [sessionId, status]);
 
   async function send(event: FormEvent) {

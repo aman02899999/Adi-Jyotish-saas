@@ -3,7 +3,7 @@ import "server-only";
 import { and, asc, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { chatMessages, chatSessions, memberUsers, practitioners } from "@/db/schema";
-import { publishChatEvent } from "@/lib/pusher";
+import { publishChatEvent } from "@/lib/ably";
 import { captureHold, createHold, getActiveHold, getOrCreateWallet, InsufficientBalanceError } from "@/lib/wallet";
 
 export { InsufficientBalanceError };
