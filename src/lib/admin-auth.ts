@@ -19,11 +19,11 @@ export type AdminIdentity = {
 export type AdminPermission =
   | "overview" | "services" | "members_view" | "members_manage"
   | "bookings" | "schedule" | "billing" | "plans" | "reviews" | "messages" | "insights" | "reports"
-  | "activity" | "settings" | "team";
+  | "activity" | "settings" | "team" | "gemstones";
 
 const permissions: Record<string, AdminPermission[]> = {
-  owner: ["overview", "services", "members_view", "members_manage", "bookings", "schedule", "billing", "plans", "reviews", "messages", "insights", "reports", "activity", "settings", "team"],
-  manager: ["overview", "services", "members_view", "members_manage", "bookings", "schedule", "billing", "plans", "reviews", "messages", "insights", "reports", "activity"],
+  owner: ["overview", "services", "members_view", "members_manage", "bookings", "schedule", "billing", "plans", "reviews", "messages", "insights", "reports", "activity", "settings", "team", "gemstones"],
+  manager: ["overview", "services", "members_view", "members_manage", "bookings", "schedule", "billing", "plans", "reviews", "messages", "insights", "reports", "activity", "gemstones"],
   support: ["overview", "members_view", "bookings", "messages"],
   analyst: ["overview", "insights", "reports"],
 };

@@ -170,6 +170,16 @@ export default async function HomePage() {
         </div>
       </div>
 
+      <div className="shell" style={{ paddingBlock: "10px 20px" }}>
+        <div className="promo-banner reveal">
+          <div className="promo-banner__copy">
+            <strong>Wear what the sky recommends.</strong>
+            <span>Shop certified, natural Vedic gemstones — chosen for your zodiac sign and planetary influence.</span>
+          </div>
+          <Link href="/gemstones" className="button button--light">Buy Gemstones <ArrowRight size={16} /></Link>
+        </div>
+      </div>
+
       <section className="section shell" id="services">
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> Find your clarity</p><h2>Guidance for every<br /><em>chapter of life.</em></h2></div>

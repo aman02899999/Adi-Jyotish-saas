@@ -11,6 +11,7 @@ export async function SiteHeader() {
         <BrandMark />
         <nav className="desktop-nav" aria-label="Primary navigation">
           <Link href="/astrologers">Practitioners</Link>
+          <Link href="/gemstones">Gemstones</Link>
           <Link href="/#services">Readings</Link>
           <Link href="/#method">Our method</Link>
           <Link href="/ask">Ask AI</Link>
@@ -28,6 +29,7 @@ export async function SiteHeader() {
           <summary aria-label="Open navigation"><Menu size={22} /></summary>
           <nav>
             <Link href="/astrologers">Practitioners</Link>
+            <Link href="/gemstones">Gemstones</Link>
             <Link href="/#services">Readings</Link>
             <Link href="/#method">Our method</Link>
             <Link href="/ask">Ask AI</Link>

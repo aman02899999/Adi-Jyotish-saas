@@ -428,6 +428,172 @@ export const aiReadings = pgTable("ai_readings", {
   uniqueIndex("ai_readings_razorpay_payment_id_unique").on(table.razorpayPaymentId),
 ]);
 
+export const gemstoneCategories = pgTable("gemstone_categories", {
+  id: serial("id").primaryKey(),
+  name: varchar("name", { length: 80 }).notNull(),
+  slug: varchar("slug", { length: 100 }).notNull().unique(),
+  description: text("description").notNull().default(""),
+  imageUrl: text("image_url"),
+  sortOrder: integer("sort_order").notNull().default(0),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const gemstoneProducts = pgTable("gemstone_products", {
+  id: serial("id").primaryKey(),
+  categoryId: integer("category_id").notNull().references(() => gemstoneCategories.id, { onDelete: "restrict" }),
+  name: varchar("name", { length: 160 }).notNull(),
+  slug: varchar("slug", { length: 180 }).notNull().unique(),
+  shortDescription: varchar("short_description", { length: 300 }).notNull().default(""),
+  description: text("description").notNull().default(""),
+  benefits: text("benefits").notNull().default(""),
+  whoShouldWear: text("who_should_wear").notNull().default(""),
+  recommendedZodiac: varchar("recommended_zodiac", { length: 200 }).notNull().default(""),
+  recommendedPlanets: varchar("recommended_planets", { length: 200 }).notNull().default(""),
+  origin: varchar("origin", { length: 120 }).notNull().default(""),
+  color: varchar("color", { length: 80 }).notNull().default(""),
+  treatment: varchar("treatment", { length: 120 }).notNull().default(""),
+  certification: varchar("certification", { length: 120 }).notNull().default(""),
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  sku: varchar("sku", { length: 60 }).notNull().unique(),
+  featured: boolean("featured").notNull().default(false),
+  trending: boolean("trending").notNull().default(false),
+  bestseller: boolean("bestseller").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  metaTitle: varchar("meta_title", { length: 160 }).notNull().default(""),
+  metaDescription: varchar("meta_description", { length: 300 }).notNull().default(""),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_products_category_idx").on(table.categoryId, table.active),
+]);
+
+export const gemstoneProductImages = pgTable("gemstone_product_images", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => gemstoneProducts.id, { onDelete: "cascade" }),
+  url: text("url").notNull(),
+  alt: varchar("alt", { length: 200 }).notNull().default(""),
+  sortOrder: integer("sort_order").notNull().default(0),
+  isPrimary: boolean("is_primary").notNull().default(false),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_product_images_product_idx").on(table.productId, table.sortOrder),
+]);
+
+export const gemstoneProductVariants = pgTable("gemstone_product_variants", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => gemstoneProducts.id, { onDelete: "cascade" }),
+  label: varchar("label", { length: 120 }).notNull(),
+  weightCarat: varchar("weight_carat", { length: 20 }).notNull().default(""),
+  weightRatti: varchar("weight_ratti", { length: 20 }).notNull().default(""),
+  certificationLevel: varchar("certification_level", { length: 80 }).notNull().default(""),
+  price: integer("price").notNull(),
+  compareAtPrice: integer("compare_at_price"),
+  stockQuantity: integer("stock_quantity").notNull().default(0),
+  sku: varchar("sku", { length: 60 }).notNull().unique(),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_product_variants_product_idx").on(table.productId, table.active),
+]);
+
+export const gemstoneOrders = pgTable("gemstone_orders", {
+  id: serial("id").primaryKey(),
+  orderNumber: varchar("order_number", { length: 30 }).notNull().unique(),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  guestName: varchar("guest_name", { length: 120 }),
+  guestEmail: varchar("guest_email", { length: 180 }),
+  guestPhone: varchar("guest_phone", { length: 40 }),
+  shippingName: varchar("shipping_name", { length: 120 }).notNull(),
+  shippingPhone: varchar("shipping_phone", { length: 40 }).notNull(),
+  shippingLine1: varchar("shipping_line1", { length: 200 }).notNull(),
+  shippingLine2: varchar("shipping_line2", { length: 200 }),
+  shippingCity: varchar("shipping_city", { length: 100 }).notNull(),
+  shippingState: varchar("shipping_state", { length: 100 }).notNull(),
+  shippingPincode: varchar("shipping_pincode", { length: 12 }).notNull(),
+  shippingCountry: varchar("shipping_country", { length: 80 }).notNull().default("India"),
+  subtotal: integer("subtotal").notNull(),
+  discount: integer("discount").notNull().default(0),
+  shippingFee: integer("shipping_fee").notNull().default(0),
+  tax: integer("tax").notNull().default(0),
+  total: integer("total").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  couponCode: varchar("coupon_code", { length: 40 }),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  paymentStatus: varchar("payment_status", { length: 20 }).notNull().default("pending"),
+  razorpayOrderId: varchar("razorpay_order_id", { length: 80 }),
+  razorpayPaymentId: varchar("razorpay_payment_id", { length: 80 }),
+  notes: text("notes"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_orders_member_idx").on(table.memberId, table.createdAt),
+  index("gemstone_orders_status_idx").on(table.status),
+  uniqueIndex("gemstone_orders_razorpay_payment_id_unique").on(table.razorpayPaymentId),
+]);
+
+export const gemstoneOrderItems = pgTable("gemstone_order_items", {
+  id: serial("id").primaryKey(),
+  orderId: integer("order_id").notNull().references(() => gemstoneOrders.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => gemstoneProducts.id, { onDelete: "restrict" }),
+  variantId: integer("variant_id").notNull().references(() => gemstoneProductVariants.id, { onDelete: "restrict" }),
+  productName: varchar("product_name", { length: 160 }).notNull(),
+  variantLabel: varchar("variant_label", { length: 120 }).notNull(),
+  unitPrice: integer("unit_price").notNull(),
+  quantity: integer("quantity").notNull(),
+  lineTotal: integer("line_total").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_order_items_order_idx").on(table.orderId),
+]);
+
+export const gemstoneWishlist = pgTable("gemstone_wishlist", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }),
+  productId: integer("product_id").notNull().references(() => gemstoneProducts.id, { onDelete: "cascade" }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("gemstone_wishlist_member_product_unique").on(table.memberId, table.productId),
+]);
+
+export const gemstoneReviews = pgTable("gemstone_reviews", {
+  id: serial("id").primaryKey(),
+  productId: integer("product_id").notNull().references(() => gemstoneProducts.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  orderId: integer("order_id").references(() => gemstoneOrders.id, { onDelete: "set null" }),
+  reviewerName: varchar("reviewer_name", { length: 120 }).notNull(),
+  rating: integer("rating").notNull(),
+  title: varchar("title", { length: 160 }).notNull().default(""),
+  body: text("body").notNull(),
+  imageUrls: text("image_urls").notNull().default(""),
+  status: varchar("status", { length: 20 }).notNull().default("pending"),
+  helpfulVotes: integer("helpful_votes").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_reviews_product_status_idx").on(table.productId, table.status),
+]);
+
+export const gemstoneCoupons = pgTable("gemstone_coupons", {
+  id: serial("id").primaryKey(),
+  code: varchar("code", { length: 40 }).notNull().unique(),
+  description: varchar("description", { length: 200 }).notNull().default(""),
+  discountType: varchar("discount_type", { length: 10 }).notNull().default("percent"),
+  discountValue: integer("discount_value").notNull(),
+  minOrderAmount: integer("min_order_amount").notNull().default(0),
+  maxDiscountAmount: integer("max_discount_amount"),
+  usageLimit: integer("usage_limit"),
+  usageCount: integer("usage_count").notNull().default(0),
+  perCustomerLimit: integer("per_customer_limit"),
+  startsAt: timestamp("starts_at", { withTimezone: true }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }),
+  active: boolean("active").notNull().default(true),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   adminId: integer("admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
@@ -471,3 +637,16 @@ export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type AiReading = typeof aiReadings.$inferSelect;
 export type NewAiReading = typeof aiReadings.$inferInsert;
+export type GemstoneCategory = typeof gemstoneCategories.$inferSelect;
+export type NewGemstoneCategory = typeof gemstoneCategories.$inferInsert;
+export type GemstoneProduct = typeof gemstoneProducts.$inferSelect;
+export type NewGemstoneProduct = typeof gemstoneProducts.$inferInsert;
+export type GemstoneProductImage = typeof gemstoneProductImages.$inferSelect;
+export type GemstoneProductVariant = typeof gemstoneProductVariants.$inferSelect;
+export type NewGemstoneProductVariant = typeof gemstoneProductVariants.$inferInsert;
+export type GemstoneOrder = typeof gemstoneOrders.$inferSelect;
+export type GemstoneOrderItem = typeof gemstoneOrderItems.$inferSelect;
+export type GemstoneWishlistItem = typeof gemstoneWishlist.$inferSelect;
+export type GemstoneReview = typeof gemstoneReviews.$inferSelect;
+export type GemstoneCoupon = typeof gemstoneCoupons.$inferSelect;
+export type NewGemstoneCoupon = typeof gemstoneCoupons.$inferInsert;
