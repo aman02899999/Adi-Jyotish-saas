@@ -41,3 +41,32 @@ export async function getAiReadingAnswer({ name, birthDate, birthTime, birthPlac
   if (!text) throw new Error("Gemini returned an empty reading.");
   return text;
 }
+
+const HOROSCOPE_SYSTEM_PROMPT = `You are Shree Santram Shashtri, a warm and deeply knowledgeable Vedic astrologer (Jyotishi) writing a short daily horoscope for a premium astrology studio's website. Write for the general public reading their zodiac sign today, not a specific person. Ground the reading in classical Jyotish themes (planetary transits, nakshatra influence) explained in plain, compassionate language. Cover love, career, and wellbeing briefly, and close with one grounded, practical suggestion for the day. Keep it to 2-3 short paragraphs. Do not address anyone by name and do not sign off.`;
+
+export async function getDailyHoroscopeText({ signName, date }: { signName: string; date: string }) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Horoscopes are not configured.");
+
+  const userPrompt = `Zodiac sign: ${signName}\nDate: ${date}\n\nWrite today's horoscope for this sign.`;
+
+  const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { role: "system", parts: [{ text: HOROSCOPE_SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: { temperature: 0.9, maxOutputTokens: 500 },
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Gemini request failed (${response.status}): ${detail.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? "").join("").trim();
+  if (!text) throw new Error("Gemini returned an empty horoscope.");
+  return text;
+}

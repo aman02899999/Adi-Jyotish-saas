@@ -490,6 +490,16 @@ export const aiReadings = pgTable("ai_readings", {
   uniqueIndex("ai_readings_razorpay_payment_id_unique").on(table.razorpayPaymentId),
 ]);
 
+export const dailyHoroscopes = pgTable("daily_horoscopes", {
+  id: serial("id").primaryKey(),
+  sign: varchar("sign", { length: 12 }).notNull(),
+  date: varchar("date", { length: 10 }).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("daily_horoscopes_sign_date_unique").on(table.sign, table.date),
+]);
+
 export const gemstoneCategories = pgTable("gemstone_categories", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 80 }).notNull(),
@@ -733,6 +743,7 @@ export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type AiReading = typeof aiReadings.$inferSelect;
 export type NewAiReading = typeof aiReadings.$inferInsert;
+export type DailyHoroscope = typeof dailyHoroscopes.$inferSelect;
 export type GemstoneCategory = typeof gemstoneCategories.$inferSelect;
 export type NewGemstoneCategory = typeof gemstoneCategories.$inferInsert;
 export type GemstoneProduct = typeof gemstoneProducts.$inferSelect;
