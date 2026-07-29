@@ -23,7 +23,7 @@ export default async function OnboardingPage() {
           <MemberOnboardingForm member={member} />
         </section>
         <aside className="onboarding-art">
-          <Image src="/images/orbital-system.png" fill priority sizes="(max-width: 800px) 90vw, 44vw" alt="Planetary birth chart system" />
+          <Image src="/images/orbital-system.jpg" fill priority sizes="(max-width: 800px) 90vw, 44vw" alt="Planetary birth chart system" />
           <div className="onboarding-art__label onboarding-art__label--one"><Orbit size={16} /><span><small>Sidereal zodiac</small><strong>Precise planetary positions</strong></span></div>
           <div className="onboarding-art__label onboarding-art__label--two"><Sparkles size={16} /><span><small>Personal guidance</small><strong>Calculated only for you</strong></span></div>
           <div className="onboarding-checks"><span><Check size={13} /> Private profile</span><span><Check size={13} /> Editable later</span></div>
