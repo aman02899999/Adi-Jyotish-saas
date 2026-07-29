@@ -24,6 +24,17 @@ export async function getSubscriptionInvoices(memberId: number) {
   return db.select().from(subscriptionInvoices).where(eq(subscriptionInvoices.memberId, memberId)).orderBy(subscriptionInvoices.createdAt);
 }
 
+export async function getMemberDiscountPercent(memberId: number) {
+  const subscription = await getMemberSubscription(memberId);
+  if (!subscription || !activeStatuses.has(subscription.status)) return 0;
+  return subscription.plan.sessionDiscountPercent;
+}
+
+export function applyDiscount(amount: number, discountPercent: number) {
+  if (!discountPercent) return amount;
+  return Math.max(0, Math.round(amount * (100 - discountPercent) / 100));
+}
+
 async function syncMemberPlanLabel(memberId: number, label: string) {
   await db.update(memberUsers).set({ plan: label, updatedAt: new Date() }).where(eq(memberUsers.id, memberId));
 }

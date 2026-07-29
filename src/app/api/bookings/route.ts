@@ -11,6 +11,7 @@ import { validateAvailableSlot } from "@/lib/scheduling";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
 
@@ -87,6 +88,9 @@ export async function POST(request: Request) {
   const available = await validateAvailableSlot({ date: bookingDate, duration: service.duration, practitionerId, startsAt: scheduledAt });
   if (!available) return Response.json({ error: "This time is no longer available. Choose another open slot." }, { status: 409 });
 
+  const discountPercent = member ? await getMemberDiscountPercent(member.id) : 0;
+  const servicePrice = applyDiscount(service.price, discountPercent);
+
   const dateCode = new Date().toISOString().slice(2, 10).replaceAll("-", "");
   const reference = `JY-${dateCode}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
   let created: typeof bookings.$inferSelect;
@@ -105,7 +109,7 @@ export async function POST(request: Request) {
         reference,
         serviceId: service.id,
         serviceTitle: service.title,
-        servicePrice: service.price,
+        servicePrice,
         serviceDuration: service.duration,
         practitionerId: practitioner.id,
         practitionerName: practitioner.name,
