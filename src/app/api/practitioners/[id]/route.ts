@@ -16,6 +16,8 @@ type PractitionerPayload = {
   verified?: boolean;
   verificationLevel?: string;
   photoUrl?: string;
+  online?: boolean;
+  chatRatePerMinute?: number;
   active?: boolean;
   featured?: boolean;
 };
@@ -48,6 +50,8 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
       verified:body.verified??false,
       verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
       photoUrl:photoUrl?photoUrl.slice(0,500):null,
+      online:body.online??false,
+      chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||5),
       active:body.active??true,
       featured:body.featured??false,
       updatedAt:new Date(),

@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { bookings, invoices, memberSubscriptions, memberUsers, membershipPlans, payments, razorpayEvents, subscriptionInvoices } from "@/db/schema";
 import { sendBookingNotification } from "@/lib/messaging";
 import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/lib/razorpay";
+import { rechargeWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
 
@@ -84,7 +85,14 @@ export async function POST(request: Request) {
 async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
   if (!payment?.order_id) return;
   const [row] = await db.select().from(payments).where(eq(payments.providerSessionId, payment.order_id)).limit(1);
-  if (!row || row.status === "succeeded") return;
+  if (!row) {
+    const memberId = Number(payment.notes?.memberId);
+    if (Number.isInteger(memberId) && memberId > 0 && payment.amount != null) {
+      await rechargeWallet({ memberId, amount: Math.round(payment.amount / 100), razorpayPaymentId: payment.id });
+    }
+    return;
+  }
+  if (row.status === "succeeded") return;
 
   const [invoice] = await db.select().from(invoices).where(eq(invoices.id, row.invoiceId)).limit(1);
   if (!invoice || invoice.status === "paid") return;

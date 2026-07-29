@@ -22,6 +22,13 @@
       "when": 1785288147903,
       "tag": "0002_practitioner_photo_url",
       "breakpoints": true
+    },
+    {
+      "idx": 3,
+      "version": "7",
+      "when": 1785289151490,
+      "tag": "0003_wallet_and_chat",
+      "breakpoints": true
     }
   ]
 }

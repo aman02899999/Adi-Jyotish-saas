@@ -39,6 +39,8 @@ export const practitioners = pgTable("practitioners", {
   verified: boolean("verified").notNull().default(false),
   verificationLevel: varchar("verification_level", { length: 40 }).notNull().default("reviewed"),
   photoUrl: text("photo_url"),
+  online: boolean("online").notNull().default(false),
+  chatRatePerMinute: integer("chat_rate_per_minute").notNull().default(5),
   active: boolean("active").notNull().default(true),
   featured: boolean("featured").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
@@ -343,6 +345,68 @@ export const subscriptionInvoices = pgTable("subscription_invoices", {
   index("subscription_invoices_subscription_idx").on(table.subscriptionId),
 ]);
 
+export const wallets = pgTable("wallets", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }).unique(),
+  currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+  balance: integer("balance").notNull().default(0),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const walletEntries = pgTable("wallet_entries", {
+  id: serial("id").primaryKey(),
+  walletId: integer("wallet_id").notNull().references(() => wallets.id, { onDelete: "cascade" }),
+  type: varchar("type", { length: 20 }).notNull(),
+  amount: integer("amount").notNull(),
+  balanceAfter: integer("balance_after").notNull(),
+  referenceType: varchar("reference_type", { length: 30 }),
+  referenceId: varchar("reference_id", { length: 60 }),
+  razorpayPaymentId: varchar("razorpay_payment_id", { length: 60 }).unique(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("wallet_entries_wallet_created_idx").on(table.walletId, table.createdAt),
+]);
+
+export const walletHolds = pgTable("wallet_holds", {
+  id: serial("id").primaryKey(),
+  walletId: integer("wallet_id").notNull().references(() => wallets.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("wallet_holds_wallet_status_idx").on(table.walletId, table.status),
+]);
+
+export const chatSessions = pgTable("chat_sessions", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }),
+  practitionerId: integer("practitioner_id").notNull().references(() => practitioners.id, { onDelete: "cascade" }),
+  walletHoldId: integer("wallet_hold_id").notNull().references(() => walletHolds.id, { onDelete: "restrict" }),
+  ratePerMinute: integer("rate_per_minute").notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("active"),
+  capturedAmount: integer("captured_amount"),
+  startedAt: timestamp("started_at", { withTimezone: true }).notNull().defaultNow(),
+  endedAt: timestamp("ended_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("chat_sessions_member_idx").on(table.memberId, table.status),
+  index("chat_sessions_practitioner_idx").on(table.practitionerId, table.status),
+]);
+
+export const chatMessages = pgTable("chat_messages", {
+  id: serial("id").primaryKey(),
+  sessionId: integer("session_id").notNull().references(() => chatSessions.id, { onDelete: "cascade" }),
+  senderType: varchar("sender_type", { length: 20 }).notNull(),
+  senderName: varchar("sender_name", { length: 120 }).notNull(),
+  body: text("body").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("chat_messages_session_created_idx").on(table.sessionId, table.createdAt),
+]);
+
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   adminId: integer("admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
@@ -379,3 +443,8 @@ export type MembershipPlan = typeof membershipPlans.$inferSelect;
 export type NewMembershipPlan = typeof membershipPlans.$inferInsert;
 export type MemberSubscription = typeof memberSubscriptions.$inferSelect;
 export type SubscriptionInvoice = typeof subscriptionInvoices.$inferSelect;
+export type Wallet = typeof wallets.$inferSelect;
+export type WalletEntry = typeof walletEntries.$inferSelect;
+export type WalletHold = typeof walletHolds.$inferSelect;
+export type ChatSession = typeof chatSessions.$inferSelect;
+export type ChatMessage = typeof chatMessages.$inferSelect;
