@@ -8,6 +8,7 @@ import {
   Coins,
   Crown,
   ExternalLink,
+  Gem,
   LayoutDashboard,
   LogOut,
   Menu,
@@ -30,6 +31,7 @@ const adminLinks: Array<{ label: string; icon: typeof LayoutDashboard; href: str
   { label: "Overview", icon: LayoutDashboard, href: "/admin", permission: "overview" },
   { label: "Services", icon: Sparkles, href: "/admin/services", permission: "services" },
   { label: "Plans", icon: Crown, href: "/admin/plans", permission: "plans" },
+  { label: "Gemstones", icon: Gem, href: "/admin/gemstones", permission: "gemstones" },
   { label: "Members", icon: Users, href: "/admin/members", permission: "members_view" },
   { label: "Bookings", icon: BookOpenText, href: "/admin/bookings", permission: "bookings" },
   { label: "Schedule", icon: CalendarRange, href: "/admin/schedule", permission: "schedule" },
@@ -42,7 +44,7 @@ const adminLinks: Array<{ label: string; icon: typeof LayoutDashboard; href: str
   { label: "Activity", icon: ScrollText, href: "/admin/activity", permission: "activity" },
 ];
 
-export async function AdminShell({ active, children }: { active: "Overview" | "Services" | "Plans" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Reviews" | "Chat" | "Wallets" | "Settings"; children: ReactNode }) {
+export async function AdminShell({ active, children }: { active: "Overview" | "Services" | "Plans" | "Gemstones" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Reviews" | "Chat" | "Wallets" | "Settings"; children: ReactNode }) {
   const [admin, unreadCount] = await Promise.all([getCurrentAdmin(), getAdminUnreadCount()]);
   const initials = admin?.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "AD";
 
