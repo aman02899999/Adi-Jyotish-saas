@@ -12,6 +12,9 @@ jobs:
         with:
           node-version: 20
       - run: npm ci
+      - run: npx drizzle-kit migrate
+        env:
+          DATABASE_URL: ${{ secrets.DATABASE_URL }}
       - run: npm run seed:demo
         env:
           DATABASE_URL: ${{ secrets.DATABASE_URL }}
