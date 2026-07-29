@@ -285,6 +285,63 @@ export const studioSettings = pgTable("studio_settings", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const membershipPlans = pgTable("membership_plans", {
+  id: serial("id").primaryKey(),
+  key: varchar("key", { length: 40 }).notNull().unique(),
+  name: varchar("name", { length: 80 }).notNull(),
+  tagline: varchar("tagline", { length: 160 }).notNull().default(""),
+  description: text("description").notNull().default(""),
+  priceMonthly: integer("price_monthly").notNull().default(0),
+  priceYearly: integer("price_yearly"),
+  currency: varchar("currency", { length: 3 }).notNull().default("USD"),
+  features: text("features").notNull().default(""),
+  sessionDiscountPercent: integer("session_discount_percent").notNull().default(0),
+  highlighted: boolean("highlighted").notNull().default(false),
+  active: boolean("active").notNull().default(true),
+  sortOrder: integer("sort_order").notNull().default(0),
+  razorpayPlanIdMonthly: varchar("razorpay_plan_id_monthly", { length: 60 }),
+  razorpayPlanIdYearly: varchar("razorpay_plan_id_yearly", { length: 60 }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("membership_plans_sort_idx").on(table.sortOrder),
+]);
+
+export const memberSubscriptions = pgTable("member_subscriptions", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }).unique(),
+  planId: integer("plan_id").notNull().references(() => membershipPlans.id, { onDelete: "restrict" }),
+  billingInterval: varchar("billing_interval", { length: 10 }).notNull().default("monthly"),
+  status: varchar("status", { length: 20 }).notNull().default("created"),
+  razorpaySubscriptionId: varchar("razorpay_subscription_id", { length: 60 }).unique(),
+  razorpayCustomerId: varchar("razorpay_customer_id", { length: 60 }),
+  currentPeriodStart: timestamp("current_period_start", { withTimezone: true }),
+  currentPeriodEnd: timestamp("current_period_end", { withTimezone: true }),
+  cancelAtPeriodEnd: boolean("cancel_at_period_end").notNull().default(false),
+  cancelledAt: timestamp("cancelled_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("member_subscriptions_status_idx").on(table.status),
+  index("member_subscriptions_plan_idx").on(table.planId),
+]);
+
+export const subscriptionInvoices = pgTable("subscription_invoices", {
+  id: serial("id").primaryKey(),
+  subscriptionId: integer("subscription_id").notNull().references(() => memberSubscriptions.id, { onDelete: "cascade" }),
+  memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull(),
+  status: varchar("status", { length: 20 }).notNull().default("paid"),
+  razorpayPaymentId: varchar("razorpay_payment_id", { length: 60 }).unique(),
+  periodStart: timestamp("period_start", { withTimezone: true }),
+  periodEnd: timestamp("period_end", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("subscription_invoices_member_created_idx").on(table.memberId, table.createdAt),
+  index("subscription_invoices_subscription_idx").on(table.subscriptionId),
+]);
+
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   adminId: integer("admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
@@ -317,3 +374,7 @@ export type AdminUser = typeof adminUsers.$inferSelect;
 export type AdminInvite = typeof adminInvites.$inferSelect;
 export type StudioSettings = typeof studioSettings.$inferSelect;
 export type AuditLog = typeof auditLogs.$inferSelect;
+export type MembershipPlan = typeof membershipPlans.$inferSelect;
+export type NewMembershipPlan = typeof membershipPlans.$inferInsert;
+export type MemberSubscription = typeof memberSubscriptions.$inferSelect;
+export type SubscriptionInvoice = typeof subscriptionInvoices.$inferSelect;

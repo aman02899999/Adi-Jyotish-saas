@@ -8,6 +8,13 @@
       "when": 1785261168198,
       "tag": "0000_blue_ulik",
       "breakpoints": true
+    },
+    {
+      "idx": 1,
+      "version": "7",
+      "when": 1785286931015,
+      "tag": "0001_membership_plans_subscriptions",
+      "breakpoints": true
     }
   ]
 }

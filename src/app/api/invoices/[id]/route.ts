@@ -99,12 +99,12 @@ async function refundInvoice(id: number) {
   });
 
   let refundId: string;
-  let refundStatus = "succeeded";
+  let refundStatus = "processed";
   try {
-    if (claimed.payment.provider === "stripe") {
-      const stripe = getRazorpay();
-      if (!stripe || !claimed.payment.paymentIntentId) throw new Error("Stripe refund is unavailable for this payment.");
-      const refund = await stripe.payments.refund(claimed.payment.paymentIntentId, {
+    if (claimed.payment.provider === "razorpay") {
+      const razorpay = getRazorpay();
+      if (!razorpay || !claimed.payment.paymentIntentId) throw new Error("Razorpay refund is unavailable for this payment.");
+      const refund = await razorpay.payments.refund(claimed.payment.paymentIntentId, {
         amount: Math.round(claimed.invoice.amount * 100),
         notes: {
           invoiceId: String(claimed.invoice.id),
@@ -121,11 +121,11 @@ async function refundInvoice(id: number) {
       await tx.update(invoices).set({ status: "paid", updatedAt: new Date() }).where(eq(invoices.id, claimed.invoice.id));
       await tx.update(payments).set({ status: "succeeded", updatedAt: new Date() }).where(eq(payments.id, claimed.payment.id));
     });
-    if (error instanceof Error && error.message.startsWith("Stripe refund")) throw new BillingConflictError(error.message);
+    if (error instanceof Error && error.message.startsWith("Razorpay refund")) throw new BillingConflictError(error.message);
     throw error;
   }
 
-  const completed = refundStatus === "succeeded";
+  const completed = refundStatus === "processed";
   const now = new Date();
   await db.transaction(async (tx) => {
     await tx.update(payments).set({ status: completed ? "refunded" : "refund_pending", refundId, updatedAt: now }).where(eq(payments.id, claimed.payment.id));

@@ -5,6 +5,7 @@ import {
   Bell,
   BookOpenText,
   CalendarRange,
+  Crown,
   ExternalLink,
   LayoutDashboard,
   LogOut,
@@ -25,6 +26,7 @@ import { getAdminUnreadCount } from "@/lib/messaging";
 const adminLinks: Array<{ label: string; icon: typeof LayoutDashboard; href: string; permission: AdminPermission }> = [
   { label: "Overview", icon: LayoutDashboard, href: "/admin", permission: "overview" },
   { label: "Services", icon: Sparkles, href: "/admin/services", permission: "services" },
+  { label: "Plans", icon: Crown, href: "/admin/plans", permission: "plans" },
   { label: "Members", icon: Users, href: "/admin/members", permission: "members_view" },
   { label: "Bookings", icon: BookOpenText, href: "/admin/bookings", permission: "bookings" },
   { label: "Schedule", icon: CalendarRange, href: "/admin/schedule", permission: "schedule" },
@@ -34,7 +36,7 @@ const adminLinks: Array<{ label: string; icon: typeof LayoutDashboard; href: str
   { label: "Activity", icon: ScrollText, href: "/admin/activity", permission: "activity" },
 ];
 
-export async function AdminShell({ active, children }: { active: "Overview" | "Services" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Settings"; children: ReactNode }) {
+export async function AdminShell({ active, children }: { active: "Overview" | "Services" | "Plans" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Settings"; children: ReactNode }) {
   const [admin, unreadCount] = await Promise.all([getCurrentAdmin(), getAdminUnreadCount()]);
   const initials = admin?.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "AD";
 
