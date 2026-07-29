@@ -47,3 +47,11 @@ export async function getEligibleReviewBookings(memberEmail: string, practitione
   const reviewed = new Set(existing.map((row) => row.bookingId));
   return completed.filter((booking) => !reviewed.has(booking.id));
 }
+
+export async function getAdminReviews() {
+  const rows = await db.select({ review: practitionerReviews, practitionerName: practitioners.name, practitionerSlug: practitioners.slug })
+    .from(practitionerReviews)
+    .innerJoin(practitioners, eq(practitionerReviews.practitionerId, practitioners.id))
+    .orderBy(desc(practitionerReviews.createdAt));
+  return rows.map((row) => ({ ...row.review, practitionerName: row.practitionerName, practitionerSlug: row.practitionerSlug }));
+}

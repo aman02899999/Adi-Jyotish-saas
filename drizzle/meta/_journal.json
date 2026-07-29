@@ -15,6 +15,13 @@
       "when": 1785286931015,
       "tag": "0001_membership_plans_subscriptions",
       "breakpoints": true
+    },
+    {
+      "idx": 2,
+      "version": "7",
+      "when": 1785288147903,
+      "tag": "0002_practitioner_photo_url",
+      "breakpoints": true
     }
   ]
 }

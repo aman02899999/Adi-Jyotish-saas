@@ -38,6 +38,7 @@ export const practitioners = pgTable("practitioners", {
   experienceYears: integer("experience_years").notNull().default(5),
   verified: boolean("verified").notNull().default(false),
   verificationLevel: varchar("verification_level", { length: 40 }).notNull().default("reviewed"),
+  photoUrl: text("photo_url"),
   active: boolean("active").notNull().default(true),
   featured: boolean("featured").notNull().default(false),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
