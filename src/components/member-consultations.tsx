@@ -85,7 +85,7 @@ export function MemberConsultations({ initialBookings, cancellationHours = 24 }:
         <div className="consultation-list">
           {visible.map((item) => {
             const date = new Date(item.scheduledAt);
-            const canCancel = ["pending","confirmed"].includes(item.status) && date.getTime() - Date.now() >= cancellationHours * 60 * 60 * 1000;
+            const canCancel = ["pending","confirmed"].includes(item.status) && date.getTime() - now.getTime() >= cancellationHours * 60 * 60 * 1000;
             return <article key={item.id}>
               <div className="consultation-list__icon"><FileText size={18} /></div>
               <div className="consultation-list__name"><small>{item.reference}</small><h3>{item.serviceTitle}</h3><p>{item.practitionerName ?? "Jyotish Studio"} · {date.toLocaleDateString("en", { weekday: "short", month: "long", day: "numeric", year: "numeric" })} · {date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p></div>
