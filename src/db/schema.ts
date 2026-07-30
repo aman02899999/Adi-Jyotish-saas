@@ -2,6 +2,7 @@ import {
   boolean,
   index,
   integer,
+  jsonb,
   pgTable,
   serial,
   text,
@@ -43,9 +44,47 @@ export const practitioners = pgTable("practitioners", {
   chatRatePerMinute: integer("chat_rate_per_minute").notNull().default(15),
   active: boolean("active").notNull().default(true),
   featured: boolean("featured").notNull().default(false),
+  passwordHash: text("password_hash"),
+  lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const practitionerSessions = pgTable("practitioner_sessions", {
+  id: serial("id").primaryKey(),
+  practitionerId: integer("practitioner_id").notNull().references(() => practitioners.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("practitioner_sessions_practitioner_id_idx").on(table.practitionerId),
+]);
+
+export const practitionerInvites = pgTable("practitioner_invites", {
+  id: serial("id").primaryKey(),
+  practitionerId: integer("practitioner_id").notNull().references(() => practitioners.id, { onDelete: "cascade" }).unique(),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  invitedBy: integer("invited_by").references(() => adminUsers.id, { onDelete: "set null" }),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  acceptedAt: timestamp("accepted_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const practitionerPayouts = pgTable("practitioner_payouts", {
+  id: serial("id").primaryKey(),
+  practitionerId: integer("practitioner_id").notNull().references(() => practitioners.id, { onDelete: "cascade" }),
+  amount: integer("amount").notNull(),
+  currency: varchar("currency", { length: 3 }).notNull().default("INR"),
+  status: varchar("status", { length: 20 }).notNull().default("requested"),
+  notes: text("notes"),
+  adminNotes: text("admin_notes"),
+  processedBy: integer("processed_by").references(() => adminUsers.id, { onDelete: "set null" }),
+  requestedAt: timestamp("requested_at", { withTimezone: true }).notNull().defaultNow(),
+  processedAt: timestamp("processed_at", { withTimezone: true }),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("practitioner_payouts_practitioner_id_idx").on(table.practitionerId),
+]);
 
 export const availabilityRules = pgTable("availability_rules", {
   id: serial("id").primaryKey(),
@@ -88,6 +127,8 @@ export const bookings = pgTable("bookings", {
   notes: text("notes"),
   status: varchar("status", { length: 30 }).notNull().default("pending"),
   paymentStatus: varchar("payment_status", { length: 30 }).notNull().default("unpaid"),
+  kundliSummary: text("kundli_summary"),
+  kundliGeneratedAt: timestamp("kundli_generated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -247,10 +288,23 @@ export const adminUsers = pgTable("admin_users", {
   passwordHash: text("password_hash").notNull(),
   role: varchar("role", { length: 30 }).notNull().default("owner"),
   active: boolean("active").notNull().default(true),
+  totpSecret: text("totp_secret"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  totpBackupCodes: jsonb("totp_backup_codes").$type<string[]>(),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const admin2faChallenges = pgTable("admin_2fa_challenges", {
+  id: serial("id").primaryKey(),
+  adminId: integer("admin_id").notNull().references(() => adminUsers.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("admin_2fa_challenges_admin_id_idx").on(table.adminId),
+]);
 
 export const adminSessions = pgTable("admin_sessions", {
   id: serial("id").primaryKey(),
@@ -275,6 +329,16 @@ export const adminInvites = pgTable("admin_invites", {
   index("admin_invites_email_idx").on(table.email),
   index("admin_invites_expiry_idx").on(table.expiresAt, table.acceptedAt),
 ]);
+
+export const adminRoles = pgTable("admin_roles", {
+  id: serial("id").primaryKey(),
+  slug: varchar("slug", { length: 40 }).notNull().unique(),
+  name: varchar("name", { length: 80 }).notNull(),
+  isSystem: boolean("is_system").notNull().default(false),
+  permissions: jsonb("permissions").$type<string[]>().notNull().default([]),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+});
 
 export const studioSettings = pgTable("studio_settings", {
   id: integer("id").primaryKey().default(1),
@@ -410,11 +474,12 @@ export const chatMessages = pgTable("chat_messages", {
 export const aiReadings = pgTable("ai_readings", {
   id: serial("id").primaryKey(),
   memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }),
+  readingType: varchar("reading_type", { length: 20 }).notNull().default("question"),
   clientName: varchar("client_name", { length: 120 }).notNull(),
   birthDate: varchar("birth_date", { length: 20 }).notNull(),
   birthTime: varchar("birth_time", { length: 20 }).notNull(),
   birthPlace: varchar("birth_place", { length: 160 }).notNull(),
-  question: text("question").notNull(),
+  question: text("question"),
   price: integer("price").notNull(),
   currency: varchar("currency", { length: 8 }).notNull().default("INR"),
   status: varchar("status", { length: 20 }).notNull().default("pending_payment"),
@@ -426,6 +491,50 @@ export const aiReadings = pgTable("ai_readings", {
 }, (table) => [
   index("ai_readings_member_idx").on(table.memberId, table.createdAt),
   uniqueIndex("ai_readings_razorpay_payment_id_unique").on(table.razorpayPaymentId),
+]);
+
+export const dailyHoroscopes = pgTable("daily_horoscopes", {
+  id: serial("id").primaryKey(),
+  sign: varchar("sign", { length: 12 }).notNull(),
+  date: varchar("date", { length: 10 }).notNull(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  uniqueIndex("daily_horoscopes_sign_date_unique").on(table.sign, table.date),
+]);
+
+export const dailyPanchang = pgTable("daily_panchang", {
+  id: serial("id").primaryKey(),
+  date: varchar("date", { length: 10 }).notNull().unique(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const kundliMatches = pgTable("kundli_matches", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  personAName: varchar("person_a_name", { length: 120 }).notNull(),
+  personABirthDate: varchar("person_a_birth_date", { length: 10 }).notNull(),
+  personBName: varchar("person_b_name", { length: 120 }).notNull(),
+  personBBirthDate: varchar("person_b_birth_date", { length: 10 }).notNull(),
+  compatibilityScore: integer("compatibility_score").notNull(),
+  narrative: text("narrative").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("kundli_matches_created_idx").on(table.createdAt),
+]);
+
+export const numerologyReadings = pgTable("numerology_readings", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  birthDate: varchar("birth_date", { length: 10 }).notNull(),
+  lifePathNumber: integer("life_path_number").notNull(),
+  destinyNumber: integer("destiny_number").notNull(),
+  narrative: text("narrative").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("numerology_readings_created_idx").on(table.createdAt),
 ]);
 
 export const gemstoneCategories = pgTable("gemstone_categories", {
@@ -594,6 +703,44 @@ export const gemstoneCoupons = pgTable("gemstone_coupons", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const gemstoneRecommendations = pgTable("gemstone_recommendations", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  birthDate: varchar("birth_date", { length: 10 }).notNull(),
+  concern: varchar("concern", { length: 300 }),
+  zodiacSign: varchar("zodiac_sign", { length: 12 }).notNull(),
+  categorySlugs: varchar("category_slugs", { length: 200 }).notNull().default(""),
+  narrative: text("narrative").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_recommendations_created_idx").on(table.createdAt),
+]);
+
+export const rateLimitBuckets = pgTable("rate_limit_buckets", {
+  id: serial("id").primaryKey(),
+  bucketKey: varchar("bucket_key", { length: 160 }).notNull().unique(),
+  windowStartedAt: timestamp("window_started_at", { withTimezone: true }).notNull().defaultNow(),
+  count: integer("count").notNull().default(0),
+  updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("rate_limit_buckets_window_idx").on(table.windowStartedAt),
+]);
+
+export const notifications = pgTable("notifications", {
+  id: serial("id").primaryKey(),
+  recipientType: varchar("recipient_type", { length: 20 }).notNull(),
+  recipientId: integer("recipient_id").notNull(),
+  type: varchar("type", { length: 60 }).notNull(),
+  title: varchar("title", { length: 160 }).notNull(),
+  body: text("body"),
+  link: varchar("link", { length: 300 }),
+  readAt: timestamp("read_at", { withTimezone: true }),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("notifications_recipient_idx").on(table.recipientType, table.recipientId, table.createdAt),
+]);
+
 export const auditLogs = pgTable("audit_logs", {
   id: serial("id").primaryKey(),
   adminId: integer("admin_id").references(() => adminUsers.id, { onDelete: "set null" }),
@@ -611,6 +758,10 @@ export const auditLogs = pgTable("audit_logs", {
 export type Service = typeof services.$inferSelect;
 export type NewService = typeof services.$inferInsert;
 export type Practitioner = typeof practitioners.$inferSelect;
+export type PractitionerSession = typeof practitionerSessions.$inferSelect;
+export type PractitionerInvite = typeof practitionerInvites.$inferSelect;
+export type PractitionerPayout = typeof practitionerPayouts.$inferSelect;
+export type NewPractitionerPayout = typeof practitionerPayouts.$inferInsert;
 export type AvailabilityRule = typeof availabilityRules.$inferSelect;
 export type PractitionerTimeOff = typeof practitionerTimeOff.$inferSelect;
 export type PractitionerReview = typeof practitionerReviews.$inferSelect;
@@ -623,8 +774,14 @@ export type ThreadMessage = typeof threadMessages.$inferSelect;
 export type Invoice = typeof invoices.$inferSelect;
 export type Payment = typeof payments.$inferSelect;
 export type AdminUser = typeof adminUsers.$inferSelect;
+export type Admin2faChallenge = typeof admin2faChallenges.$inferSelect;
+export type AdminRole = typeof adminRoles.$inferSelect;
+export type NewAdminRole = typeof adminRoles.$inferInsert;
 export type AdminInvite = typeof adminInvites.$inferSelect;
 export type StudioSettings = typeof studioSettings.$inferSelect;
+export type RateLimitBucket = typeof rateLimitBuckets.$inferSelect;
+export type Notification = typeof notifications.$inferSelect;
+export type NewNotification = typeof notifications.$inferInsert;
 export type AuditLog = typeof auditLogs.$inferSelect;
 export type MembershipPlan = typeof membershipPlans.$inferSelect;
 export type NewMembershipPlan = typeof membershipPlans.$inferInsert;
@@ -637,6 +794,7 @@ export type ChatSession = typeof chatSessions.$inferSelect;
 export type ChatMessage = typeof chatMessages.$inferSelect;
 export type AiReading = typeof aiReadings.$inferSelect;
 export type NewAiReading = typeof aiReadings.$inferInsert;
+export type DailyHoroscope = typeof dailyHoroscopes.$inferSelect;
 export type GemstoneCategory = typeof gemstoneCategories.$inferSelect;
 export type NewGemstoneCategory = typeof gemstoneCategories.$inferInsert;
 export type GemstoneProduct = typeof gemstoneProducts.$inferSelect;
@@ -650,3 +808,7 @@ export type GemstoneWishlistItem = typeof gemstoneWishlist.$inferSelect;
 export type GemstoneReview = typeof gemstoneReviews.$inferSelect;
 export type GemstoneCoupon = typeof gemstoneCoupons.$inferSelect;
 export type NewGemstoneCoupon = typeof gemstoneCoupons.$inferInsert;
+export type GemstoneRecommendation = typeof gemstoneRecommendations.$inferSelect;
+export type DailyPanchang = typeof dailyPanchang.$inferSelect;
+export type KundliMatch = typeof kundliMatches.$inferSelect;
+export type NumerologyReading = typeof numerologyReadings.$inferSelect;

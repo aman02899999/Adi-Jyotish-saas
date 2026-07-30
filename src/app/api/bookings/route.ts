@@ -8,6 +8,10 @@ import { sendBookingNotification } from "@/lib/messaging";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { ensureInvoiceForBooking } from "@/lib/billing";
 import { validateAvailableSlot } from "@/lib/scheduling";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { createNotification, notifyAdmins } from "@/lib/notifications";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
 
@@ -43,6 +47,9 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = (await request.json()) as BookingPayload;
   const [member, settings] = await Promise.all([getCurrentMember(), getStudioSettings()]);
+
+  const throttle = await checkRateLimit("booking-create", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 8, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
   const serviceId = Number(body.serviceId);
   const practitionerId = Number(body.practitionerId);
   const bookingDate = body.bookingDate?.trim() ?? "";
@@ -81,6 +88,9 @@ export async function POST(request: Request) {
   const available = await validateAvailableSlot({ date: bookingDate, duration: service.duration, practitionerId, startsAt: scheduledAt });
   if (!available) return Response.json({ error: "This time is no longer available. Choose another open slot." }, { status: 409 });
 
+  const discountPercent = member ? await getMemberDiscountPercent(member.id) : 0;
+  const servicePrice = applyDiscount(service.price, discountPercent);
+
   const dateCode = new Date().toISOString().slice(2, 10).replaceAll("-", "");
   const reference = `JY-${dateCode}-${crypto.randomUUID().slice(0, 6).toUpperCase()}`;
   let created: typeof bookings.$inferSelect;
@@ -99,7 +109,7 @@ export async function POST(request: Request) {
         reference,
         serviceId: service.id,
         serviceTitle: service.title,
-        servicePrice: service.price,
+        servicePrice,
         serviceDuration: service.duration,
         practitionerId: practitioner.id,
         practitionerName: practitioner.name,
@@ -125,6 +135,22 @@ export async function POST(request: Request) {
   }
 
   await ensureInvoiceForBooking(created, member?.id);
+  getAdminIdsWithPermission("bookings").then((adminIds) => notifyAdmins(adminIds, {
+    type: "booking.created",
+    title: `New booking · ${created.serviceTitle}`,
+    body: `${created.clientName} with ${created.practitionerName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric" })}.`,
+    link: "/admin/bookings",
+  })).catch(() => {});
+  if (created.practitionerId) {
+    createNotification({
+      recipientType: "practitioner",
+      recipientId: created.practitionerId,
+      type: "booking.created",
+      title: `New booking · ${created.serviceTitle}`,
+      body: `${created.clientName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric" })}.`,
+      link: "/practitioner/bookings",
+    }).catch(() => {});
+  }
   if (member) {
     await sendBookingNotification({
       memberEmail: member.email,

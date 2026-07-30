@@ -4,7 +4,7 @@ import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypt
 import { cookies } from "next/headers";
 import { and, eq, gt, lt, sql } from "drizzle-orm";
 import { db } from "@/db";
-import { adminSessions, adminUsers, auditLogs } from "@/db/schema";
+import { adminRoles, adminSessions, adminUsers, auditLogs } from "@/db/schema";
 
 const COOKIE_NAME = "jyotish_admin_session";
 const SESSION_DAYS = 7;
@@ -14,22 +14,37 @@ export type AdminIdentity = {
   name: string;
   email: string;
   role: string;
+  permissions: AdminPermission[];
 };
 
 export type AdminPermission =
   | "overview" | "services" | "members_view" | "members_manage"
   | "bookings" | "schedule" | "billing" | "plans" | "reviews" | "messages" | "insights" | "reports"
-  | "activity" | "settings" | "team" | "gemstones";
+  | "activity" | "settings" | "team" | "gemstones" | "roles";
 
-const permissions: Record<string, AdminPermission[]> = {
-  owner: ["overview", "services", "members_view", "members_manage", "bookings", "schedule", "billing", "plans", "reviews", "messages", "insights", "reports", "activity", "settings", "team", "gemstones"],
-  manager: ["overview", "services", "members_view", "members_manage", "bookings", "schedule", "billing", "plans", "reviews", "messages", "insights", "reports", "activity", "gemstones"],
-  support: ["overview", "members_view", "bookings", "messages"],
-  analyst: ["overview", "insights", "reports"],
-};
+export const ALL_ADMIN_PERMISSIONS: { key: AdminPermission; label: string }[] = [
+  { key: "overview", label: "Overview" },
+  { key: "services", label: "Services" },
+  { key: "members_view", label: "View members" },
+  { key: "members_manage", label: "Manage members" },
+  { key: "bookings", label: "Bookings" },
+  { key: "schedule", label: "Schedule" },
+  { key: "billing", label: "Billing" },
+  { key: "plans", label: "Plans" },
+  { key: "reviews", label: "Reviews" },
+  { key: "messages", label: "Messages" },
+  { key: "insights", label: "Insights" },
+  { key: "reports", label: "Reports" },
+  { key: "activity", label: "Activity log" },
+  { key: "settings", label: "Settings" },
+  { key: "team", label: "Team" },
+  { key: "gemstones", label: "Gemstones" },
+  { key: "roles", label: "Roles & permissions" },
+];
 
+/** Permissions are resolved once when the admin identity is loaded (see getCurrentAdmin), so this stays a synchronous, allocation-free check at every call site. */
 export function hasAdminPermission(admin: AdminIdentity | null, permission: AdminPermission) {
-  return Boolean(admin && permissions[admin.role]?.includes(permission));
+  return Boolean(admin && admin.permissions.includes(permission));
 }
 
 export function normalizeEmail(email: string) {
@@ -90,9 +105,11 @@ export async function getCurrentAdmin(): Promise<AdminIdentity | null> {
       name: adminUsers.name,
       email: adminUsers.email,
       role: adminUsers.role,
+      permissions: adminRoles.permissions,
     })
     .from(adminSessions)
     .innerJoin(adminUsers, eq(adminSessions.adminId, adminUsers.id))
+    .leftJoin(adminRoles, eq(adminRoles.slug, adminUsers.role))
     .where(and(
       eq(adminSessions.tokenHash, tokenDigest(token)),
       gt(adminSessions.expiresAt, new Date()),
@@ -100,7 +117,8 @@ export async function getCurrentAdmin(): Promise<AdminIdentity | null> {
     ))
     .limit(1);
 
-  return row ?? null;
+  if (!row) return null;
+  return { ...row, permissions: (row.permissions as AdminPermission[] | null) ?? [] };
 }
 
 export async function revokeCurrentSession() {
@@ -111,7 +129,7 @@ export async function revokeCurrentSession() {
 }
 
 export async function recordAudit(
-  admin: AdminIdentity,
+  admin: Pick<AdminIdentity, "id" | "name">,
   action: string,
   entityType: string,
   entityId?: string | number,

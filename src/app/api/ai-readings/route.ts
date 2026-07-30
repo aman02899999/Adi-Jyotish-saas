@@ -1,6 +1,7 @@
-import { AI_READING_CURRENCY, AI_READING_PRICE, attachRazorpayOrder, createPendingReading } from "@/lib/ai-readings";
+import { AI_READING_CURRENCY, AI_READING_PRICE, attachRazorpayOrder, createFreeReading, createPendingReading, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay } from "@/lib/razorpay";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -16,8 +17,8 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
 
-  const razorpay = getRazorpay();
-  if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
+  const throttle = await checkRateLimit("ai-reading-create", `member:${member.id}`, 5, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as CreatePayload;
   const clientName = body.clientName?.trim() ?? "";
@@ -31,6 +32,19 @@ export async function POST(request: Request) {
   }
   if (question.length < 8) return Response.json({ error: "Please write a fuller question (at least a sentence)." }, { status: 400 });
   if (question.length > 600) return Response.json({ error: "Please keep your question under 600 characters." }, { status: 400 });
+
+  if (await isEligibleForFreeReading(member.id)) {
+    const freeReading = await createFreeReading({ memberId: member.id, clientName, birthDate, birthTime, birthPlace, question });
+    try {
+      const answered = await generateReadingAnswer(freeReading);
+      return Response.json({ free: true, readingId: freeReading.id, status: answered.status, answer: answered.answer }, { status: 201 });
+    } catch {
+      return Response.json({ free: true, readingId: freeReading.id, status: "paid", answer: null }, { status: 201 });
+    }
+  }
+
+  const razorpay = getRazorpay();
+  if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
 
   const reading = await createPendingReading({ memberId: member.id, clientName, birthDate, birthTime, birthPlace, question });
 

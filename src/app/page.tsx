@@ -4,7 +4,9 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CalendarDays,
+  Gem,
   GraduationCap,
+  Hash,
   Heart,
   HeartHandshake,
   HeartPulse,
@@ -14,7 +16,6 @@ import {
   PhoneCall,
   Quote,
   ScrollText,
-  Smartphone,
   Sparkles,
   Star,
   Sun,
@@ -22,6 +23,7 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { BrandMark } from "@/components/brand-mark";
+import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners } from "@/lib/homepage";
 import { getPublishedServices } from "@/lib/services";
 
 export const dynamic = "force-dynamic";
@@ -44,24 +46,19 @@ const categories = [
   { icon: GraduationCap, label: "Education", note: "Focus & academic timing" },
 ];
 
-const liveExperts = [
-  { name: "Acharya Devika Rao", specialty: "Vedic Astrology · Marriage", online: true, rating: 4.9, reviews: "2,340", price: 22, experience: 14 },
-  { name: "Pandit Rohan Mehta", specialty: "Career & Finance", online: true, rating: 4.8, reviews: "1,870", price: 18, experience: 11 },
-  { name: "Guruji Aditya Nair", specialty: "Vastu & Numerology", online: false, rating: 4.9, reviews: "3,120", price: 25, experience: 19 },
-  { name: "Smt. Kavita Iyer", specialty: "Love & Relationships", online: true, rating: 4.7, reviews: "980", price: 15, experience: 7 },
-  { name: "Acharya Manoj Tiwari", specialty: "Health & Wellness", online: true, rating: 4.9, reviews: "2,560", price: 20, experience: 16 },
-  { name: "Pandit Suresh Bhatt", specialty: "Family & Progeny", online: false, rating: 4.8, reviews: "1,430", price: 19, experience: 12 },
-];
-
 const freeTools = [
-  { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by moon sign" },
-  { icon: ScrollText, label: "Free Kundli", note: "Instant birth chart report" },
-  { icon: HeartHandshake, label: "Kundli Matching", note: "Compatibility for marriage" },
-  { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat" },
+  { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by your sign", href: "/horoscope" },
+  { icon: MessageCircle, label: "Ask AI a Question", note: "Instant answer, one question", href: "/ask" },
+  { icon: Gem, label: "Gemstone Match", note: "Free AI recommendation", href: "/gemstones/recommend" },
+  { icon: HeartHandshake, label: "Kundli Matching", note: "Free compatibility reading", href: "/kundli-matching" },
+  { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat", href: "/panchang" },
+  { icon: Hash, label: "Numerology", note: "Life Path & Destiny numbers", href: "/numerology" },
+  { icon: ScrollText, label: "Full Kundli Report", note: "Your complete birth chart", href: "/kundli" },
 ];
 
 export default async function HomePage() {
-  const services = await getPublishedServices();
+  const [services, stats, liveExperts, testimonials] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials()]);
+  const onlineCount = liveExperts.filter((expert) => expert.online).length;
 
   return (
     <main className="marketing-page">
@@ -80,9 +77,9 @@ export default async function HomePage() {
           </div>
           <div className="hero-proof">
             <div className="avatar-stack" aria-hidden="true">
-              <span>AK</span><span>MS</span><span>RL</span>
+              {liveExperts.slice(0, 3).map((expert) => <span key={expert.id}>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>)}
             </div>
-            <div><strong>4.9</strong> <span className="stars">★★★★★</span><small>Trusted by 12,000+ seekers</small></div>
+            <div><strong>{stats.averageRating || "—"}</strong> <span className="stars">★★★★★</span><small>{stats.consultationsDelivered >= 100 ? `Trusted by ${stats.consultationsDelivered}+ seekers` : "Trusted by a growing community"}</small></div>
           </div>
         </div>
 
@@ -102,9 +99,9 @@ export default async function HomePage() {
 
       <section className="trust-strip" aria-label="Jyotish highlights">
         <div className="shell trust-grid">
-          <div><strong>12k+</strong><span>Charts interpreted</span></div>
-          <div><strong>24</strong><span>Vedic astrologers</span></div>
-          <div><strong>4.9/5</strong><span>Average reading</span></div>
+          <div><strong>{stats.consultationsDelivered >= 100 ? `${stats.consultationsDelivered}+` : stats.consultationsDelivered}</strong><span>Consultations delivered</span></div>
+          <div><strong>{stats.practitionerCount}</strong><span>Vedic astrologers</span></div>
+          <div><strong>{stats.averageRating || "—"}/5</strong><span>Average reading</span></div>
           <div><strong>100%</strong><span>Private & personal</span></div>
         </div>
       </section>
@@ -124,47 +121,49 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="live-strip shell" aria-label="Astrologers online now">
-        <div className="live-strip__head reveal">
-          <div>
-            <p className="live-pulse"><i /> {liveExperts.filter((e) => e.online).length} astrologers online now</p>
-            <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>Talk to a guide<br /><em style={{ color: "var(--copper)" }}>right now.</em></h2>
+      {liveExperts.length > 0 && (
+        <section className="live-strip shell" aria-label="Astrologers online now">
+          <div className="live-strip__head reveal">
+            <div>
+              <p className="live-pulse"><i /> {onlineCount} astrologer{onlineCount === 1 ? "" : "s"} online now</p>
+              <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>Talk to a guide<br /><em style={{ color: "var(--copper)" }}>right now.</em></h2>
+            </div>
+            <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat or call instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
           </div>
-          <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat or call instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
-        </div>
-        <div className="live-grid">
-          {liveExperts.map((expert) => (
-            <article className="live-card reveal" key={expert.name}>
-              <div className="live-card__top">
-                <div className="live-card__avatar">
-                  <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>
-                  <i className={`live-card__dot ${expert.online ? "" : "live-card__dot--off"}`} />
+          <div className="live-grid">
+            {liveExperts.map((expert) => (
+              <article className="live-card reveal" key={expert.id}>
+                <div className="live-card__top">
+                  <div className="live-card__avatar">
+                    <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>
+                    <i className={`live-card__dot ${expert.online ? "" : "live-card__dot--off"}`} />
+                  </div>
+                  <div className="live-card__name">
+                    <strong>{expert.name}</strong>
+                    <span>{expert.online ? "Online now" : "Offline"}</span>
+                  </div>
                 </div>
-                <div className="live-card__name">
-                  <strong>{expert.name}</strong>
-                  <span>{expert.online ? "Online now" : "Offline"}</span>
+                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating ?? "New"}</strong><small>{expert.reviewCount} review{expert.reviewCount === 1 ? "" : "s"} · {expert.experienceYears} yrs</small></div>
+                <div className="live-card__tags"><span>{expert.specialties}</span></div>
+                <div className="live-card__foot">
+                  <div className="live-card__price"><strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong><small>Chat or call</small></div>
+                  <div className="live-card__actions">
+                    <Link href={`/astrologers/${expert.slug}`} aria-label={`Chat with ${expert.name}`}><MessageCircle size={15} /></Link>
+                    <Link href={`/astrologers/${expert.slug}`} className="primary" aria-label={`Call ${expert.name}`}><PhoneCall size={15} /></Link>
+                  </div>
                 </div>
-              </div>
-              <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating}</strong><small>{expert.reviews} reviews · {expert.experience} yrs</small></div>
-              <div className="live-card__tags"><span>{expert.specialty}</span></div>
-              <div className="live-card__foot">
-                <div className="live-card__price"><strong>₹{expert.price}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong><small>Chat or call</small></div>
-                <div className="live-card__actions">
-                  <Link href="/astrologers" aria-label={`Chat with a guide like ${expert.name}`}><MessageCircle size={15} /></Link>
-                  <Link href="/astrologers" className="primary" aria-label={`Call a guide like ${expert.name}`}><PhoneCall size={15} /></Link>
-                </div>
-              </div>
-            </article>
-          ))}
-        </div>
-        <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
-      </section>
+              </article>
+            ))}
+          </div>
+          <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
+        </section>
+      )}
 
       <div className="shell" style={{ paddingBlock: "10px 20px" }}>
         <div className="promo-banner promo-banner--dark reveal">
           <div className="promo-banner__copy">
             <strong>Or ask Shree Santram Shashtri instantly.</strong>
-            <span>Our AI Jyotish guide answers one focused question in under a minute — pay once, get your reading right away.</span>
+            <span>Our AI Jyotish guide answers one focused question in under a minute. Your first reading is free.</span>
           </div>
           <Link href="/ask" className="button button--light">Ask now <ArrowRight size={16} /></Link>
         </div>
@@ -206,8 +205,8 @@ export default async function HomePage() {
 
       <section className="tools-strip shell" aria-label="Free astrology tools">
         <div className="tools-grid">
-          {freeTools.map(({ icon: Icon, label, note }) => (
-            <Link href="/dashboard" className="tool-card reveal" key={label}>
+          {freeTools.map(({ icon: Icon, label, note, href }) => (
+            <Link href={href} className="tool-card reveal" key={label}>
               <span><Icon size={19} strokeWidth={1.5} /></span>
               <div><strong>{label}</strong><small>{note}</small></div>
             </Link>
@@ -239,46 +238,29 @@ export default async function HomePage() {
       <div className="shell" style={{ paddingTop: 70 }}>
         <div className="promo-banner reveal">
           <div className="promo-banner__copy">
-            <strong>Your first chat is on us.</strong>
-            <span>3 free minutes with any guide — no card required to start.</span>
+            <strong>Prefer a live guide?</strong>
+            <span>Chat instantly with an available astrologer — pay only for the minutes you use, no subscription required.</span>
           </div>
-          <Link href="/astrologers" className="button button--light">Claim your free chat <ArrowRight size={16} /></Link>
+          <Link href="/astrologers" className="button button--light">Find a guide <ArrowRight size={16} /></Link>
         </div>
       </div>
 
-      <section className="section shell stories" id="stories">
-        <div className="section-heading section-heading--center reveal">
-          <div><p className="eyebrow"><span /> From our community</p><h2>Clarity changes<br /><em>everything.</em></h2></div>
-        </div>
-        <div className="story-grid">
-          {[
-            ["Maya S.", "London", "I felt seen without feeling boxed in. My reading gave language to a transition I had been quietly moving through."],
-            ["Arun K.", "New York", "The timing was astonishingly precise, but it was the practical guidance that made the biggest difference."],
-            ["Leah R.", "Melbourne", "Beautiful, thoughtful and grounded. I returned to the dashboard all month whenever I needed perspective."],
-          ].map(([name, city, quote]) => (
-            <blockquote className="story-card reveal" key={name}>
-              <Quote size={22} strokeWidth={1.2} />
-              <p>“{quote}”</p>
-              <footer><span className="story-avatar">{name.charAt(0)}</span><div><strong>{name}</strong><small>{city}</small></div></footer>
-            </blockquote>
-          ))}
-        </div>
-      </section>
-
-      <section className="app-strip shell" aria-label="Get the app">
-        <div className="app-strip__copy reveal">
-          <p className="eyebrow"><span /> Take it with you</p>
-          <h2>Your chart,<br /><em>in your pocket.</em></h2>
-          <p>Get daily transits, instant chat with your favorite guides, and wallet top-ups from wherever you are.</p>
-          <div className="app-strip__badges">
-            <span className="app-badge"><Smartphone size={18} /><span><small>Download on</small><strong>App Store</strong></span></span>
-            <span className="app-badge"><Smartphone size={18} /><span><small>Get it on</small><strong>Google Play</strong></span></span>
+      {testimonials.length > 0 && (
+        <section className="section shell stories" id="stories">
+          <div className="section-heading section-heading--center reveal">
+            <div><p className="eyebrow"><span /> From our community</p><h2>Clarity changes<br /><em>everything.</em></h2></div>
           </div>
-        </div>
-        <div className="app-strip__visual reveal reveal--delay">
-          <div className="marketplace-orbit"><span><Smartphone size={26} /></span><i /><b /></div>
-        </div>
-      </section>
+          <div className="story-grid">
+            {testimonials.map((review, index) => (
+              <blockquote className="story-card reveal" key={index}>
+                <Quote size={22} strokeWidth={1.2} />
+                <p>&ldquo;{review.body}&rdquo;</p>
+                <footer><span className="story-avatar">{review.reviewerName.charAt(0)}</span><div><strong>{review.reviewerName}</strong><small>{review.rating}/5 reading</small></div></footer>
+              </blockquote>
+            ))}
+          </div>
+        </section>
+      )}
 
       <section className="cta shell reveal">
         <div className="cta-zodiac" aria-hidden="true">✦</div>

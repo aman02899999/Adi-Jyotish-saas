@@ -5,6 +5,7 @@ import { db } from "@/db";
 import { chatMessages, chatSessions, memberUsers, practitioners } from "@/db/schema";
 import { publishChatEvent } from "@/lib/ably";
 import { captureHold, createHold, getActiveHold, getOrCreateWallet, InsufficientBalanceError } from "@/lib/wallet";
+import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 
 export { InsufficientBalanceError };
 
@@ -36,7 +37,8 @@ export async function startChatSession(memberId: number, practitionerId: number)
   if (existing) throw new ChatSessionConflictError("You already have an active chat. Finish it before starting another.");
 
   const wallet = await getOrCreateWallet(memberId);
-  const rate = practitioner.chatRatePerMinute;
+  const discountPercent = await getMemberDiscountPercent(memberId);
+  const rate = Math.max(1, applyDiscount(practitioner.chatRatePerMinute, discountPercent));
   const affordableMinutes = Math.floor(wallet.balance / rate);
   if (affordableMinutes < MIN_HOLD_MINUTES) {
     throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${rate} to your wallet to start this chat.`);

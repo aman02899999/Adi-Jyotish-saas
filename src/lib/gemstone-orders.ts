@@ -5,6 +5,8 @@ import { and, asc, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { gemstoneCoupons, gemstoneOrderItems, gemstoneOrders, gemstoneProductVariants, gemstoneProducts, type GemstoneOrder } from "@/db/schema";
 import { validateCoupon } from "@/lib/gemstone-coupons";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { createNotification, notifyAdmins } from "@/lib/notifications";
 
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
@@ -158,10 +160,10 @@ export async function attachRazorpayOrder(orderId: number, razorpayOrderId: stri
 
 /** Idempotent per razorpayPaymentId. */
 export async function markOrderPaid({ orderId, razorpayPaymentId }: { orderId: number; razorpayPaymentId: string }) {
-  return db.transaction(async (tx) => {
+  const result = await db.transaction(async (tx) => {
     const [existing] = await tx.select().from(gemstoneOrders).where(eq(gemstoneOrders.id, orderId)).limit(1);
     if (!existing) throw new OrderNotFoundError("Order not found.");
-    if (existing.paymentStatus === "paid") return existing;
+    if (existing.paymentStatus === "paid") return { order: existing, justPaid: false };
 
     const [updated] = await tx.update(gemstoneOrders)
       .set({ paymentStatus: "paid", status: "processing", razorpayPaymentId, updatedAt: new Date() })
@@ -172,8 +174,31 @@ export async function markOrderPaid({ orderId, razorpayPaymentId }: { orderId: n
       await tx.update(gemstoneCoupons).set({ usageCount: sql`${gemstoneCoupons.usageCount} + 1` }).where(eq(gemstoneCoupons.code, updated.couponCode));
     }
 
-    return updated ?? existing;
+    return { order: updated ?? existing, justPaid: Boolean(updated) };
   });
+
+  if (result.justPaid) await notifyOrderPaid(result.order).catch(() => {});
+  return result.order;
+}
+
+async function notifyOrderPaid(order: GemstoneOrder) {
+  const adminIds = await getAdminIdsWithPermission("gemstones");
+  await notifyAdmins(adminIds, {
+    type: "gemstone_order.paid",
+    title: `New paid order ${order.orderNumber}`,
+    body: `${order.currency} ${order.total} · ${order.guestName || "Member order"}`,
+    link: `/admin/gemstones/orders`,
+  });
+  if (order.memberId) {
+    await createNotification({
+      recipientType: "member",
+      recipientId: order.memberId,
+      type: "gemstone_order.paid",
+      title: "Your order is confirmed",
+      body: `Order ${order.orderNumber} is being processed.`,
+      link: `/gemstones/order/${order.orderNumber}`,
+    });
+  }
 }
 
 export async function getOrderItems(orderId: number) {
@@ -208,7 +233,7 @@ export async function getAllOrdersAdmin(status?: string) {
 const CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
 
 export async function updateOrderStatus(orderId: number, status: string) {
-  return db.transaction(async (tx) => {
+  const updated = await db.transaction(async (tx) => {
     const [existing] = await tx.select().from(gemstoneOrders).where(eq(gemstoneOrders.id, orderId)).limit(1);
     if (!existing) throw new OrderNotFoundError("Order not found.");
 
@@ -222,12 +247,23 @@ export async function updateOrderStatus(orderId: number, status: string) {
       }
     }
 
-    const [updated] = await tx.update(gemstoneOrders)
+    const [row] = await tx.update(gemstoneOrders)
       .set({ status, paymentStatus: status === "refunded" ? "refunded" : existing.paymentStatus, updatedAt: new Date() })
       .where(eq(gemstoneOrders.id, orderId))
       .returning();
-    return updated;
+    return row;
   });
+
+  if (updated?.memberId) {
+    await createNotification({
+      recipientType: "member",
+      recipientId: updated.memberId,
+      type: "gemstone_order.status",
+      title: `Order ${updated.orderNumber} is now ${status}`,
+      link: `/gemstones/order/${updated.orderNumber}`,
+    }).catch(() => {});
+  }
+  return updated;
 }
 
 export async function getGemstoneAdminStats() {

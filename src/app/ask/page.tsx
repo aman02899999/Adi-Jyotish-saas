@@ -1,8 +1,9 @@
 import type { Metadata } from "next";
-import { CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { AskReadingForm } from "@/components/ask-reading-form";
 import { SiteHeader } from "@/components/site-header";
-import { AI_READING_CURRENCY, AI_READING_PRICE } from "@/lib/ai-readings";
+import { AI_READING_CURRENCY, AI_READING_PRICE, isEligibleForFreeReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { isRazorpayConfigured } from "@/lib/razorpay";
 
@@ -15,6 +16,7 @@ export const metadata: Metadata = {
 
 export default async function AskPage() {
   const member = await getCurrentMember();
+  const isFreeEligible = member ? await isEligibleForFreeReading(member.id) : false;
 
   return (
     <main className="marketing-page">
@@ -36,7 +38,7 @@ export default async function AskPage() {
             <div className="ask-persona-avatar"><Sparkles size={26} /></div>
             <strong>Shree Santram Shashtri</strong>
             <span>AI Jyotish Guide · Available instantly</span>
-            <div className="ask-persona-price">{AI_READING_CURRENCY} {AI_READING_PRICE}<small>per reading</small></div>
+            <div className="ask-persona-price">{isFreeEligible ? "Free" : `${AI_READING_CURRENCY} ${AI_READING_PRICE}`}<small>{isFreeEligible ? "your first reading" : "per reading"}</small></div>
             <ul>
               <li><CheckCircle2 size={13} /> One focused question, one clear answer</li>
               <li><CheckCircle2 size={13} /> Grounded in classical Jyotish method</li>
@@ -51,8 +53,19 @@ export default async function AskPage() {
           price={AI_READING_PRICE}
           currency={AI_READING_CURRENCY}
           onlinePaymentsAvailable={isRazorpayConfigured()}
+          isFreeEligible={isFreeEligible}
         />
       </section>
+
+      <div className="shell" style={{ paddingBlock: "10px 60px" }}>
+        <div className="promo-banner reveal">
+          <div className="promo-banner__copy">
+            <strong>Want your whole picture, not just one answer?</strong>
+            <span>Get a full Kundli report covering career, relationships, health, and wealth in one reading.</span>
+          </div>
+          <Link href="/kundli" className="button button--light">Get full report <ArrowRight size={15} /></Link>
+        </div>
+      </div>
     </main>
   );
 }

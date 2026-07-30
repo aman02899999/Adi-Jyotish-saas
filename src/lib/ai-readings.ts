@@ -3,9 +3,10 @@ import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { aiReadings, type AiReading } from "@/db/schema";
-import { getAiReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { getAiReadingAnswer, getKundliReportAnswer, isGeminiConfigured } from "@/lib/gemini";
 
 export const AI_READING_PRICE = 149;
+export const AI_KUNDLI_PRICE = 499;
 export const AI_READING_CURRENCY = "INR";
 
 export async function createPendingReading({ memberId, clientName, birthDate, birthTime, birthPlace, question }: {
@@ -24,6 +25,57 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
     birthPlace,
     question,
     price: AI_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+  }).returning();
+  return reading;
+}
+
+/** A member's very first question-type reading is free. Checked (and consumed) at creation time, so a second attempt is never free even if the first is still pending. */
+export async function isEligibleForFreeReading(memberId: number) {
+  const [existing] = await db.select({ id: aiReadings.id }).from(aiReadings)
+    .where(and(eq(aiReadings.memberId, memberId), eq(aiReadings.readingType, "question")))
+    .limit(1);
+  return !existing;
+}
+
+export async function createFreeReading({ memberId, clientName, birthDate, birthTime, birthPlace, question }: {
+  memberId: number;
+  clientName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+  question: string;
+}) {
+  const [reading] = await db.insert(aiReadings).values({
+    memberId,
+    clientName,
+    birthDate,
+    birthTime,
+    birthPlace,
+    question,
+    price: 0,
+    currency: AI_READING_CURRENCY,
+    status: "paid",
+  }).returning();
+  return reading;
+}
+
+export async function createPendingKundliReport({ memberId, clientName, birthDate, birthTime, birthPlace }: {
+  memberId: number;
+  clientName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+}) {
+  const [reading] = await db.insert(aiReadings).values({
+    memberId,
+    readingType: "kundli",
+    clientName,
+    birthDate,
+    birthTime,
+    birthPlace,
+    price: AI_KUNDLI_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
   }).returning();
@@ -60,13 +112,9 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
   if (reading.status === "answered" && reading.answer) return reading;
   if (!isGeminiConfigured()) throw new Error("AI readings are not configured yet. Please try again shortly.");
 
-  const answer = await getAiReadingAnswer({
-    name: reading.clientName,
-    birthDate: reading.birthDate,
-    birthTime: reading.birthTime,
-    birthPlace: reading.birthPlace,
-    question: reading.question,
-  });
+  const answer = reading.readingType === "kundli"
+    ? await getKundliReportAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace })
+    : await getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
 
   const [updated] = await db.update(aiReadings)
     .set({ status: "answered", answer, answeredAt: new Date() })

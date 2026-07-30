@@ -1,6 +1,7 @@
 import { db } from "@/db";
 import { adminUsers } from "@/db/schema";
 import { createAdminSession, normalizeEmail, recordAudit, verifyPassword } from "@/lib/admin-auth";
+import { createTwoFactorChallenge } from "@/lib/admin-2fa";
 import { and, eq } from "drizzle-orm";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 
@@ -26,6 +27,12 @@ export async function POST(request: Request) {
   }
 
   await clearAuthFailures(throttle.keyHash);
+
+  if (admin.totpEnabled) {
+    const challengeToken = await createTwoFactorChallenge(admin.id);
+    return Response.json({ requiresTotp: true, challengeToken });
+  }
+
   await db.update(adminUsers).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(adminUsers.id, admin.id));
   const identity = { id: admin.id, name: admin.name, email: admin.email, role: admin.role };
   await createAdminSession(admin.id);

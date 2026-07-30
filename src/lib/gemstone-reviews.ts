@@ -3,6 +3,8 @@ import "server-only";
 import { and, desc, eq, sql } from "drizzle-orm";
 import { db } from "@/db";
 import { gemstoneOrderItems, gemstoneOrders, gemstoneProducts, gemstoneReviews, type GemstoneReview } from "@/db/schema";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { notifyAdmins } from "@/lib/notifications";
 
 export class ReviewError extends Error {}
 
@@ -54,6 +56,15 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
     imageUrls: imageUrls?.trim() ?? "",
     status: "pending",
   }).returning();
+
+  const adminIds = await getAdminIdsWithPermission("gemstones");
+  await notifyAdmins(adminIds, {
+    type: "gemstone_review.pending",
+    title: "New review awaiting moderation",
+    body: `${created.reviewerName} rated a product ${created.rating}/5.`,
+    link: "/admin/gemstones/reviews",
+  }).catch(() => {});
+
   return created;
 }
 

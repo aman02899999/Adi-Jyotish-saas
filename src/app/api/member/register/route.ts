@@ -2,10 +2,14 @@ import { db } from "@/db";
 import { memberUsers } from "@/db/schema";
 import { createMemberSession } from "@/lib/member-auth";
 import { hashPassword, normalizeEmail } from "@/lib/admin-auth";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const throttle = await checkRateLimit("member-register", requestIp(request), 8, 3600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const body = await request.json() as { name?: string; email?: string; password?: string };
   const name = body.name?.trim().slice(0, 120) ?? "";
   const email = normalizeEmail(body.email ?? "");

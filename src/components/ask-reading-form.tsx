@@ -7,11 +7,12 @@ import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
-export function AskReadingForm({ member, price, currency, onlinePaymentsAvailable }: {
+export function AskReadingForm({ member, price, currency, onlinePaymentsAvailable, isFreeEligible }: {
   member: MemberPrefill | null;
   price: number;
   currency: string;
   onlinePaymentsAvailable: boolean;
+  isFreeEligible: boolean;
 }) {
   const [clientName, setClientName] = useState(member?.name ?? "");
   const [birthDate, setBirthDate] = useState(member?.birthDate ?? "");
@@ -77,7 +78,18 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         body: JSON.stringify({ clientName, birthDate, birthTime, birthPlace, question }),
       });
       const data = await response.json();
-      if (!response.ok || !data.orderId) throw new Error(data.error || "Your reading could not be started.");
+      if (!response.ok) throw new Error(data.error || "Your reading could not be started.");
+
+      if (data.free) {
+        setReadingId(data.readingId);
+        if (data.answer) { setAnswer(data.answer); setLoading(false); return; }
+        setWaiting(true);
+        setLoading(false);
+        await pollForAnswer(data.readingId, 5);
+        return;
+      }
+
+      if (!data.orderId) throw new Error(data.error || "Your reading could not be started.");
       setReadingId(data.readingId);
 
       await openRazorpayCheckout({
@@ -136,7 +148,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
 
   return (
     <div className="ask-form-card">
-      <header><div><p>{currency} {price} · one question, one answer</p><h2>Tell Shree Santram Shashtri about yourself</h2></div></header>
+      <header><div><p>{isFreeEligible ? "Your first question is free" : `${currency} ${price} · one question, one answer`}</p><h2>Tell Shree Santram Shashtri about yourself</h2></div></header>
       <div className="booking-fields">
         <label><span>Your name</span><div><UserRound size={16} /><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
@@ -144,10 +156,10 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         <label className="wide"><span>Birth place</span><div><MapPin size={16} /><input value={birthPlace} onChange={(event) => setBirthPlace(event.target.value)} placeholder="City, country" /></div></label>
         <label className="wide"><span>Your question</span><textarea rows={4} maxLength={600} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="What would you like Shree Santram Shashtri to look into?" /><small>{question.length}/600</small></label>
       </div>
-      <button type="button" className="button ask-form-card__submit" disabled={loading || !onlinePaymentsAvailable} onClick={submit}>
-        {loading ? "Opening payment…" : `Pay ${currency} ${price} & get my reading`}
+      <button type="button" className="button ask-form-card__submit" disabled={loading || (!isFreeEligible && !onlinePaymentsAvailable)} onClick={submit}>
+        {loading ? "Preparing…" : isFreeEligible ? "Get my first reading free" : `Pay ${currency} ${price} & get my reading`}
       </button>
-      {!onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments are being configured — please check back shortly.</p>}
+      {!isFreeEligible && !onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments are being configured — please check back shortly.</p>}
       {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
     </div>
   );
