@@ -305,6 +305,8 @@ button { border: 0; }
 .ask-hero__points { display:flex; flex-direction:column; gap:11px; margin:0; padding:0; list-style:none; }
 .ask-hero__points li { display:flex; align-items:center; gap:10px; color:#5f554d; font-size:14px; }
 .ask-hero__points li svg { flex:0 0 auto; color:var(--copper); }
+.ask-persona-photo { position:relative; width:100%; aspect-ratio:16/10; margin-bottom:18px; border-radius:24px; overflow:hidden; box-shadow:0 25px 55px rgba(94,62,41,.14); }
+.ask-persona-photo img { object-fit:cover; object-position:center; }
 .ask-persona-card { display:flex; flex-direction:column; align-items:center; gap:6px; padding:38px 32px; border:1px solid var(--line); border-radius:24px; text-align:center; background:rgba(255,255,255,.4); box-shadow:0 25px 55px rgba(94,62,41,.1); }
 .ask-persona-avatar { width:64px; height:64px; display:grid; place-items:center; margin-bottom:8px; border-radius:50%; color:#fff; background:linear-gradient(145deg,#c18c70,#704c41); box-shadow:0 14px 30px rgba(72,49,38,.22); }
 .ask-persona-card strong { font:400 22px var(--serif); }

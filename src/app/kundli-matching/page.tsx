@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { CheckCircle2, Clock3, HeartHandshake, ShieldCheck } from "lucide-react";
 import { KundliMatchingForm } from "@/components/kundli-matching-form";
 import { SiteHeader } from "@/components/site-header";
@@ -27,6 +28,9 @@ export default function KundliMatchingPage() {
           </ul>
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
+          <div className="ask-persona-photo">
+            <Image src="/images/kundli-matching-hero.jpg" alt="Two people holding hands under a starry sky with an astrological chart overlay" fill sizes="(max-width: 800px) 90vw, 40vw" />
+          </div>
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><HeartHandshake size={26} /></div>
             <strong>Guna Milan Engine</strong>
