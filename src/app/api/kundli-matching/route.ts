@@ -4,7 +4,10 @@ import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
-type Payload = { nameA?: string; birthDateA?: string; nameB?: string; birthDateB?: string };
+type Payload = {
+  nameA?: string; birthDateA?: string; birthTimeA?: string; birthPlaceA?: string;
+  nameB?: string; birthDateB?: string; birthTimeB?: string; birthPlaceB?: string;
+};
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();
@@ -15,17 +18,35 @@ export async function POST(request: Request) {
   const body = (await request.json()) as Payload;
   const nameA = body.nameA?.trim().slice(0, 120) ?? "";
   const birthDateA = body.birthDateA?.trim() ?? "";
+  const birthTimeA = body.birthTimeA?.trim() ?? "";
+  const birthPlaceA = body.birthPlaceA?.trim().slice(0, 160) ?? "";
   const nameB = body.nameB?.trim().slice(0, 120) ?? "";
   const birthDateB = body.birthDateB?.trim() ?? "";
+  const birthTimeB = body.birthTimeB?.trim() ?? "";
+  const birthPlaceB = body.birthPlaceB?.trim().slice(0, 160) ?? "";
 
   if (!nameA || !nameB) return Response.json({ error: "Please share both names." }, { status: 400 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDateA) || !/^\d{4}-\d{2}-\d{2}$/.test(birthDateB)) {
     return Response.json({ error: "Please choose valid birth dates for both people." }, { status: 400 });
   }
+  if (!/^\d{2}:\d{2}$/.test(birthTimeA) || !/^\d{2}:\d{2}$/.test(birthTimeB)) {
+    return Response.json({ error: "Please enter valid birth times for both people — Guna Milan needs the Moon's exact position." }, { status: 400 });
+  }
+  if (!birthPlaceA || !birthPlaceB) return Response.json({ error: "Please share both birth places." }, { status: 400 });
 
   try {
-    const match = await createKundliMatch({ memberId: member?.id ?? null, nameA, birthDateA, nameB, birthDateB });
-    return Response.json({ score: match.compatibilityScore, narrative: match.narrative }, { status: 201 });
+    const { match, result, moonARashi, moonANakshatra, moonBRashi, moonBNakshatra } = await createKundliMatch({
+      memberId: member?.id ?? null, nameA, birthDateA, birthTimeA, birthPlaceA, nameB, birthDateB, birthTimeB, birthPlaceB,
+    });
+    return Response.json({
+      score: match.compatibilityScore,
+      maxScore: result.maxScore,
+      breakdown: result.breakdown,
+      nadiDosha: result.nadiDosha,
+      bhakootDosha: result.bhakootDosha,
+      moonARashi, moonANakshatra, moonBRashi, moonBNakshatra,
+      narrative: match.narrative,
+    }, { status: 201 });
   } catch (error) {
     if (error instanceof KundliMatchError) return Response.json({ error: error.message }, { status: 400 });
     console.error("Kundli matching failed", error instanceof Error ? error.message : "unknown error");

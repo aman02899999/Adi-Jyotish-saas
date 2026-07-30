@@ -11,10 +11,13 @@
   },
   "dependencies": {
     "ably": "^2.26.0",
+    "astronomy-engine": "^2.1.19",
+    "city-timezones": "^1.3.4",
     "drizzle-orm": "0.45.2",
     "lucide-react": "^1.27.0",
     "next": "^16.2.12",
     "otplib": "^13.4.1",
+    "panchanga": "^0.1.1",
     "pg": "8.20.0",
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.8",

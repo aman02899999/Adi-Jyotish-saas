@@ -4,6 +4,7 @@ import {
   integer,
   jsonb,
   pgTable,
+  real,
   serial,
   text,
   timestamp,
@@ -503,21 +504,19 @@ export const dailyHoroscopes = pgTable("daily_horoscopes", {
   uniqueIndex("daily_horoscopes_sign_date_unique").on(table.sign, table.date),
 ]);
 
-export const dailyPanchang = pgTable("daily_panchang", {
-  id: serial("id").primaryKey(),
-  date: varchar("date", { length: 10 }).notNull().unique(),
-  content: text("content").notNull(),
-  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
-});
-
 export const kundliMatches = pgTable("kundli_matches", {
   id: serial("id").primaryKey(),
   memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
   personAName: varchar("person_a_name", { length: 120 }).notNull(),
   personABirthDate: varchar("person_a_birth_date", { length: 10 }).notNull(),
+  personABirthTime: varchar("person_a_birth_time", { length: 5 }).notNull(),
+  personABirthPlace: varchar("person_a_birth_place", { length: 160 }).notNull(),
   personBName: varchar("person_b_name", { length: 120 }).notNull(),
   personBBirthDate: varchar("person_b_birth_date", { length: 10 }).notNull(),
-  compatibilityScore: integer("compatibility_score").notNull(),
+  personBBirthTime: varchar("person_b_birth_time", { length: 5 }).notNull(),
+  personBBirthPlace: varchar("person_b_birth_place", { length: 160 }).notNull(),
+  compatibilityScore: real("compatibility_score").notNull(),
+  breakdown: jsonb("breakdown").$type<{ varna: number; vashya: number; tara: number; yoni: number; grahaMaitri: number; gana: number; bhakoot: number; nadi: number }>().notNull(),
   narrative: text("narrative").notNull(),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -809,6 +808,5 @@ export type GemstoneReview = typeof gemstoneReviews.$inferSelect;
 export type GemstoneCoupon = typeof gemstoneCoupons.$inferSelect;
 export type NewGemstoneCoupon = typeof gemstoneCoupons.$inferInsert;
 export type GemstoneRecommendation = typeof gemstoneRecommendations.$inferSelect;
-export type DailyPanchang = typeof dailyPanchang.$inferSelect;
 export type KundliMatch = typeof kundliMatches.$inferSelect;
 export type NumerologyReading = typeof numerologyReadings.$inferSelect;

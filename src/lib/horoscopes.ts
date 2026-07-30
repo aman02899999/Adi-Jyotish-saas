@@ -3,7 +3,7 @@ import "server-only";
 import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { dailyHoroscopes } from "@/db/schema";
-import { getDailyHoroscopeText, isGeminiConfigured } from "@/lib/gemini";
+import { tropicalLongitudeOf } from "@/lib/astro-engine";
 import { dateInTimeZone } from "@/lib/scheduling";
 import { getStudioSettings } from "@/lib/studio-settings";
 
@@ -55,16 +55,45 @@ export async function todayCivilDate() {
   return dateInTimeZone(new Date(), settings.timezone);
 }
 
+/** Theme of the Moon transiting each house counted from a person's own (Moon) sign —
+ * the standard "Chandra transit" framework classical Jyotish daily horoscopes are built on. */
+const HOUSE_THEMES: Record<number, string> = {
+  1: "The Moon lights up your own sign today, sharpening your instincts and putting your feelings close to the surface. It's a self-focused day, good for starting something that actually reflects who you are.",
+  2: "The Moon turns your attention to money, family, and the things that make you feel grounded. Practical decisions — a purchase, a budget, a conversation with family — land well today.",
+  3: "The Moon energizes courage, communication, and short trips. A conversation or message you've been putting off is easier to start today than it will feel tomorrow.",
+  4: "The Moon settles into your house of home and emotional comfort. You may want to slow down, spend time with family, or simply be somewhere familiar — that instinct is worth honoring.",
+  5: "The Moon lights up creativity, romance, and anything that lets you think for yourself. It's a good day for a creative project, a date, or trusting your own judgment over everyone else's advice.",
+  6: "The Moon highlights work, routine, and small obstacles. Problems that show up today are usually more manageable than they first appear — deal with them directly rather than avoiding them.",
+  7: "The Moon activates your house of partnership. Conversations with a spouse, close partner, or collaborator carry extra weight today — say the honest thing, gently.",
+  8: "The Moon moves through a more private, intense house today. Energy may feel lower or emotions closer to the surface than usual — this is a better day for rest and reflection than for big decisions.",
+  9: "The Moon lifts your house of fortune, learning, and travel. Bigger-picture thinking — planning ahead, studying, or a journey — flows more easily than usual today.",
+  10: "The Moon sits in your house of career and public standing. Your work is more visible than usual today, for better or worse — it's a good day to do your best work in front of others.",
+  11: "The Moon brightens your house of gains and friendships. Financial news, social plans, or progress toward a goal you've been chasing are more likely to land in your favor today.",
+  12: "The Moon withdraws into your house of rest and letting go. Today rewards quiet over hustle — sleep, solitude, or simply finishing something rather than starting something new.",
+};
+
+function relativeHouse(signRashiIndex: number, moonRashiIndex: number) {
+  return ((moonRashiIndex - signRashiIndex + 12) % 12) + 1;
+}
+
+function generateHoroscopeText(signIndex: number) {
+  const moonLongitude = tropicalLongitudeOf(new Date(), "moon");
+  const moonSignIndex = Math.floor(moonLongitude / 30);
+  const house = relativeHouse(signIndex, moonSignIndex);
+  const theme = HOUSE_THEMES[house];
+  return `${theme}\n\nThe Moon is currently transiting ${ZODIAC_SIGNS[moonSignIndex].name}. Use today's mood as information, not instruction — notice it, then choose deliberately.`;
+}
+
 export async function getDailyHoroscope(sign: ZodiacSignKey) {
   const definition = ZODIAC_SIGNS.find((entry) => entry.key === sign);
   if (!definition) throw new Error("Unknown zodiac sign.");
+  const signIndex = ZODIAC_SIGNS.findIndex((entry) => entry.key === sign);
   const date = await todayCivilDate();
 
   const [existing] = await db.select().from(dailyHoroscopes).where(and(eq(dailyHoroscopes.sign, sign), eq(dailyHoroscopes.date, date))).limit(1);
   if (existing) return existing;
 
-  if (!isGeminiConfigured()) throw new Error("Horoscopes are not configured yet. Please try again shortly.");
-  const content = await getDailyHoroscopeText({ signName: definition.name, date });
+  const content = generateHoroscopeText(signIndex);
 
   await db.insert(dailyHoroscopes).values({ sign, date, content }).onConflictDoNothing({ target: [dailyHoroscopes.sign, dailyHoroscopes.date] });
   const [row] = await db.select().from(dailyHoroscopes).where(and(eq(dailyHoroscopes.sign, sign), eq(dailyHoroscopes.date, date))).limit(1);

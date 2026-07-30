@@ -2,7 +2,9 @@ import type { ReactNode } from "react";
 import Link from "next/link";
 import { CalendarClock, Coins, LayoutDashboard, LogOut, Menu, Star, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { FaqWidget } from "@/components/faq-widget";
 import { NotificationBell } from "@/components/notification-bell";
+import { PRACTITIONER_FAQ } from "@/lib/faq-data";
 import type { PractitionerIdentity } from "@/lib/practitioner-auth";
 
 type ActiveTab = "Overview" | "Schedule" | "Bookings" | "Earnings" | "Reviews" | "Profile";
@@ -57,6 +59,7 @@ export async function PractitionerShell({ practitioner, active, children }: { pr
           <div className="dashboard-scroll">{children}</div>
         </section>
       </div>
+      <FaqWidget faqs={PRACTITIONER_FAQ} title="Help & FAQ" />
     </main>
   );
 }

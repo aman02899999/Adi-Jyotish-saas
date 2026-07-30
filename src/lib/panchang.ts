@@ -1,21 +1,16 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { dailyPanchang } from "@/db/schema";
-import { getPanchangText, isGeminiConfigured } from "@/lib/gemini";
+import { dailyPanchanga, type DailyPanchanga, type GeoLocation } from "panchanga";
 import { todayCivilDate } from "@/lib/horoscopes";
 
-export async function getTodayPanchang() {
-  const date = await todayCivilDate();
+/** Reference location for the general daily Panchang (no personal birth data involved). */
+const REFERENCE_LOCATION: GeoLocation = { latitude: 28.6139, longitude: 77.2090, timeZone: "Asia/Kolkata" };
+export const REFERENCE_LOCATION_LABEL = "New Delhi, India";
 
-  const [existing] = await db.select().from(dailyPanchang).where(eq(dailyPanchang.date, date)).limit(1);
-  if (existing) return existing;
-
-  if (!isGeminiConfigured()) throw new Error("Panchang is not configured yet. Please try again shortly.");
-  const content = await getPanchangText({ date });
-
-  await db.insert(dailyPanchang).values({ date, content }).onConflictDoNothing({ target: dailyPanchang.date });
-  const [row] = await db.select().from(dailyPanchang).where(eq(dailyPanchang.date, date)).limit(1);
-  return row!;
+/** Computed live on every call from real astronomical data — the math is cheap pure JS,
+ * so there's nothing to cache and no AI involved. */
+export async function getTodayPanchang(): Promise<DailyPanchanga> {
+  const dateString = await todayCivilDate();
+  const date = new Date(`${dateString}T12:00:00Z`);
+  return dailyPanchanga(date, REFERENCE_LOCATION);
 }

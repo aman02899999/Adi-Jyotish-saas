@@ -10,7 +10,7 @@ import {
   practitionerTimeOff,
   practitioners,
 } from "@/db/schema";
-import { getKundliReportAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
 
 export class PayoutError extends Error {}
 export class KundliSummaryError extends Error {}
@@ -138,14 +138,21 @@ export async function updatePayoutStatus(id: number, status: "approved" | "paid"
   return updated;
 }
 
-/** Generates (or returns the cached) AI Kundli summary for a booking's client, using the birth details already captured at booking time. */
+/** Generates (or returns the cached) Kundli summary for a booking's client from the real chart
+ * engine, using the birth details already captured at booking time. No AI involved. */
 export async function getBookingKundliSummary(bookingId: number, practitionerId: number) {
   const [booking] = await db.select().from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.practitionerId, practitionerId))).limit(1);
   if (!booking) throw new KundliSummaryError("Booking not found.");
   if (booking.kundliSummary) return booking;
 
-  if (!isGeminiConfigured()) throw new KundliSummaryError("Kundli summaries are not configured yet. Please try again shortly.");
-  const summary = await getKundliReportAnswer({ name: booking.clientName, birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace });
+  let summary: string;
+  try {
+    const chart = buildKundliChart({ name: booking.clientName, birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace });
+    summary = renderKundliReport(chart);
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
 
   const [updated] = await db.update(bookings).set({ kundliSummary: summary, kundliGeneratedAt: new Date() }).where(eq(bookings.id, bookingId)).returning();
   return updated ?? booking;

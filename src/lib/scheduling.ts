@@ -72,7 +72,7 @@ export function dateInTimeZone(date: Date, timeZone: string) {
   return `${values.year}-${values.month}-${values.day}`;
 }
 
-function civilToUtc(date: string, time: string, timeZone: string) {
+export function civilToUtc(date: string, time: string, timeZone: string) {
   const [year, month, day] = date.split("-").map(Number);
   const [hour, minute] = time.split(":").map(Number);
   const desired = Date.UTC(year, month - 1, day, hour, minute);

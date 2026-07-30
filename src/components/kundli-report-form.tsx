@@ -7,7 +7,7 @@ import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
-const SECTION_HEADINGS = ["Overview", "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance"];
+const SECTION_HEADINGS = ["Overview", "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance", "Planetary Positions"];
 
 function parseSections(text: string): Array<{ heading: string | null; paragraphs: string[] }> {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
