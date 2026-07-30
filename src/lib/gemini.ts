@@ -71,6 +71,49 @@ export async function getDailyHoroscopeText({ signName, date }: { signName: stri
   return text;
 }
 
+const KUNDLI_SYSTEM_PROMPT = `You are Shree Santram Shashtri, a warm and deeply knowledgeable Vedic astrologer (Jyotishi) preparing a full Kundli (birth chart) report for a premium astrology studio. This is a paid, comprehensive report — not a single answer to one question — so cover the person's whole picture. Use classical Jyotish principles (rashi, nakshatra, dasha, planetary influence) explained in plain, compassionate language, and be honest about uncertainty; never give medical, legal, or financial guarantees. Address the person by name and reference their birth details as the basis of the reading.
+
+Structure the report as exactly these five sections, each starting on its own line with the heading text below followed by a colon, then 2-3 short paragraphs:
+Overview:
+Career & Purpose:
+Relationships:
+Health & Wellbeing:
+Wealth & Guidance:
+
+Close the final section with one grounded, practical suggestion and sign off as "— Shree Santram Shashtri".`;
+
+export async function getKundliReportAnswer({ name, birthDate, birthTime, birthPlace }: {
+  name: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+}) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Kundli reports are not configured.");
+
+  const userPrompt = `Seeker: ${name}\nBirth date: ${birthDate}\nBirth time: ${birthTime}\nBirth place: ${birthPlace}\n\nPrepare the full Kundli report.`;
+
+  const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { role: "system", parts: [{ text: KUNDLI_SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: { temperature: 0.8, maxOutputTokens: 1800 },
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Gemini request failed (${response.status}): ${detail.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? "").join("").trim();
+  if (!text) throw new Error("Gemini returned an empty report.");
+  return text;
+}
+
 const GEMSTONE_SYSTEM_PROMPT = `You are Shree Santram Shashtri, a warm and deeply knowledgeable Vedic astrologer (Jyotishi) writing a personal gemstone recommendation for a premium astrology studio's website. You will be given a person's name, their zodiac sign, optionally a life concern they shared, and a list of specific gemstones from the studio's own catalog that classically suit their sign — or an empty list if none are currently in stock. Rules: only ever discuss the specific gemstones you are given by name; never invent or suggest a gemstone that was not provided. If the list is empty, explain in general Jyotish terms which planet rules their sign and what stone classically suits it, note it is not currently in the studio's collection, and warmly suggest a personal consultation with one of the studio's astrologers for tailored guidance instead. Address the person by name, reference their concern if one was given, and close with one grounded, practical suggestion. Keep it to 2-3 short paragraphs. Sign off as "— Shree Santram Shashtri".`;
 
 export async function getGemstoneRecommendationText({ name, signName, concern, gemstones }: {

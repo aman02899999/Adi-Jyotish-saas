@@ -1,5 +1,6 @@
 import type { Metadata } from "next";
-import { CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
+import Link from "next/link";
+import { ArrowRight, CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { AskReadingForm } from "@/components/ask-reading-form";
 import { SiteHeader } from "@/components/site-header";
 import { AI_READING_CURRENCY, AI_READING_PRICE } from "@/lib/ai-readings";
@@ -53,6 +54,16 @@ export default async function AskPage() {
           onlinePaymentsAvailable={isRazorpayConfigured()}
         />
       </section>
+
+      <div className="shell" style={{ paddingBlock: "10px 60px" }}>
+        <div className="promo-banner reveal">
+          <div className="promo-banner__copy">
+            <strong>Want your whole picture, not just one answer?</strong>
+            <span>Get a full Kundli report covering career, relationships, health, and wealth in one reading.</span>
+          </div>
+          <Link href="/kundli" className="button button--light">Get full report <ArrowRight size={15} /></Link>
+        </div>
+      </div>
     </main>
   );
 }

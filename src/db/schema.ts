@@ -472,11 +472,12 @@ export const chatMessages = pgTable("chat_messages", {
 export const aiReadings = pgTable("ai_readings", {
   id: serial("id").primaryKey(),
   memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }),
+  readingType: varchar("reading_type", { length: 20 }).notNull().default("question"),
   clientName: varchar("client_name", { length: 120 }).notNull(),
   birthDate: varchar("birth_date", { length: 20 }).notNull(),
   birthTime: varchar("birth_time", { length: 20 }).notNull(),
   birthPlace: varchar("birth_place", { length: 160 }).notNull(),
-  question: text("question").notNull(),
+  question: text("question"),
   price: integer("price").notNull(),
   currency: varchar("currency", { length: 8 }).notNull().default("INR"),
   status: varchar("status", { length: 20 }).notNull().default("pending_payment"),
