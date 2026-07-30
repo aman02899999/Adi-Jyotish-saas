@@ -25,6 +25,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // firebase-admin's grpc/protobuf dependency tree defeats bundler tracing when inlined;
+  // externalizing lets the platform's own Node-module resolution handle it at runtime.
+  serverExternalPackages: ["firebase-admin", "google-gax", "@grpc/grpc-js", "@sentry/nextjs"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
