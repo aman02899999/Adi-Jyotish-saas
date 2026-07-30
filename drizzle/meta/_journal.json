@@ -78,6 +78,13 @@
       "when": 1785370000000,
       "tag": "0010_daily_horoscopes",
       "breakpoints": true
+    },
+    {
+      "idx": 11,
+      "version": "7",
+      "when": 1785380000000,
+      "tag": "0011_gemstone_recommendations",
+      "breakpoints": true
     }
   ]
 }

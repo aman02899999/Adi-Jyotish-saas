@@ -666,6 +666,20 @@ export const gemstoneCoupons = pgTable("gemstone_coupons", {
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 
+export const gemstoneRecommendations = pgTable("gemstone_recommendations", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  birthDate: varchar("birth_date", { length: 10 }).notNull(),
+  concern: varchar("concern", { length: 300 }),
+  zodiacSign: varchar("zodiac_sign", { length: 12 }).notNull(),
+  categorySlugs: varchar("category_slugs", { length: 200 }).notNull().default(""),
+  narrative: text("narrative").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("gemstone_recommendations_created_idx").on(table.createdAt),
+]);
+
 export const rateLimitBuckets = pgTable("rate_limit_buckets", {
   id: serial("id").primaryKey(),
   bucketKey: varchar("bucket_key", { length: 160 }).notNull().unique(),
@@ -757,3 +771,4 @@ export type GemstoneWishlistItem = typeof gemstoneWishlist.$inferSelect;
 export type GemstoneReview = typeof gemstoneReviews.$inferSelect;
 export type GemstoneCoupon = typeof gemstoneCoupons.$inferSelect;
 export type NewGemstoneCoupon = typeof gemstoneCoupons.$inferInsert;
+export type GemstoneRecommendation = typeof gemstoneRecommendations.$inferSelect;

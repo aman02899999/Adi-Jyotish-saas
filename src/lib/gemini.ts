@@ -70,3 +70,40 @@ export async function getDailyHoroscopeText({ signName, date }: { signName: stri
   if (!text) throw new Error("Gemini returned an empty horoscope.");
   return text;
 }
+
+const GEMSTONE_SYSTEM_PROMPT = `You are Shree Santram Shashtri, a warm and deeply knowledgeable Vedic astrologer (Jyotishi) writing a personal gemstone recommendation for a premium astrology studio's website. You will be given a person's name, their zodiac sign, optionally a life concern they shared, and a list of specific gemstones from the studio's own catalog that classically suit their sign — or an empty list if none are currently in stock. Rules: only ever discuss the specific gemstones you are given by name; never invent or suggest a gemstone that was not provided. If the list is empty, explain in general Jyotish terms which planet rules their sign and what stone classically suits it, note it is not currently in the studio's collection, and warmly suggest a personal consultation with one of the studio's astrologers for tailored guidance instead. Address the person by name, reference their concern if one was given, and close with one grounded, practical suggestion. Keep it to 2-3 short paragraphs. Sign off as "— Shree Santram Shashtri".`;
+
+export async function getGemstoneRecommendationText({ name, signName, concern, gemstones }: {
+  name: string;
+  signName: string;
+  concern: string;
+  gemstones: Array<{ name: string; planet: string; description: string }>;
+}) {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) throw new Error("Gemstone recommendations are not configured.");
+
+  const gemstoneList = gemstones.length
+    ? gemstones.map((gem) => `- ${gem.name} (ruled by ${gem.planet}): ${gem.description}`).join("\n")
+    : "(none currently in stock for this sign)";
+  const userPrompt = `Seeker: ${name}\nZodiac sign: ${signName}\nConcern shared: ${concern || "none given"}\n\nGemstones in the studio's catalog that suit this sign:\n${gemstoneList}\n\nWrite the recommendation.`;
+
+  const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
+    method: "POST",
+    headers: { "Content-Type": "application/json" },
+    body: JSON.stringify({
+      systemInstruction: { role: "system", parts: [{ text: GEMSTONE_SYSTEM_PROMPT }] },
+      contents: [{ role: "user", parts: [{ text: userPrompt }] }],
+      generationConfig: { temperature: 0.8, maxOutputTokens: 700 },
+    }),
+  });
+
+  if (!response.ok) {
+    const detail = await response.text().catch(() => "");
+    throw new Error(`Gemini request failed (${response.status}): ${detail.slice(0, 300)}`);
+  }
+
+  const data = await response.json();
+  const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? "").join("").trim();
+  if (!text) throw new Error("Gemini returned an empty recommendation.");
+  return text;
+}

@@ -28,6 +28,28 @@ export function isZodiacSign(value: string): value is ZodiacSignKey {
   return ZODIAC_SIGNS.some((sign) => sign.key === value);
 }
 
+// [month, day, sign] the sign STARTING on that date, in ascending calendar order. Jan 1–19 defaults to
+// Capricorn (its range wraps the year boundary), so it's intentionally absent from this list.
+const SIGN_START_BOUNDARIES: Array<[number, number, ZodiacSignKey]> = [
+  [1, 20, "aquarius"], [2, 19, "pisces"], [3, 21, "aries"], [4, 20, "taurus"], [5, 21, "gemini"],
+  [6, 21, "cancer"], [7, 23, "leo"], [8, 23, "virgo"], [9, 23, "libra"], [10, 23, "scorpio"],
+  [11, 22, "sagittarius"], [12, 22, "capricorn"],
+];
+
+export function signForBirthDate(birthDate: string): ZodiacSignKey | null {
+  const match = /^\d{4}-(\d{2})-(\d{2})$/.exec(birthDate.trim());
+  if (!match) return null;
+  const month = Number(match[1]);
+  const day = Number(match[2]);
+  if (month < 1 || month > 12 || day < 1 || day > 31) return null;
+
+  let sign: ZodiacSignKey = "capricorn";
+  for (const [startMonth, startDay, boundarySign] of SIGN_START_BOUNDARIES) {
+    if (month > startMonth || (month === startMonth && day >= startDay)) sign = boundarySign;
+  }
+  return sign;
+}
+
 export async function todayCivilDate() {
   const settings = await getStudioSettings();
   return dateInTimeZone(new Date(), settings.timezone);
