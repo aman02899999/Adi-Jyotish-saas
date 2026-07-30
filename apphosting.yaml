@@ -1,0 +1,113 @@
+# Firebase App Hosting build/run configuration.
+# Docs: https://firebase.google.com/docs/app-hosting/configure
+#
+# One-time setup (Firebase Console, not this file):
+#   1. Firebase Console → Build → App Hosting → Create backend.
+#   2. Connect this GitHub repo and pick the branch to deploy
+#      (e.g. main, or claude/website-saas-conversion-0agq71 for a preview backend).
+#   3. For every entry below marked `secret:`, create the secret first:
+#        firebase apphosting:secrets:set SECRET_NAME
+#      then grant the backend access when prompted (or via
+#        firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
+#      ).
+#   4. Fill in the `value:` placeholders below with your real public config
+#      (NEXT_PUBLIC_* values are safe to commit — they ship to the browser anyway).
+
+runConfig:
+  minInstances: 0
+  maxInstances: 3
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+
+env:
+  # ── Database (required) ──────────────────────────────────────────
+  - variable: DATABASE_URL
+    secret: DATABASE_URL
+    availability: [BUILD, RUNTIME]
+
+  # ── Site URL ──────────────────────────────────────────────────────
+  - variable: NEXT_PUBLIC_SITE_URL
+    value: ""
+    availability: [BUILD, RUNTIME]
+
+  # ── Razorpay payments ─────────────────────────────────────────────
+  - variable: RAZORPAY_MODE
+    value: "test"
+    availability: [RUNTIME]
+  - variable: RAZORPAY_TEST_KEY_ID
+    value: ""
+    availability: [RUNTIME]
+  - variable: RAZORPAY_TEST_KEY_SECRET
+    secret: RAZORPAY_TEST_KEY_SECRET
+    availability: [RUNTIME]
+  - variable: RAZORPAY_LIVE_KEY_ID
+    value: ""
+    availability: [RUNTIME]
+  - variable: RAZORPAY_LIVE_KEY_SECRET
+    secret: RAZORPAY_LIVE_KEY_SECRET
+    availability: [RUNTIME]
+  - variable: RAZORPAY_WEBHOOK_SECRET
+    secret: RAZORPAY_WEBHOOK_SECRET
+    availability: [RUNTIME]
+
+  # ── Practitioner payout bank/UPI encryption ──────────────────────
+  - variable: PAYOUT_ENCRYPTION_KEY
+    secret: PAYOUT_ENCRYPTION_KEY
+    availability: [RUNTIME]
+
+  # ── Transactional email (Resend) ─────────────────────────────────
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+    availability: [RUNTIME]
+  - variable: RESEND_FROM_EMAIL
+    value: "Jyotish Studio <onboarding@resend.dev>"
+    availability: [RUNTIME]
+
+  # ── AI readings (Google Gemini) ───────────────────────────────────
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+    availability: [RUNTIME]
+
+  # ── Realtime chat (Ably) ──────────────────────────────────────────
+  - variable: ABLY_API_KEY
+    secret: ABLY_API_KEY
+    availability: [RUNTIME]
+
+  # ── Firebase Google sign-in ───────────────────────────────────────
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: ""
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: ""
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: ""
+    availability: [BUILD, RUNTIME]
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: ""
+    availability: [BUILD, RUNTIME]
+  - variable: FIREBASE_SERVICE_ACCOUNT_KEY
+    secret: FIREBASE_SERVICE_ACCOUNT_KEY
+    availability: [RUNTIME]
+
+  # ── Cloudflare Turnstile (CAPTCHA) ────────────────────────────────
+  - variable: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+    value: ""
+    availability: [BUILD, RUNTIME]
+  - variable: TURNSTILE_SECRET_KEY
+    secret: TURNSTILE_SECRET_KEY
+    availability: [RUNTIME]
+
+  # ── Error tracking (Sentry) ───────────────────────────────────────
+  - variable: SENTRY_DSN
+    secret: SENTRY_DSN
+    availability: [RUNTIME]
+  - variable: NEXT_PUBLIC_SENTRY_DSN
+    value: ""
+    availability: [BUILD, RUNTIME]
+
+  # ── Analytics (Google Analytics) ──────────────────────────────────
+  - variable: NEXT_PUBLIC_GA_ID
+    value: ""
+    availability: [BUILD, RUNTIME]
