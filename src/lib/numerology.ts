@@ -2,7 +2,6 @@ import "server-only";
 
 import { db } from "@/db";
 import { numerologyReadings } from "@/db/schema";
-import { getNumerologyText } from "@/lib/gemini";
 
 export class NumerologyError extends Error {}
 
@@ -26,12 +25,59 @@ export function computeDestinyNumber(name: string) {
   return reduceNumber(sum || 1);
 }
 
+const LIFE_PATH_MEANINGS: Record<number, string> = {
+  1: "Life Path 1 is the number of the starter — independent, driven, and most alive when you're building something that's genuinely yours. Your growth edge is learning that leading doesn't mean doing everything alone.",
+  2: "Life Path 2 is the number of the diplomat — sensitive, cooperative, and gifted at reading a room. You do your best work in partnership, and your growth edge is trusting your own judgment as much as you weigh everyone else's.",
+  3: "Life Path 3 is the number of the communicator — expressive, creative, and naturally drawn to putting feeling into words, art, or performance. Your growth edge is following through once the initial spark fades.",
+  4: "Life Path 4 is the number of the builder — practical, disciplined, and most comfortable with a clear plan and steady effort. Your growth edge is loosening your grip on control long enough to adapt when plans change.",
+  5: "Life Path 5 is the number of the free spirit — adaptable, curious, and energized by change and new experience. Your growth edge is staying with something long enough to see its real value.",
+  6: "Life Path 6 is the number of the caretaker — responsible, warm, and naturally oriented toward home, family, and community. Your growth edge is caring for yourself with the same devotion you give everyone else.",
+  7: "Life Path 7 is the number of the seeker — introspective, analytical, and drawn to understanding what's beneath the surface. Your growth edge is letting people in before you've fully figured everything out.",
+  8: "Life Path 8 is the number of the achiever — ambitious, capable, and naturally oriented toward material and professional success. Your growth edge is defining success on your own terms, not just by the scoreboard.",
+  9: "Life Path 9 is the number of the humanitarian — compassionate, idealistic, and pulled toward causes bigger than yourself. Your growth edge is tending to your own needs while you tend to everyone else's.",
+  11: "Life Path 11 is a master number — the intuitive. You carry unusual sensitivity and insight, often sensing things before you can explain them. Your growth edge is grounding that intuition in steady, practical action.",
+  22: "Life Path 22 is a master number — the master builder. You have the rare combination of big vision and the practical discipline to actually build it. Your growth edge is trusting that vision instead of playing small.",
+  33: "Life Path 33 is a master number — the master teacher. You're wired for selfless service and uplifting others, often at real personal cost. Your growth edge is giving as generously to yourself as you do to everyone else.",
+};
+
+const DESTINY_MEANINGS: Record<number, string> = {
+  1: "a Destiny of 1 — you're here to lead and originate, most fulfilled when you're the one setting the direction rather than following someone else's.",
+  2: "a Destiny of 2 — you're here to connect and mediate, most fulfilled in close partnership and work that brings people together.",
+  3: "a Destiny of 3 — you're here to express and inspire, most fulfilled when your creativity or voice reaches other people.",
+  4: "a Destiny of 4 — you're here to build and stabilize, most fulfilled when your steady effort produces something lasting.",
+  5: "a Destiny of 5 — you're here to explore and adapt, most fulfilled when your life has room for change and new experience.",
+  6: "a Destiny of 6 — you're here to nurture and take responsibility, most fulfilled when you're caring for people or a place you call home.",
+  7: "a Destiny of 7 — you're here to study and understand, most fulfilled when you're given the space to think deeply before acting.",
+  8: "a Destiny of 8 — you're here to achieve and manage, most fulfilled when your competence is recognized and rewarded.",
+  9: "a Destiny of 9 — you're here to give and complete, most fulfilled when your work serves something larger than your own interests.",
+  11: "a Destiny of 11 — a master number of inspiration, most fulfilled when your intuitive insight helps other people see something they couldn't see alone.",
+  22: "a Destiny of 22 — a master number of large-scale building, most fulfilled when a big, practical vision of yours actually gets built.",
+  33: "a Destiny of 33 — a master number of selfless service, most fulfilled when your care for others becomes something they can lean on.",
+};
+
+function buildNarrative({ name, lifePathNumber, destinyNumber }: { name: string; lifePathNumber: number; destinyNumber: number }) {
+  const lifePathText = LIFE_PATH_MEANINGS[lifePathNumber] ?? LIFE_PATH_MEANINGS[reduceNumber(lifePathNumber)];
+  const destinyText = DESTINY_MEANINGS[destinyNumber] ?? DESTINY_MEANINGS[reduceNumber(destinyNumber)];
+
+  const paragraphs = [
+    `${name}, your Life Path number is ${lifePathNumber}. ${lifePathText}`,
+    `Your name reduces to ${destinyText}`,
+    lifePathNumber === destinyNumber
+      ? `With your Life Path and Destiny matching at ${lifePathNumber}, these two numbers reinforce each other — the traits above show up consistently across how you're built and what you're working toward, for better and for worse.`
+      : `Life Path and Destiny describe two different layers — Life Path ${lifePathNumber} is the terrain you were born into, Destiny ${destinyNumber} is the direction you're meant to grow toward. The friction between them, if any, is usually where the real growth happens.`,
+    `Numerology, like any symbolic system, is a mirror for reflection — not a fixed script. Use it to notice patterns, not to limit your choices.`,
+  ];
+
+  return paragraphs.join("\n\n");
+}
+
 export async function createNumerologyReading({ memberId, name, birthDate }: { memberId: number | null; name: string; birthDate: string }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) throw new NumerologyError("Please enter a valid birth date.");
+  if (!name.trim()) throw new NumerologyError("Please enter a name.");
   const lifePathNumber = computeLifePathNumber(birthDate);
   const destinyNumber = computeDestinyNumber(name);
 
-  const narrative = await getNumerologyText({ name, birthDate, lifePathNumber, destinyNumber });
+  const narrative = buildNarrative({ name, lifePathNumber, destinyNumber });
 
   const [saved] = await db.insert(numerologyReadings).values({ memberId, name, birthDate, lifePathNumber, destinyNumber, narrative }).returning();
   return saved;

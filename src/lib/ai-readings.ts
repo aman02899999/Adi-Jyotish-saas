@@ -3,7 +3,8 @@ import "server-only";
 import { and, desc, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { aiReadings, type AiReading } from "@/db/schema";
-import { getAiReadingAnswer, getKundliReportAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { getAiReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
 
 export const AI_READING_PRICE = 149;
 export const AI_KUNDLI_PRICE = 499;
@@ -107,14 +108,17 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
   return updated ?? reading;
 }
 
-/** Calls the AI, saves the answer, and returns the updated reading. Throws if generation fails; the reading stays "paid" so it can be retried. */
+/** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays "paid" so it can be retried.
+ * The Kundli report is computed by the real chart engine (no AI); only the free-form question path calls Gemini. */
 export async function generateReadingAnswer(reading: AiReading): Promise<AiReading> {
   if (reading.status === "answered" && reading.answer) return reading;
-  if (!isGeminiConfigured()) throw new Error("AI readings are not configured yet. Please try again shortly.");
 
   const answer = reading.readingType === "kundli"
-    ? await getKundliReportAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace })
-    : await getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
+    ? renderKundliReport(buildKundliChart({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace }))
+    : await (async () => {
+        if (!isGeminiConfigured()) throw new Error("AI readings are not configured yet. Please try again shortly.");
+        return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
+      })();
 
   const [updated] = await db.update(aiReadings)
     .set({ status: "answered", answer, answeredAt: new Date() })

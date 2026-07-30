@@ -23,7 +23,9 @@ import {
   WalletCards,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
+import { FaqWidget } from "@/components/faq-widget";
 import { NotificationBell } from "@/components/notification-bell";
+import { MEMBER_FAQ } from "@/lib/faq-data";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getMemberUnreadCount } from "@/lib/messaging";
 
@@ -91,6 +93,7 @@ export async function MemberAppShell({ member, active, children }: { member: Mem
           <div className="dashboard-scroll">{children}</div>
         </section>
       </div>
+      <FaqWidget faqs={MEMBER_FAQ} title="Help & FAQ" />
     </main>
   );
 }
