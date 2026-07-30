@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { memberUsers } from "@/db/schema";
 import { normalizeEmail, verifyPassword } from "@/lib/admin-auth";
 import { createMemberSession } from "@/lib/member-auth";
+import { createTwoFactorChallenge } from "@/lib/member-2fa";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,12 @@ export async function POST(request: Request) {
   }
 
   await clearAuthFailures(throttle.keyHash);
+
+  if (member.totpEnabled) {
+    const challengeToken = await createTwoFactorChallenge(member.id);
+    return Response.json({ requiresTotp: true, challengeToken });
+  }
+
   await db.update(memberUsers).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(memberUsers.id, member.id));
   await createMemberSession(member.id);
   return Response.json({ ok: true, onboardingComplete: member.onboardingComplete });

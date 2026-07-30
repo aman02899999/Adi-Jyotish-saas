@@ -1,7 +1,7 @@
 import { AI_KUNDLI_PRICE, AI_READING_CURRENCY, attachRazorpayOrder, createPendingKundliReport } from "@/lib/ai-readings";
 import { resolvePlaceToCoordinates } from "@/lib/geo";
 import { getCurrentMember } from "@/lib/member-auth";
-import { getRazorpay } from "@/lib/razorpay";
+import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -46,5 +46,5 @@ export async function POST(request: Request) {
   });
   await attachRazorpayOrder(reading.id, order.id);
 
-  return Response.json({ readingId: reading.id, orderId: order.id, amount: order.amount, currency: order.currency, key: process.env.RAZORPAY_KEY_ID });
+  return Response.json({ readingId: reading.id, orderId: order.id, amount: order.amount, currency: order.currency, key: getRazorpayKeyId() });
 }

@@ -4,7 +4,10 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
+import { JsonLd } from "@/components/json-ld";
 import { getAllPosts, getPostBySlug } from "@/lib/blog";
+import { getSiteUrl } from "@/lib/site-url";
 
 export function generateStaticParams() {
   return getAllPosts().map((post) => ({ slug: post.slug }));
@@ -34,6 +37,17 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
   return (
     <main className="marketing-page blog-post-page">
+      <JsonLd data={{
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: post.title,
+        description: post.excerpt,
+        image: new URL(post.cover, getSiteUrl()).toString(),
+        datePublished: post.publishedAt,
+        author: { "@type": "Person", name: post.author },
+        publisher: { "@type": "Organization", name: "Jyotish" },
+        mainEntityOfPage: new URL(`/blog/${post.slug}`, getSiteUrl()).toString(),
+      }} />
       <SiteHeader />
       <article className="blog-post shell">
         <Link href="/blog" className="text-arrow blog-post__back"><ArrowLeft size={15} /> The journal</Link>
@@ -80,6 +94,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           </div>
         )}
       </article>
+    <SiteFooter />
     </main>
   );
 }

@@ -26,6 +26,17 @@ export async function sendEmail({ to, subject, html }: { to: string; subject: st
   return { sent: true as const };
 }
 
+export function genericNotificationEmailHtml({ title, name, body, ctaLabel, ctaUrl }: { title: string; name: string; body: string; ctaLabel?: string; ctaUrl?: string }) {
+  return `
+  <div style="font-family:Georgia,serif;max-width:520px;margin:auto;color:#302822;">
+    <h2 style="color:#a95838;">${title}</h2>
+    <p>Hi ${name},</p>
+    <p>${body}</p>
+    ${ctaUrl ? `<p><a href="${ctaUrl}" style="display:inline-block;padding:12px 22px;background:#a95838;color:#fff;text-decoration:none;border-radius:8px;">${ctaLabel ?? "View details"}</a></p>` : ""}
+    <p style="margin-top:24px;font-size:12px;color:#aa9d90;">Jyotish Studio</p>
+  </div>`;
+}
+
 export function orderConfirmationEmailHtml({ orderNumber, customerName, items, subtotal, discount, shippingFee, total, currency }: {
   orderNumber: string;
   customerName: string;

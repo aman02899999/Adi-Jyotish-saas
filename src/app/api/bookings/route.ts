@@ -5,6 +5,8 @@ import { and, desc, eq, lt, ne, sql } from "drizzle-orm";
 import { getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { getCurrentMember } from "@/lib/member-auth";
 import { sendBookingNotification } from "@/lib/messaging";
+import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
+import { getSiteUrl } from "@/lib/site-url";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { ensureInvoiceForBooking } from "@/lib/billing";
 import { validateAvailableSlot } from "@/lib/scheduling";
@@ -151,13 +153,25 @@ export async function POST(request: Request) {
       link: "/practitioner/bookings",
     }).catch(() => {});
   }
+  const scheduledLabel = created.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short" });
   if (member) {
     await sendBookingNotification({
       memberEmail: member.email,
       bookingId: created.id,
       subject: `${created.serviceTitle} · ${created.reference}`,
-      body: `Your consultation with ${created.practitionerName} is reserved for ${created.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short" })}. We will keep booking and payment updates together in this conversation.`,
+      body: `Your consultation with ${created.practitionerName} is reserved for ${scheduledLabel}. We will keep booking and payment updates together in this conversation.`,
     });
   }
+  await sendEmail({
+    to: clientEmail,
+    subject: `Booking confirmed · ${created.reference}`,
+    html: genericNotificationEmailHtml({
+      title: "Your consultation is booked",
+      name: clientName,
+      body: `Your ${created.serviceTitle} with ${created.practitionerName} is reserved for ${scheduledLabel}. Reference: ${created.reference}.`,
+      ctaLabel: "View your booking",
+      ctaUrl: new URL(member ? "/dashboard/consultations" : "/", getSiteUrl()).toString(),
+    }),
+  }).catch(() => {});
   return Response.json(created, { status: 201 });
 }

@@ -1,6 +1,6 @@
 import { attachRazorpayOrder, CartValidationError, createPendingOrder } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
-import { getRazorpay } from "@/lib/razorpay";
+import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
-      key: process.env.RAZORPAY_KEY_ID,
+      key: getRazorpayKeyId(),
       total: order.total,
     });
   } catch (error) {

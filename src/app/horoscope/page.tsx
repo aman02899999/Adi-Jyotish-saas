@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { ZODIAC_SIGNS, getDailyHoroscope, isZodiacSign, todayCivilDate, type ZodiacSignKey } from "@/lib/horoscopes";
 
 export const dynamic = "force-dynamic";
@@ -60,7 +61,9 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
           <span>Want guidance on your own chart?</span>
           <Link href="/ask" className="button button--small">Ask a personal question <ArrowRight size={14} /></Link>
         </div>
+        <p className="legal-note">This horoscope offers guidance and reflection, not a guarantee of any outcome.</p>
       </section>
+    <SiteFooter />
     </main>
   );
 }

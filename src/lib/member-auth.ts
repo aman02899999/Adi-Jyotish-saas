@@ -19,6 +19,8 @@ export type MemberIdentity = {
   birthPlace: string | null;
   plan: string;
   onboardingComplete: boolean;
+  emailVerified: boolean;
+  totpEnabled: boolean;
 };
 
 function digest(token: string) {
@@ -55,6 +57,8 @@ export async function getCurrentMember(): Promise<MemberIdentity | null> {
     birthPlace: memberUsers.birthPlace,
     plan: memberUsers.plan,
     onboardingComplete: memberUsers.onboardingComplete,
+    emailVerified: memberUsers.emailVerified,
+    totpEnabled: memberUsers.totpEnabled,
   }).from(memberSessions)
     .innerJoin(memberUsers, eq(memberSessions.memberId, memberUsers.id))
     .where(and(

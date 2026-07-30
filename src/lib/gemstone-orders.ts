@@ -7,6 +7,8 @@ import { gemstoneCoupons, gemstoneOrderItems, gemstoneOrders, gemstoneProductVar
 import { validateCoupon } from "@/lib/gemstone-coupons";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
+import { getStudioSettings } from "@/lib/studio-settings";
+import { splitGstInclusive } from "@/lib/gst";
 
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
@@ -102,6 +104,9 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
 
   const shippingFee = computeShippingFee(subtotal - discount);
   const total = Math.max(0, subtotal - discount) + shippingFee;
+  const settings = await getStudioSettings();
+  // Listed prices are treated as GST-inclusive, so this only splits out the tax for invoicing — the checkout total is unchanged.
+  const { taxAmount } = splitGstInclusive(Math.max(0, subtotal - discount), settings.gstRate);
   const orderNumber = generateOrderNumber();
 
   return db.transaction(async (tx) => {
@@ -132,7 +137,7 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
       subtotal,
       discount,
       shippingFee,
-      tax: 0,
+      tax: taxAmount,
       total,
       couponCode: appliedCouponCode,
       status: "pending",

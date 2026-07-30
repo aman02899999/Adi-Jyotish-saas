@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CheckCircle2, Clock3, Hash, ShieldCheck } from "lucide-react";
 import { NumerologyForm } from "@/components/numerology-form";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -41,7 +42,9 @@ export default function NumerologyPage() {
 
       <section className="ask-form-section shell">
         <NumerologyForm />
+        <p className="legal-note">Numerology is offered for guidance and reflection, not a guarantee of any outcome.</p>
       </section>
+    <SiteFooter />
     </main>
   );
 }

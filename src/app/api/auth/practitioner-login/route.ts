@@ -3,6 +3,7 @@ import { db } from "@/db";
 import { practitioners } from "@/db/schema";
 import { normalizeEmail, verifyPassword } from "@/lib/admin-auth";
 import { createPractitionerSession } from "@/lib/practitioner-auth";
+import { createTwoFactorChallenge } from "@/lib/practitioner-2fa";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 
 export const dynamic = "force-dynamic";
@@ -26,6 +27,12 @@ export async function POST(request: Request) {
   }
 
   await clearAuthFailures(throttle.keyHash);
+
+  if (practitioner.totpEnabled) {
+    const challengeToken = await createTwoFactorChallenge(practitioner.id);
+    return Response.json({ requiresTotp: true, challengeToken });
+  }
+
   await db.update(practitioners).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(practitioners.id, practitioner.id));
   await createPractitionerSession(practitioner.id);
   return Response.json({ ok: true });

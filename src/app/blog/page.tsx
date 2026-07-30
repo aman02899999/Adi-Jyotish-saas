@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getAllPosts } from "@/lib/blog";
 
 export const metadata: Metadata = {
@@ -70,6 +71,7 @@ export default function BlogIndexPage() {
         <p>A personal consultation reads your exact birth details, not a general pattern.</p>
         <Link href="/book" className="button button--light">Begin your reading <ArrowRight size={17} /></Link>
       </section>
+    <SiteFooter />
     </main>
   );
 }

@@ -46,10 +46,34 @@ export const practitioners = pgTable("practitioners", {
   active: boolean("active").notNull().default(true),
   featured: boolean("featured").notNull().default(false),
   passwordHash: text("password_hash"),
+  firebaseUid: varchar("firebase_uid", { length: 128 }).unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  emailVerificationTokenHash: varchar("email_verification_token_hash", { length: 64 }).unique(),
+  emailVerificationExpiresAt: timestamp("email_verification_expires_at", { withTimezone: true }),
+  passwordResetTokenHash: varchar("password_reset_token_hash", { length: 64 }).unique(),
+  passwordResetExpiresAt: timestamp("password_reset_expires_at", { withTimezone: true }),
+  totpSecret: text("totp_secret"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  totpBackupCodes: jsonb("totp_backup_codes").$type<string[]>(),
+  bankAccountName: varchar("bank_account_name", { length: 120 }),
+  bankAccountNumberEnc: text("bank_account_number_enc"),
+  bankIfsc: varchar("bank_ifsc", { length: 20 }),
+  upiIdEnc: text("upi_id_enc"),
+  payoutDetailsUpdatedAt: timestamp("payout_details_updated_at", { withTimezone: true }),
   lastLoginAt: timestamp("last_login_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const practitioner2faChallenges = pgTable("practitioner_2fa_challenges", {
+  id: serial("id").primaryKey(),
+  practitionerId: integer("practitioner_id").notNull().references(() => practitioners.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("practitioner_2fa_challenges_practitioner_id_idx").on(table.practitionerId),
+]);
 
 export const practitionerSessions = pgTable("practitioner_sessions", {
   id: serial("id").primaryKey(),
@@ -77,6 +101,8 @@ export const practitionerPayouts = pgTable("practitioner_payouts", {
   amount: integer("amount").notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default("INR"),
   status: varchar("status", { length: 20 }).notNull().default("requested"),
+  payoutMethod: varchar("payout_method", { length: 20 }).notNull().default("bank_transfer"),
+  transactionRef: varchar("transaction_ref", { length: 120 }),
   notes: text("notes"),
   adminNotes: text("admin_notes"),
   processedBy: integer("processed_by").references(() => adminUsers.id, { onDelete: "set null" }),
@@ -143,7 +169,16 @@ export const memberUsers = pgTable("member_users", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 120 }).notNull(),
   email: varchar("email", { length: 180 }).notNull().unique(),
-  passwordHash: text("password_hash").notNull(),
+  passwordHash: text("password_hash"),
+  firebaseUid: varchar("firebase_uid", { length: 128 }).unique(),
+  emailVerified: boolean("email_verified").notNull().default(false),
+  emailVerificationTokenHash: varchar("email_verification_token_hash", { length: 64 }).unique(),
+  emailVerificationExpiresAt: timestamp("email_verification_expires_at", { withTimezone: true }),
+  passwordResetTokenHash: varchar("password_reset_token_hash", { length: 64 }).unique(),
+  passwordResetExpiresAt: timestamp("password_reset_expires_at", { withTimezone: true }),
+  totpSecret: text("totp_secret"),
+  totpEnabled: boolean("totp_enabled").notNull().default(false),
+  totpBackupCodes: jsonb("totp_backup_codes").$type<string[]>(),
   phone: varchar("phone", { length: 40 }),
   birthDate: varchar("birth_date", { length: 10 }),
   birthTime: varchar("birth_time", { length: 8 }),
@@ -155,6 +190,16 @@ export const memberUsers = pgTable("member_users", {
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
+
+export const member2faChallenges = pgTable("member_2fa_challenges", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").notNull().references(() => memberUsers.id, { onDelete: "cascade" }),
+  tokenHash: varchar("token_hash", { length: 64 }).notNull().unique(),
+  expiresAt: timestamp("expires_at", { withTimezone: true }).notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("member_2fa_challenges_member_id_idx").on(table.memberId),
+]);
 
 export const favoritePractitioners = pgTable("favorite_practitioners", {
   id: serial("id").primaryKey(),
@@ -233,6 +278,9 @@ export const invoices = pgTable("invoices", {
   customerName: varchar("customer_name", { length: 120 }).notNull(),
   customerEmail: varchar("customer_email", { length: 180 }).notNull(),
   description: varchar("description", { length: 180 }).notNull(),
+  subtotal: integer("subtotal").notNull().default(0),
+  taxRate: real("tax_rate").notNull().default(0),
+  taxAmount: integer("tax_amount").notNull().default(0),
   amount: integer("amount").notNull(),
   currency: varchar("currency", { length: 3 }).notNull().default("INR"),
   status: varchar("status", { length: 24 }).notNull().default("open"),
@@ -350,6 +398,8 @@ export const studioSettings = pgTable("studio_settings", {
   cancellationHours: integer("cancellation_hours").notNull().default(24),
   bookingLeadMinutes: integer("booking_lead_minutes").notNull().default(15),
   replySlaHours: integer("reply_sla_hours").notNull().default(24),
+  gstRate: real("gst_rate").notNull().default(18),
+  gstin: varchar("gstin", { length: 20 }),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 });
 

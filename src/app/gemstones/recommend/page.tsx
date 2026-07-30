@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CheckCircle2, Gem, ShieldCheck, Sparkles } from "lucide-react";
 import { GemstoneRecommendationForm } from "@/components/gemstone-recommendation-form";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getCurrentMember } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
@@ -44,7 +45,9 @@ export default async function GemstoneRecommendPage() {
 
       <section className="ask-form-section shell">
         <GemstoneRecommendationForm prefillName={member?.name ?? ""} />
+        <p className="legal-note">Gemstone recommendations are offered for guidance based on traditional Vedic astrology, not a guarantee of any outcome.</p>
       </section>
+    <SiteFooter />
     </main>
   );
 }

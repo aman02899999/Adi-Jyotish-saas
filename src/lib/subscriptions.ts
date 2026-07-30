@@ -4,7 +4,7 @@ import { eq } from "drizzle-orm";
 import { db } from "@/db";
 import { memberSubscriptions, memberUsers, membershipPlans, subscriptionInvoices, type MembershipPlan } from "@/db/schema";
 import type { MemberIdentity } from "@/lib/member-auth";
-import { getRazorpay, verifyRazorpaySubscriptionSignature } from "@/lib/razorpay";
+import { getRazorpay, getRazorpayKeyId, verifyRazorpaySubscriptionSignature } from "@/lib/razorpay";
 
 const activeStatuses = new Set(["created", "authenticated", "active", "pending", "halted"]);
 
@@ -69,7 +69,7 @@ export async function startSubscriptionCheckout(member: MemberIdentity, plan: Me
     set: { planId: plan.id, billingInterval: interval, status: subscription.status, razorpaySubscriptionId: subscription.id, cancelAtPeriodEnd: false, cancelledAt: null, updatedAt: new Date() },
   });
 
-  return { subscriptionId: subscription.id, key: process.env.RAZORPAY_KEY_ID! };
+  return { subscriptionId: subscription.id, key: getRazorpayKeyId()! };
 }
 
 export async function verifySubscriptionCheckout(member: MemberIdentity, subscriptionId: string, paymentId: string, signature: string) {

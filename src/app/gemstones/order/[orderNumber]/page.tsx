@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, CheckCircle2, PackageSearch } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getOrderByNumberScoped, getOrderItems } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
 
@@ -62,6 +63,7 @@ export default async function GemstoneOrderConfirmationPage({ params, searchPara
           </div>
         </div>
       </section>
+    <SiteFooter />
     </main>
   );
 }

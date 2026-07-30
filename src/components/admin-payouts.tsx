@@ -11,12 +11,17 @@ export type AdminPayoutRow = {
   status: string;
   notes: string | null;
   adminNotes: string | null;
+  transactionRef: string | null;
   processedBy: number | null;
   requestedAt: Date | string;
   processedAt: Date | string | null;
   updatedAt: Date | string;
   practitionerName: string;
   practitionerEmail: string;
+  bankAccountName: string | null;
+  bankAccountNumber: string | null;
+  bankIfsc: string | null;
+  upiId: string | null;
 };
 
 export function AdminPayouts({ initialPayouts }: { initialPayouts: AdminPayoutRow[] }) {
@@ -52,12 +57,18 @@ export function AdminPayouts({ initialPayouts }: { initialPayouts: AdminPayoutRo
       paid: "Mark this payout as paid out?",
       rejected: "Reject this payout request?",
     };
-    if (!window.confirm(labels[status])) return;
+    let transactionRef: string | null = null;
+    if (status === "paid") {
+      transactionRef = window.prompt("Bank/UPI transaction reference (UTR) for this transfer — required to mark paid:");
+      if (!transactionRef?.trim()) return;
+    } else if (!window.confirm(labels[status])) {
+      return;
+    }
     setSaving(payout.id);
     const response = await fetch(`/api/admin/practitioner-payouts/${payout.id}`, {
       method: "PUT",
       headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ status }),
+      body: JSON.stringify({ status, transactionRef }),
     });
     const data = await response.json();
     if (response.ok) {
@@ -94,14 +105,21 @@ export function AdminPayouts({ initialPayouts }: { initialPayouts: AdminPayoutRo
           <span>{filtered.length} requests</span>
         </div>
         <div className="payout-table">
-          <div className="payout-table__head"><span>Practitioner</span><span>Amount</span><span>Requested</span><span>Notes</span><span>Status</span><span>Actions</span></div>
+          <div className="payout-table__head"><span>Practitioner</span><span>Amount</span><span>Requested</span><span>Notes</span><span>Payout to</span><span>Status</span><span>Actions</span></div>
           {filtered.map((payout) => (
             <div className="payout-table__row" key={payout.id}>
               <div className="finance-customer"><strong>{payout.practitionerName}</strong><small>{payout.practitionerEmail}</small></div>
               <strong>{payout.currency} {payout.amount.toLocaleString()}</strong>
               <div className="finance-date"><strong>{new Date(payout.requestedAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</strong><small>{new Date(payout.requestedAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</small></div>
               <small>{payout.notes || "—"}</small>
-              <span className={`invoice-status invoice-status--${payout.status}`}>{payout.status}</span>
+              {payout.bankAccountNumber ? (
+                <small title={payout.bankIfsc ?? ""}>{payout.bankAccountName} · {payout.bankAccountNumber}</small>
+              ) : payout.upiId ? (
+                <small>{payout.upiId}</small>
+              ) : (
+                <small>No details on file</small>
+              )}
+              <span className={`invoice-status invoice-status--${payout.status}`}>{payout.status}{payout.transactionRef && <em title={`Ref: ${payout.transactionRef}`}> ✓</em>}</span>
               <div className="finance-actions">
                 {payout.status === "requested" && (
                   <>

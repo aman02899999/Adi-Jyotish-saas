@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Gem, X } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getProductBySlug, getProductsByIds } from "@/lib/gemstones";
 
 export const dynamic = "force-dynamic";
@@ -53,6 +54,7 @@ export default async function GemstoneComparePage({ searchParams }: { searchPara
           <div className="empty-state"><X size={26} /><h3>Nothing to compare</h3><p>Select up to 3 gemstones from the shop page.</p></div>
         )}
       </section>
+    <SiteFooter />
     </main>
   );
 }

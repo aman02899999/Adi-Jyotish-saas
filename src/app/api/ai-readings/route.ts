@@ -1,6 +1,6 @@
 import { AI_READING_CURRENCY, AI_READING_PRICE, attachRazorpayOrder, createFreeReading, createPendingReading, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
-import { getRazorpay } from "@/lib/razorpay";
+import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -56,5 +56,5 @@ export async function POST(request: Request) {
   });
   await attachRazorpayOrder(reading.id, order.id);
 
-  return Response.json({ readingId: reading.id, orderId: order.id, amount: order.amount, currency: order.currency, key: process.env.RAZORPAY_KEY_ID });
+  return Response.json({ readingId: reading.id, orderId: order.id, amount: order.amount, currency: order.currency, key: getRazorpayKeyId() });
 }

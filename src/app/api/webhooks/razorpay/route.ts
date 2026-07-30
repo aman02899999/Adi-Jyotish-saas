@@ -2,6 +2,8 @@ import { and, eq } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, invoices, memberSubscriptions, memberUsers, membershipPlans, payments, razorpayEvents, subscriptionInvoices } from "@/db/schema";
 import { sendBookingNotification } from "@/lib/messaging";
+import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
+import { getSiteUrl } from "@/lib/site-url";
 import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import { rechargeWallet } from "@/lib/wallet";
 
@@ -105,6 +107,17 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
   });
 
   await sendBookingNotification({ memberEmail: invoice.customerEmail, bookingId: row.bookingId, subject: `${invoice.description} · ${invoice.number}`, body: `Payment received for invoice ${invoice.number}. Amount: ${invoice.currency} ${invoice.amount}. Thank you—your receipt is now available in Billing.` });
+  await sendEmail({
+    to: invoice.customerEmail,
+    subject: `Payment received · ${invoice.number}`,
+    html: genericNotificationEmailHtml({
+      title: "Payment received",
+      name: invoice.customerName,
+      body: `We've received your payment of ${invoice.currency} ${invoice.amount} for invoice ${invoice.number}. Your receipt is ready to download.`,
+      ctaLabel: "View receipt",
+      ctaUrl: new URL(`/dashboard/billing/${invoice.id}`, getSiteUrl()).toString(),
+    }),
+  }).catch(() => {});
 }
 
 async function handlePaymentFailed(payment?: RazorpayWebhookPayment) {

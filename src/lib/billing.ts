@@ -4,6 +4,7 @@ import { asc, desc, eq, inArray } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, invoices, memberUsers, payments, type Booking } from "@/db/schema";
 import { getStudioSettings } from "@/lib/studio-settings";
+import { splitGstInclusive } from "@/lib/gst";
 
 export type BillingInvoice = typeof invoices.$inferSelect & {
   bookingReference: string;
@@ -20,6 +21,7 @@ function invoiceNumber(booking: Pick<Booking, "id" | "createdAt">) {
 
 export async function ensureInvoiceForBooking(booking: Booking, memberId?: number | null) {
   const settings = await getStudioSettings();
+  const { subtotal, taxAmount } = splitGstInclusive(booking.servicePrice, settings.gstRate);
   await db.insert(invoices).values({
     number: invoiceNumber(booking),
     bookingId: booking.id,
@@ -27,6 +29,9 @@ export async function ensureInvoiceForBooking(booking: Booking, memberId?: numbe
     customerName: booking.clientName,
     customerEmail: booking.clientEmail,
     description: booking.serviceTitle,
+    subtotal,
+    taxRate: settings.gstRate,
+    taxAmount,
     amount: booking.servicePrice,
     currency: settings.currency,
     status: booking.paymentStatus === "paid" ? "paid" : booking.paymentStatus === "refunded" ? "refunded" : "open",
@@ -47,19 +52,25 @@ export async function backfillInvoices() {
   ]);
   const existingIds = new Set(existing.map((row) => row.bookingId));
   const memberByEmail = new Map(members.map((member) => [member.email, member.id]));
-  const missing = bookingRows.filter((booking) => !existingIds.has(booking.id)).map((booking) => ({
-    number: invoiceNumber(booking),
-    bookingId: booking.id,
-    memberId: memberByEmail.get(booking.clientEmail) ?? null,
-    customerName: booking.clientName,
-    customerEmail: booking.clientEmail,
-    description: booking.serviceTitle,
-    amount: booking.servicePrice,
-    currency: settings.currency,
-    status: booking.paymentStatus === "paid" ? "paid" : booking.paymentStatus === "refunded" ? "refunded" : "open",
-    dueAt: booking.scheduledAt,
-    paidAt: booking.paymentStatus === "paid" ? booking.updatedAt : null,
-  }));
+  const missing = bookingRows.filter((booking) => !existingIds.has(booking.id)).map((booking) => {
+    const { subtotal, taxAmount } = splitGstInclusive(booking.servicePrice, settings.gstRate);
+    return {
+      number: invoiceNumber(booking),
+      bookingId: booking.id,
+      memberId: memberByEmail.get(booking.clientEmail) ?? null,
+      customerName: booking.clientName,
+      customerEmail: booking.clientEmail,
+      description: booking.serviceTitle,
+      subtotal,
+      taxRate: settings.gstRate,
+      taxAmount,
+      amount: booking.servicePrice,
+      currency: settings.currency,
+      status: booking.paymentStatus === "paid" ? "paid" : booking.paymentStatus === "refunded" ? "refunded" : "open",
+      dueAt: booking.scheduledAt,
+      paidAt: booking.paymentStatus === "paid" ? booking.updatedAt : null,
+    };
+  });
   for (let index = 0; index < missing.length; index += 500) {
     await db.insert(invoices).values(missing.slice(index, index + 500)).onConflictDoNothing({ target: invoices.bookingId });
   }

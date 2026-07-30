@@ -1,18 +1,23 @@
 import { createNumerologyReading, NumerologyError } from "@/lib/numerology";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 export const dynamic = "force-dynamic";
 
-type Payload = { name?: string; birthDate?: string };
+type Payload = { name?: string; birthDate?: string; turnstileToken?: string };
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();
+  const ip = requestIp(request);
 
-  const throttle = await checkRateLimit("numerology-create", `ip:${requestIp(request)}`, 5, 3600);
+  const throttle = await checkRateLimit("numerology-create", `ip:${ip}`, 5, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as Payload;
+  if (!(await verifyTurnstileToken(body.turnstileToken, ip))) {
+    return Response.json({ error: "Verification failed. Please try again." }, { status: 403 });
+  }
   const name = body.name?.trim().slice(0, 120) ?? "";
   const birthDate = body.birthDate?.trim() ?? "";
 

@@ -6,6 +6,7 @@ import { GemstoneProductCard } from "@/components/gemstone-product-card";
 import { GemstoneProductDetail } from "@/components/gemstone-product-detail";
 import { GemstoneRecentlyViewed } from "@/components/gemstone-recently-viewed";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getPublishedReviews } from "@/lib/gemstone-reviews";
 import { getWishlistProductIds } from "@/lib/gemstone-wishlist";
 import { getProductBySlug, getRelatedProducts } from "@/lib/gemstones";
@@ -91,6 +92,7 @@ export default async function GemstoneProductPage({ params }: { params: Promise<
       )}
 
       <GemstoneRecentlyViewed excludeSlug={product.slug} wishlistIds={wishlistIds} signedIn={Boolean(member)} />
+    <SiteFooter />
     </main>
   );
 }

@@ -11,6 +11,7 @@ import {
   practitioners,
 } from "@/db/schema";
 import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
+import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
 
 export class PayoutError extends Error {}
 export class KundliSummaryError extends Error {}
@@ -118,24 +119,71 @@ export async function requestPayout(practitionerId: number, amount: number, note
 }
 
 export async function getAllPayoutsAdmin(status?: string) {
-  const rows = await db.select({ payout: practitionerPayouts, practitionerName: practitioners.name, practitionerEmail: practitioners.email })
+  const rows = await db.select({
+    payout: practitionerPayouts,
+    practitionerName: practitioners.name,
+    practitionerEmail: practitioners.email,
+    bankAccountName: practitioners.bankAccountName,
+    bankAccountNumberEnc: practitioners.bankAccountNumberEnc,
+    bankIfsc: practitioners.bankIfsc,
+    upiIdEnc: practitioners.upiIdEnc,
+  })
     .from(practitionerPayouts)
     .innerJoin(practitioners, eq(practitionerPayouts.practitionerId, practitioners.id))
     .orderBy(desc(practitionerPayouts.requestedAt));
   const filtered = status && status !== "all" ? rows.filter((row) => row.payout.status === status) : rows;
-  return filtered.map((row) => ({ ...row.payout, practitionerName: row.practitionerName, practitionerEmail: row.practitionerEmail }));
+  return filtered.map((row) => ({
+    ...row.payout,
+    practitionerName: row.practitionerName,
+    practitionerEmail: row.practitionerEmail,
+    bankAccountName: row.bankAccountName,
+    bankAccountNumber: row.bankAccountNumberEnc ? decryptPayoutField(row.bankAccountNumberEnc) : null,
+    bankIfsc: row.bankIfsc,
+    upiId: row.upiIdEnc ? decryptPayoutField(row.upiIdEnc) : null,
+  }));
 }
 
-export async function updatePayoutStatus(id: number, status: "approved" | "paid" | "rejected", adminId: number, adminNotes?: string) {
+export async function updatePayoutStatus(id: number, status: "approved" | "paid" | "rejected", adminId: number, adminNotes?: string, transactionRef?: string) {
+  if (status === "paid" && !transactionRef?.trim()) throw new PayoutError("Enter a bank transaction reference before marking this payout paid.");
   const [updated] = await db.update(practitionerPayouts).set({
     status,
     adminNotes: adminNotes?.trim().slice(0, 500) || null,
+    transactionRef: transactionRef?.trim().slice(0, 120) || null,
     processedBy: adminId,
     processedAt: new Date(),
     updatedAt: new Date(),
   }).where(eq(practitionerPayouts.id, id)).returning();
   if (!updated) throw new PayoutError("Payout request not found.");
   return updated;
+}
+
+export async function updatePractitionerPayoutDetails(practitionerId: number, input: { bankAccountName: string; bankAccountNumber: string; bankIfsc: string; upiId: string }) {
+  const bankAccountName = input.bankAccountName.trim().slice(0, 120);
+  const bankAccountNumber = input.bankAccountNumber.trim().slice(0, 34);
+  const bankIfsc = input.bankIfsc.trim().toUpperCase().slice(0, 20);
+  const upiId = input.upiId.trim().slice(0, 80);
+
+  if (bankAccountNumber && (!bankAccountName || !/^[A-Z]{4}0[A-Z0-9]{6}$/.test(bankIfsc))) {
+    throw new PayoutError("Enter the account holder name and a valid 11-character IFSC code.");
+  }
+  if (upiId && !/^[\w.\-]{2,256}@[a-zA-Z]{2,64}$/.test(upiId)) {
+    throw new PayoutError("Enter a valid UPI ID (e.g. name@bank).");
+  }
+
+  // Blank bank/UPI fields mean "keep what's already saved" (the form never pre-fills
+  // secrets), so only touch a group of columns when its input was actually provided.
+  await db.update(practitioners).set({
+    ...(bankAccountNumber
+      ? {
+          bankAccountName,
+          bankAccountNumberEnc: encryptPayoutField(bankAccountNumber),
+          bankIfsc,
+        }
+      : {}),
+    ...(upiId ? { upiIdEnc: encryptPayoutField(upiId) } : {}),
+    payoutDetailsUpdatedAt: new Date(),
+    updatedAt: new Date(),
+  }).where(eq(practitioners.id, practitionerId));
 }
 
 /** Generates (or returns the cached) Kundli summary for a booking's client from the real chart

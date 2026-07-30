@@ -23,7 +23,9 @@ import {
   Users,
 } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
-import { BrandMark } from "@/components/brand-mark";
+import { SiteFooter } from "@/components/site-footer";
+import { JsonLd } from "@/components/json-ld";
+import { getSiteUrl } from "@/lib/site-url";
 import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getSeniorAstrologers } from "@/lib/homepage";
 import { getPublishedServices } from "@/lib/services";
 
@@ -65,6 +67,15 @@ export default async function HomePage() {
 
   return (
     <main className="marketing-page">
+      <JsonLd data={{
+        "@context": "https://schema.org",
+        "@type": "Organization",
+        name: "Jyotish",
+        url: getSiteUrl().toString(),
+        logo: new URL("/images/vedic-hero.jpg", getSiteUrl()).toString(),
+        description: "Authentic Vedic astrology readings, cosmic insights, and auspicious timing.",
+        aggregateRating: stats.averageRating ? { "@type": "AggregateRating", ratingValue: stats.averageRating, reviewCount: Math.max(1, stats.consultationsDelivered) } : undefined,
+      }} />
       <SiteHeader />
 
       <section className="hero shell">
@@ -321,12 +332,7 @@ export default async function HomePage() {
         <Link href="/book" className="button button--light">Begin your reading <ArrowRight size={17} /></Link>
       </section>
 
-      <footer className="footer shell">
-        <BrandMark />
-        <p>Ancient wisdom for modern life.<br />Made thoughtfully in the present.</p>
-        <div><Link href="#services">Readings</Link><Link href="/blog">Journal</Link><Link href="/dashboard">Dashboard</Link><Link href="/admin">Admin</Link></div>
-        <small>© 2026 Jyotish Studio</small>
-      </footer>
+      <SiteFooter />
     </main>
   );
 }

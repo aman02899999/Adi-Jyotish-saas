@@ -4,6 +4,7 @@ import Link from "next/link";
 import { ArrowRight, Award, BadgeCheck, PackageCheck, ShieldCheck, Sparkles, Truck } from "lucide-react";
 import { GemstoneProductCard } from "@/components/gemstone-product-card";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getWishlistProductIds } from "@/lib/gemstone-wishlist";
 import { getActiveCategories, getProductCatalog } from "@/lib/gemstones";
 import { getCurrentMember } from "@/lib/member-auth";
@@ -110,6 +111,7 @@ export default async function GemstonesLandingPage() {
         <p>Share your birth date and let our AI guide point you to your stone from the full collection.</p>
         <Link href="/gemstones/recommend" className="button button--light">Get an AI recommendation <Sparkles size={16} /></Link>
       </section>
+    <SiteFooter />
     </main>
   );
 }

@@ -2,7 +2,7 @@ import { and, eq, or } from "drizzle-orm";
 import { db } from "@/db";
 import { bookings, invoices, payments } from "@/db/schema";
 import { getCurrentMember } from "@/lib/member-auth";
-import { getRazorpay } from "@/lib/razorpay";
+import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
@@ -38,6 +38,6 @@ return Response.json({
   orderId: order.id,
   amount: order.amount,
   currency: order.currency,
-  key: process.env.RAZORPAY_KEY_ID,
+  key: getRazorpayKeyId(),
 });
 }

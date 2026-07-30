@@ -3,6 +3,7 @@ import Link from "next/link";
 import { ArrowRight, CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { AskReadingForm } from "@/components/ask-reading-form";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { AI_READING_CURRENCY, AI_READING_PRICE, isEligibleForFreeReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { isRazorpayConfigured } from "@/lib/razorpay";
@@ -55,6 +56,7 @@ export default async function AskPage() {
           onlinePaymentsAvailable={isRazorpayConfigured()}
           isFreeEligible={isFreeEligible}
         />
+        <p className="legal-note">This reading offers guidance and reflection, not a guarantee of any outcome — it is not a substitute for medical, legal, or financial advice.</p>
       </section>
 
       <div className="shell" style={{ paddingBlock: "10px 60px" }}>
@@ -66,6 +68,7 @@ export default async function AskPage() {
           <Link href="/kundli" className="button button--light">Get full report <ArrowRight size={15} /></Link>
         </div>
       </div>
+    <SiteFooter />
     </main>
   );
 }

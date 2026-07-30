@@ -3,6 +3,7 @@ import Image from "next/image";
 import { CheckCircle2, Clock3, HeartHandshake, ShieldCheck } from "lucide-react";
 import { KundliMatchingForm } from "@/components/kundli-matching-form";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -45,7 +46,9 @@ export default function KundliMatchingPage() {
 
       <section className="ask-form-section shell">
         <KundliMatchingForm />
+        <p className="legal-note">Guna Milan is one traditional input among many — it&rsquo;s guidance for reflection, not a guarantee, and not a substitute for the couple&rsquo;s own compatibility, values, and communication.</p>
       </section>
+    <SiteFooter />
     </main>
   );
 }

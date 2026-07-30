@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Moon, Sparkles, Sunrise, Sunset } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getTodayPanchang, REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
 export const dynamic = "force-dynamic";
@@ -93,6 +94,7 @@ export default async function PanchangPage() {
           <Link href="/kundli" className="button button--small">Get your full Kundli <ArrowRight size={14} /></Link>
         </div>
       </section>
+    <SiteFooter />
     </main>
   );
 }
