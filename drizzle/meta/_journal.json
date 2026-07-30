@@ -92,6 +92,13 @@
       "when": 1785390000000,
       "tag": "0012_kundli_reports",
       "breakpoints": true
+    },
+    {
+      "idx": 13,
+      "version": "7",
+      "when": 1785400000000,
+      "tag": "0013_practitioner_kundli_and_new_tools",
+      "breakpoints": true
     }
   ]
 }

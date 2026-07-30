@@ -127,6 +127,8 @@ export const bookings = pgTable("bookings", {
   notes: text("notes"),
   status: varchar("status", { length: 30 }).notNull().default("pending"),
   paymentStatus: varchar("payment_status", { length: 30 }).notNull().default("unpaid"),
+  kundliSummary: text("kundli_summary"),
+  kundliGeneratedAt: timestamp("kundli_generated_at", { withTimezone: true }),
   createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
   updatedAt: timestamp("updated_at", { withTimezone: true }).notNull().defaultNow(),
 }, (table) => [
@@ -501,6 +503,40 @@ export const dailyHoroscopes = pgTable("daily_horoscopes", {
   uniqueIndex("daily_horoscopes_sign_date_unique").on(table.sign, table.date),
 ]);
 
+export const dailyPanchang = pgTable("daily_panchang", {
+  id: serial("id").primaryKey(),
+  date: varchar("date", { length: 10 }).notNull().unique(),
+  content: text("content").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+});
+
+export const kundliMatches = pgTable("kundli_matches", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  personAName: varchar("person_a_name", { length: 120 }).notNull(),
+  personABirthDate: varchar("person_a_birth_date", { length: 10 }).notNull(),
+  personBName: varchar("person_b_name", { length: 120 }).notNull(),
+  personBBirthDate: varchar("person_b_birth_date", { length: 10 }).notNull(),
+  compatibilityScore: integer("compatibility_score").notNull(),
+  narrative: text("narrative").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("kundli_matches_created_idx").on(table.createdAt),
+]);
+
+export const numerologyReadings = pgTable("numerology_readings", {
+  id: serial("id").primaryKey(),
+  memberId: integer("member_id").references(() => memberUsers.id, { onDelete: "set null" }),
+  name: varchar("name", { length: 120 }).notNull(),
+  birthDate: varchar("birth_date", { length: 10 }).notNull(),
+  lifePathNumber: integer("life_path_number").notNull(),
+  destinyNumber: integer("destiny_number").notNull(),
+  narrative: text("narrative").notNull(),
+  createdAt: timestamp("created_at", { withTimezone: true }).notNull().defaultNow(),
+}, (table) => [
+  index("numerology_readings_created_idx").on(table.createdAt),
+]);
+
 export const gemstoneCategories = pgTable("gemstone_categories", {
   id: serial("id").primaryKey(),
   name: varchar("name", { length: 80 }).notNull(),
@@ -773,3 +809,6 @@ export type GemstoneReview = typeof gemstoneReviews.$inferSelect;
 export type GemstoneCoupon = typeof gemstoneCoupons.$inferSelect;
 export type NewGemstoneCoupon = typeof gemstoneCoupons.$inferInsert;
 export type GemstoneRecommendation = typeof gemstoneRecommendations.$inferSelect;
+export type DailyPanchang = typeof dailyPanchang.$inferSelect;
+export type KundliMatch = typeof kundliMatches.$inferSelect;
+export type NumerologyReading = typeof numerologyReadings.$inferSelect;

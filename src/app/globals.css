@@ -310,6 +310,15 @@ button { border: 0; }
 .kundli-report__section { margin-bottom:22px; }
 .kundli-report__section:last-child { margin-bottom:0; }
 .kundli-report__section h3 { margin:0 0 10px; color:var(--copper); font:400 16px var(--serif); }
+.kundli-report p { margin:0 0 12px; color:#4c433c; font:12px/1.75 var(--sans); }
+.kundli-report p:last-child { margin-bottom:0; }
+.match-score { display:flex; align-items:baseline; gap:6px; margin:0 0 14px; }
+.match-score strong { font:400 40px var(--serif); color:var(--copper); }
+.match-score span { color:var(--muted); font-size:11px; }
+.numerology-numbers { display:flex; gap:14px; margin:0 0 18px; }
+.numerology-numbers div { display:flex; flex-direction:column; align-items:center; gap:4px; padding:16px 22px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.4); }
+.numerology-numbers strong { font:400 30px var(--serif); color:var(--copper); }
+.numerology-numbers span { color:var(--muted); font-size:10px; text-transform:uppercase; letter-spacing:.05em; }
 
 /* horoscope */
 .zodiac-hero { min-height:auto; padding-block:70px 30px; text-align:center; }
@@ -1282,6 +1291,13 @@ button { border: 0; }
 .member-invoice-name { min-width:0; }.member-invoice-name small { color:var(--copper); font-size:6px; }.member-invoice-name h3 { overflow:hidden; margin:3px 0; font:400 12px var(--serif); text-overflow:ellipsis; white-space:nowrap; }.member-invoice-name p { margin:0; color:var(--muted); font-size:6px; }
 .member-invoice-amount { display:flex; flex-direction:column; align-items:start; gap:7px; }.member-invoice-amount > strong { font:400 12px var(--serif); }
 .member-invoice-actions { display:flex; flex-direction:column; align-items:end; gap:7px; }.member-invoice-actions a,.member-invoice-actions button { padding:0; color:var(--copper); background:transparent; font-size:7px; font-weight:700; }.member-invoice-actions button { padding:6px 8px; border-radius:5px; color:white; background:var(--copper); }.member-invoice-actions span { color:var(--muted); font-size:6px; }
+
+.practitioner-booking { border-bottom:1px solid rgba(100,75,55,.09); }
+.practitioner-booking__row { min-height:82px; display:grid; grid-template-columns:38px 1.4fr .6fr .7fr 18px; align-items:center; gap:11px; padding:13px 19px; cursor:pointer; }
+.practitioner-booking__chevron { color:var(--faint); transition:transform .2s ease; }
+.practitioner-booking__chevron--open { transform:rotate(180deg); color:var(--copper); }
+.practitioner-booking__detail { padding:0 19px 20px 68px; display:flex; flex-direction:column; gap:14px; }
+.practitioner-booking__birth { display:flex; flex-direction:column; gap:2px; color:var(--muted); font-size:7px; }
 .receipt-page { min-height:100dvh; padding:35px 20px 70px; background:#ded7cb; background-image:linear-gradient(rgba(120,87,61,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(120,87,61,.08) 1px,transparent 1px); background-size:100px 100px; }
 .receipt-actions { width:min(780px,100%); display:flex; align-items:center; justify-content:space-between; margin:0 auto 16px; }
 .receipt-actions > a { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:8px; }

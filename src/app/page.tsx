@@ -6,7 +6,9 @@ import {
   CalendarDays,
   Gem,
   GraduationCap,
+  Hash,
   Heart,
+  HeartHandshake,
   HeartPulse,
   Home,
   MessageCircle,
@@ -48,6 +50,9 @@ const freeTools = [
   { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by your sign", href: "/horoscope" },
   { icon: MessageCircle, label: "Ask AI a Question", note: "Instant answer, one question", href: "/ask" },
   { icon: Gem, label: "Gemstone Match", note: "Free AI recommendation", href: "/gemstones/recommend" },
+  { icon: HeartHandshake, label: "Kundli Matching", note: "Free compatibility reading", href: "/kundli-matching" },
+  { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat", href: "/panchang" },
+  { icon: Hash, label: "Numerology", note: "Life Path & Destiny numbers", href: "/numerology" },
   { icon: ScrollText, label: "Full Kundli Report", note: "Your complete birth chart", href: "/kundli" },
 ];
 
@@ -158,7 +163,7 @@ export default async function HomePage() {
         <div className="promo-banner promo-banner--dark reveal">
           <div className="promo-banner__copy">
             <strong>Or ask Shree Santram Shashtri instantly.</strong>
-            <span>Our AI Jyotish guide answers one focused question in under a minute — pay once, get your reading right away.</span>
+            <span>Our AI Jyotish guide answers one focused question in under a minute. Your first reading is free.</span>
           </div>
           <Link href="/ask" className="button button--light">Ask now <ArrowRight size={16} /></Link>
         </div>
@@ -233,10 +238,10 @@ export default async function HomePage() {
       <div className="shell" style={{ paddingTop: 70 }}>
         <div className="promo-banner reveal">
           <div className="promo-banner__copy">
-            <strong>Your first chat is on us.</strong>
-            <span>3 free minutes with any guide — no card required to start.</span>
+            <strong>Prefer a live guide?</strong>
+            <span>Chat instantly with an available astrologer — pay only for the minutes you use, no subscription required.</span>
           </div>
-          <Link href="/astrologers" className="button button--light">Claim your free chat <ArrowRight size={16} /></Link>
+          <Link href="/astrologers" className="button button--light">Find a guide <ArrowRight size={16} /></Link>
         </div>
       </div>
 

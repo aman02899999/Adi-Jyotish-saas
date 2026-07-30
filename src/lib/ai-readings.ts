@@ -31,6 +31,36 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
   return reading;
 }
 
+/** A member's very first question-type reading is free. Checked (and consumed) at creation time, so a second attempt is never free even if the first is still pending. */
+export async function isEligibleForFreeReading(memberId: number) {
+  const [existing] = await db.select({ id: aiReadings.id }).from(aiReadings)
+    .where(and(eq(aiReadings.memberId, memberId), eq(aiReadings.readingType, "question")))
+    .limit(1);
+  return !existing;
+}
+
+export async function createFreeReading({ memberId, clientName, birthDate, birthTime, birthPlace, question }: {
+  memberId: number;
+  clientName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+  question: string;
+}) {
+  const [reading] = await db.insert(aiReadings).values({
+    memberId,
+    clientName,
+    birthDate,
+    birthTime,
+    birthPlace,
+    question,
+    price: 0,
+    currency: AI_READING_CURRENCY,
+    status: "paid",
+  }).returning();
+  return reading;
+}
+
 export async function createPendingKundliReport({ memberId, clientName, birthDate, birthTime, birthPlace }: {
   memberId: number;
   clientName: string;
