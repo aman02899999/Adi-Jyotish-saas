@@ -4,6 +4,7 @@ import { CalendarClock, Coins, LayoutDashboard, LogOut, Menu, Star, UserRound } 
 import { BrandMark } from "@/components/brand-mark";
 import { FaqWidget } from "@/components/faq-widget";
 import { NotificationBell } from "@/components/notification-bell";
+import { ProfileMenu } from "@/components/profile-menu";
 import { PRACTITIONER_FAQ } from "@/lib/faq-data";
 import type { PractitionerIdentity } from "@/lib/practitioner-auth";
 
@@ -53,7 +54,7 @@ export async function PractitionerShell({ practitioner, active, children }: { pr
             <nav>{navItems.map(({ label, href, tab }) => <Link key={label} className={active === tab ? "active" : ""} href={href}>{label}</Link>)}</nav>
             <div className="topbar-tools">
               <NotificationBell apiBase="/api/practitioner/notifications" />
-              <span className="top-avatar">{initials}</span>
+              <ProfileMenu initials={initials} name={practitioner.name} subtitle={practitioner.title} logoutAction="/api/auth/practitioner-logout" />
             </div>
           </header>
           <div className="dashboard-scroll">{children}</div>

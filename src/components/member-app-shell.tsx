@@ -25,6 +25,7 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 import { FaqWidget } from "@/components/faq-widget";
 import { NotificationBell } from "@/components/notification-bell";
+import { ProfileMenu } from "@/components/profile-menu";
 import { MEMBER_FAQ } from "@/lib/faq-data";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getMemberUnreadCount } from "@/lib/messaging";
@@ -87,7 +88,7 @@ export async function MemberAppShell({ member, active, children }: { member: Mem
               <label><Search size={16} /><input aria-label="Search dashboard" placeholder="Search" /></label>
               <Link className="notification-button" href="/dashboard/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <span />}</Link>
               <NotificationBell apiBase="/api/member/notifications" />
-              <span className="top-avatar">{initials}</span>
+              <ProfileMenu initials={initials} name={member.name} subtitle={`${member.plan} plan`} logoutAction="/api/member/logout" />
             </div>
           </header>
           <div className="dashboard-scroll">{children}</div>
