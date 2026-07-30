@@ -213,6 +213,35 @@ button { border: 0; }
 .live-card__actions a:hover, .live-card__actions a.primary { background: var(--copper); color: #fff; border-color: var(--copper); }
 .live-strip__more { display: flex; justify-content: center; margin-top: 30px; }
 
+/* senior astrologers */
+.senior-strip { padding-block: 30px 20px; }
+.senior-main-grid { display: grid; grid-template-columns: repeat(2, 1fr); gap: 20px; margin-bottom: 20px; }
+.senior-main-card { display: flex; overflow: hidden; border: 1px solid var(--line); border-radius: 22px; background: rgba(255,255,255,.4); box-shadow: 0 20px 45px rgba(94,62,41,.08); transition: transform .25s ease, box-shadow .25s ease; }
+.senior-main-card:hover { transform: translateY(-4px); box-shadow: 0 26px 55px rgba(94,62,41,.14); }
+.senior-main-card__photo { width: 220px; flex: 0 0 auto; position: relative; background: linear-gradient(160deg,#c18c70,#704c41); }
+.senior-main-card__photo img { width: 100%; height: 100%; object-fit: cover; }
+.senior-main-card__photo > span { width: 100%; height: 100%; display: grid; place-items: center; color: #fff; font: 400 48px var(--serif); }
+.senior-main-card__photo em { position: absolute; left: 12px; bottom: 12px; display: flex; align-items: center; gap: 4px; padding: 5px 9px; border-radius: 999px; color: #48784a; background: rgba(255,255,255,.92); font-size: 12px; font-style: normal; font-weight: 700; }
+.senior-main-card__body { min-width: 0; display: flex; flex-direction: column; padding: 24px 26px; }
+.senior-main-card__title { margin: 0 0 4px; color: var(--copper); font-size: 12px; font-weight: 700; text-transform: uppercase; letter-spacing: .08em; }
+.senior-main-card__body h3 { margin: 0 0 10px; font: 400 24px var(--serif); }
+.senior-main-card__meta { display: flex; flex-wrap: wrap; gap: 8px; margin-bottom: 12px; }
+.senior-main-card__meta span { padding: 5px 10px; border-radius: 999px; color: #71584a; background: rgba(112,87,69,.08); font-size: 12px; font-weight: 600; }
+.senior-main-card__meta span:last-child { color: #fff; background: var(--copper); }
+.senior-main-card__bio { display: -webkit-box; margin: 0 0 14px; overflow: hidden; color: var(--muted); font-size: 13px; line-height: 1.7; -webkit-line-clamp: 4; -webkit-box-orient: vertical; }
+.senior-main-card__tags { display: flex; flex-wrap: wrap; gap: 5px; margin-bottom: 18px; }
+.senior-main-card__tags span { padding: 5px 8px; border-radius: 6px; color: #71584a; background: rgba(112,87,69,.07); font-size: 12px; }
+.senior-main-card__actions { display: flex; flex-wrap: wrap; gap: 8px; margin-top: auto; }
+.senior-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
+.senior-card { display: flex; flex-direction: column; align-items: center; gap: 3px; padding: 20px 16px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.3); text-align: center; transition: transform .25s ease, box-shadow .25s ease; }
+.senior-card:hover { transform: translateY(-3px); box-shadow: 0 16px 32px rgba(94,62,41,.08); }
+.senior-card__avatar { width: 58px; height: 58px; margin-bottom: 8px; }
+.senior-card__avatar img { width: 100%; height: 100%; border-radius: 50%; object-fit: cover; }
+.senior-card__avatar span { width: 100%; height: 100%; display: grid; place-items: center; border-radius: 50%; color: #fff; background: linear-gradient(145deg,#c18c70,#704c41); font: 400 17px var(--serif); }
+.senior-card strong { font: 400 15px var(--serif); }
+.senior-card span { color: var(--copper); font-size: 12px; }
+.senior-card small { color: var(--muted); font-size: 12px; }
+
 /* free tools */
 .tools-strip { padding-block: 20px 30px; }
 .tools-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
@@ -248,12 +277,16 @@ button { border: 0; }
   .tools-grid { grid-template-columns: repeat(2, 1fr); }
   .app-strip { grid-template-columns: 1fr; gap: 30px; padding-block: 70px; }
   .app-strip__visual { min-height: 260px; order: -1; }
+  .senior-main-grid { grid-template-columns: 1fr; }
+  .senior-grid { grid-template-columns: repeat(2, 1fr); }
 }
 @media (max-width: 640px) {
   .category-grid { grid-template-columns: repeat(2, 1fr); }
   .live-grid, .tools-grid { grid-template-columns: 1fr; }
   .promo-banner { flex-direction: column; text-align: center; padding: 30px 24px; }
   .app-strip__badges { flex-direction: column; }
+  .senior-main-card { flex-direction: column; }
+  .senior-main-card__photo { width: 100%; height: 220px; }
 }
 
 /* dashboard ai readings */

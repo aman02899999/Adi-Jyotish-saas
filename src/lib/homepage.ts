@@ -26,6 +26,13 @@ export async function getLivePractitioners(limit = 6) {
     .slice(0, limit);
 }
 
+export async function getSeniorAstrologers(limit = 4) {
+  const people = await getMarketplacePractitioners();
+  return [...people]
+    .sort((a, b) => Number(b.featured) - Number(a.featured) || b.experienceYears - a.experienceYears)
+    .slice(0, limit);
+}
+
 export async function getFeaturedTestimonials(limit = 3) {
   return db.select({ reviewerName: practitionerReviews.reviewerName, body: practitionerReviews.body, rating: practitionerReviews.rating })
     .from(practitionerReviews)

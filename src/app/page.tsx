@@ -4,6 +4,7 @@ import {
   ArrowRight,
   BriefcaseBusiness,
   CalendarDays,
+  CheckCircle2,
   Gem,
   GraduationCap,
   Hash,
@@ -23,7 +24,7 @@ import {
 } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { BrandMark } from "@/components/brand-mark";
-import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners } from "@/lib/homepage";
+import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getSeniorAstrologers } from "@/lib/homepage";
 import { getPublishedServices } from "@/lib/services";
 
 export const dynamic = "force-dynamic";
@@ -57,8 +58,10 @@ const freeTools = [
 ];
 
 export default async function HomePage() {
-  const [services, stats, liveExperts, testimonials] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials()]);
+  const [services, stats, liveExperts, testimonials, seniorAstrologers] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers()]);
   const onlineCount = liveExperts.filter((expert) => expert.online).length;
+  const seniorMain = seniorAstrologers.slice(0, 2);
+  const seniorRest = seniorAstrologers.slice(2);
 
   return (
     <main className="marketing-page">
@@ -156,6 +159,54 @@ export default async function HomePage() {
             ))}
           </div>
           <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
+        </section>
+      )}
+
+      {seniorMain.length > 0 && (
+        <section className="senior-strip shell" aria-label="Our most senior astrologers">
+          <div className="section-heading reveal">
+            <div><p className="eyebrow"><span /> Our most senior astrologers</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Decades of wisdom,<br /><em>ready to guide you.</em></h2></div>
+          </div>
+          <div className="senior-main-grid">
+            {seniorMain.map((expert) => (
+              <article className="senior-main-card reveal" key={expert.id}>
+                <div className="senior-main-card__photo">
+                  {expert.photoUrl ? <img src={expert.photoUrl} alt={expert.name} /> : <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>}
+                  {expert.verified && <em><CheckCircle2 size={13} /> Verified</em>}
+                </div>
+                <div className="senior-main-card__body">
+                  <p className="senior-main-card__title">{expert.title}</p>
+                  <h3>{expert.name}</h3>
+                  <div className="senior-main-card__meta">
+                    <span>{expert.experienceYears}+ years experience</span>
+                    <span>₹{expert.chatRatePerMinute}/min</span>
+                  </div>
+                  <p className="senior-main-card__bio">{expert.bio}</p>
+                  <div className="senior-main-card__tags">
+                    {expert.specialties.split(",").slice(0, 7).map((tag) => <span key={tag}>{tag.trim()}</span>)}
+                  </div>
+                  <div className="senior-main-card__actions">
+                    <Link href={`/astrologers/${expert.slug}`} className="button">View profile <ArrowRight size={15} /></Link>
+                    <Link href={`/book?practitioner=${expert.id}`} className="button button--ghost">Book consultation</Link>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+          {seniorRest.length > 0 && (
+            <div className="senior-grid">
+              {seniorRest.map((expert) => (
+                <Link href={`/astrologers/${expert.slug}`} className="senior-card reveal" key={expert.id}>
+                  <div className="senior-card__avatar">
+                    {expert.photoUrl ? <img src={expert.photoUrl} alt={expert.name} /> : <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>}
+                  </div>
+                  <strong>{expert.name}</strong>
+                  <span>{expert.title}</span>
+                  <small>{expert.experienceYears} yrs · ₹{expert.chatRatePerMinute}/min</small>
+                </Link>
+              ))}
+            </div>
+          )}
         </section>
       )}
 
