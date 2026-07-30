@@ -75,18 +75,23 @@ env:
     availability: [RUNTIME]
 
   # ── Firebase Google sign-in ───────────────────────────────────────
+  # Client config is public by design (Firebase secures access via Security
+  # Rules/authorized domains, not secrecy) — safe to commit.
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
-    value: ""
+    value: "AIzaSyA1Pbcaa7D2_JhOo7Qs3bkw5OTkvy4Gdtw"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
-    value: ""
+    value: "ask-astrologer-2c5b5.firebaseapp.com"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
-    value: ""
+    value: "ask-astrologer-2c5b5"
     availability: [BUILD, RUNTIME]
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
-    value: ""
+    value: "1:473989526170:web:a8bbdefc0a46c6c3e12523"
     availability: [BUILD, RUNTIME]
+  # Server-side service account JSON — a real secret, never paste it in chat.
+  # Get it from Firebase Console → Project Settings → Service Accounts →
+  # Generate new private key, then: firebase apphosting:secrets:set FIREBASE_SERVICE_ACCOUNT_KEY
   - variable: FIREBASE_SERVICE_ACCOUNT_KEY
     secret: FIREBASE_SERVICE_ACCOUNT_KEY
     availability: [RUNTIME]
@@ -108,6 +113,7 @@ env:
     availability: [BUILD, RUNTIME]
 
   # ── Analytics (Google Analytics) ──────────────────────────────────
+  # measurementId from the Firebase web config doubles as the GA4 ID.
   - variable: NEXT_PUBLIC_GA_ID
-    value: ""
+    value: "G-61D4BLFYET"
     availability: [BUILD, RUNTIME]
