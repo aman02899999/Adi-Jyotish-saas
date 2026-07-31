@@ -1,13 +1,68 @@
 import "server-only";
 
-import { asc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { membershipPlans, type MembershipPlan, type NewMembershipPlan } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getRazorpay } from "@/lib/razorpay";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { toSlug } from "@/lib/services";
 
-const starterPlans: Array<Omit<NewMembershipPlan, "currency">> = [
+export type MembershipPlan = {
+  id: string; // == key
+  key: string;
+  name: string;
+  tagline: string;
+  description: string;
+  priceMonthly: number;
+  priceYearly: number | null;
+  currency: string;
+  features: string;
+  sessionDiscountPercent: number;
+  highlighted: boolean;
+  active: boolean;
+  sortOrder: number;
+  razorpayPlanIdMonthly: string | null;
+  razorpayPlanIdYearly: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function toDate(value: FirebaseFirestore.Timestamp | Date | undefined | null): Date {
+  if (!value) return new Date();
+  return value instanceof Date ? value : value.toDate();
+}
+
+function plansCollection() {
+  return db.collection("membershipPlans");
+}
+
+function planFromSnap(snap: FirebaseFirestore.DocumentSnapshot | FirebaseFirestore.QueryDocumentSnapshot): MembershipPlan {
+  const data = snap.data() as Record<string, unknown>;
+  return {
+    id: snap.id,
+    key: snap.id,
+    name: data.name as string,
+    tagline: (data.tagline as string) ?? "",
+    description: (data.description as string) ?? "",
+    priceMonthly: (data.priceMonthly as number) ?? 0,
+    priceYearly: (data.priceYearly as number | null) ?? null,
+    currency: (data.currency as string) ?? "INR",
+    features: (data.features as string) ?? "",
+    sessionDiscountPercent: (data.sessionDiscountPercent as number) ?? 0,
+    highlighted: Boolean(data.highlighted),
+    active: data.active !== false,
+    sortOrder: (data.sortOrder as number) ?? 0,
+    razorpayPlanIdMonthly: (data.razorpayPlanIdMonthly as string | null) ?? null,
+    razorpayPlanIdYearly: (data.razorpayPlanIdYearly as string | null) ?? null,
+    createdAt: toDate(data.createdAt as FirebaseFirestore.Timestamp),
+    updatedAt: toDate(data.updatedAt as FirebaseFirestore.Timestamp),
+  };
+}
+
+function isAlreadyExists(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
+}
+
+const starterPlans: Array<Omit<MembershipPlan, "id" | "currency" | "razorpayPlanIdMonthly" | "razorpayPlanIdYearly" | "createdAt" | "updatedAt">> = [
   {
     key: "plus",
     name: "Plus",
@@ -36,14 +91,31 @@ const starterPlans: Array<Omit<NewMembershipPlan, "currency">> = [
   },
 ];
 
-export async function seedMembershipPlans() {
+/** Doc id == plan key (unique tier slug), so seeding is idempotent the same way `ensureInvoiceForBooking`
+ * is: `create()` fails silently (caught) if the plan already exists — no separate uniqueness check needed. */
+export async function seedMembershipPlans(): Promise<void> {
   const settings = await getStudioSettings();
-  await db.insert(membershipPlans).values(starterPlans.map((plan) => ({ ...plan, currency: settings.currency }))).onConflictDoNothing({ target: membershipPlans.key });
+  await Promise.all(starterPlans.map(async (plan) => {
+    const ref = plansCollection().doc(plan.key);
+    try {
+      await ref.create({
+        ...plan,
+        currency: settings.currency,
+        razorpayPlanIdMonthly: null,
+        razorpayPlanIdYearly: null,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      if (!isAlreadyExists(error)) throw error;
+    }
+  }));
 }
 
 export async function getAllPlans(): Promise<MembershipPlan[]> {
   await seedMembershipPlans();
-  return db.select().from(membershipPlans).orderBy(asc(membershipPlans.sortOrder), asc(membershipPlans.id));
+  const snap = await plansCollection().orderBy("sortOrder", "asc").get();
+  return snap.docs.map((doc) => planFromSnap(doc));
 }
 
 export async function getPublicPlans(): Promise<MembershipPlan[]> {
@@ -51,14 +123,13 @@ export async function getPublicPlans(): Promise<MembershipPlan[]> {
   return rows.filter((plan) => plan.active);
 }
 
-export async function getPlanById(id: number) {
-  const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans.id, id)).limit(1);
-  return plan ?? null;
+export async function getPlanById(id: string): Promise<MembershipPlan | null> {
+  const snap = await plansCollection().doc(id).get();
+  return snap.exists ? planFromSnap(snap) : null;
 }
 
-export async function getPlanByKey(key: string) {
-  const [plan] = await db.select().from(membershipPlans).where(eq(membershipPlans.key, key)).limit(1);
-  return plan ?? null;
+export async function getPlanByKey(key: string): Promise<MembershipPlan | null> {
+  return getPlanById(key);
 }
 
 function toMinorUnits(amount: number) {
@@ -109,13 +180,17 @@ export type PlanPayload = {
   sortOrder?: number;
 };
 
-export async function createPlan(payload: PlanPayload) {
+export async function createPlan(payload: PlanPayload): Promise<MembershipPlan> {
   const name = payload.name?.trim();
   if (!name) throw new Error("Plan name is required.");
   const settings = await getStudioSettings();
   const key = payload.key?.trim() ? toSlug(payload.key) : toSlug(name);
 
-  const [created] = await db.insert(membershipPlans).values({
+  const ref = plansCollection().doc(key);
+  const existing = await ref.get();
+  if (existing.exists) throw new Error("A plan with this key already exists.");
+
+  await ref.set({
     key,
     name,
     tagline: payload.tagline?.trim() ?? "",
@@ -128,18 +203,24 @@ export async function createPlan(payload: PlanPayload) {
     highlighted: payload.highlighted ?? false,
     active: payload.active ?? true,
     sortOrder: Math.max(0, Number(payload.sortOrder) || 0),
-  }).returning();
+    razorpayPlanIdMonthly: null,
+    razorpayPlanIdYearly: null,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
+  const created = planFromSnap(await ref.get());
   const razorpayIds = await ensureRazorpayPlans(created);
-  const [synced] = await db.update(membershipPlans).set(razorpayIds).where(eq(membershipPlans.id, created.id)).returning();
-  return synced;
+  await ref.update({ ...razorpayIds, updatedAt: FieldValue.serverTimestamp() });
+  return planFromSnap(await ref.get());
 }
 
-export async function updatePlan(id: number, payload: PlanPayload) {
+export async function updatePlan(id: string, payload: PlanPayload): Promise<MembershipPlan> {
   const existing = await getPlanById(id);
   if (!existing) throw new Error("Plan not found.");
+  const ref = plansCollection().doc(id);
 
-  const [updated] = await db.update(membershipPlans).set({
+  await ref.update({
     name: payload.name?.trim() || existing.name,
     tagline: payload.tagline?.trim() ?? existing.tagline,
     description: payload.description?.trim() ?? existing.description,
@@ -150,10 +231,11 @@ export async function updatePlan(id: number, payload: PlanPayload) {
     highlighted: payload.highlighted ?? existing.highlighted,
     active: payload.active ?? existing.active,
     sortOrder: payload.sortOrder != null ? Math.max(0, Number(payload.sortOrder) || 0) : existing.sortOrder,
-    updatedAt: new Date(),
-  }).where(eq(membershipPlans.id, id)).returning();
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
+  const updated = planFromSnap(await ref.get());
   const razorpayIds = await ensureRazorpayPlans(updated);
-  const [synced] = await db.update(membershipPlans).set(razorpayIds).where(eq(membershipPlans.id, id)).returning();
-  return synced;
+  await ref.update({ ...razorpayIds, updatedAt: FieldValue.serverTimestamp() });
+  return planFromSnap(await ref.get());
 }

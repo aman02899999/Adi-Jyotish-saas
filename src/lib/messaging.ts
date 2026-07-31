@@ -1,12 +1,11 @@
 import "server-only";
 
-import { and, desc, eq, inArray, or, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { memberUsers, messageThreads, threadMessages } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 export type InboxMessage = {
-  id: number;
-  threadId: number;
+  id: string;
+  threadId: string;
   senderType: string;
   senderName: string;
   body: string;
@@ -16,8 +15,8 @@ export type InboxMessage = {
 };
 
 export type InboxThread = {
-  id: number;
-  memberId: number;
+  id: string;
+  memberId: string;
   bookingId: number | null;
   subject: string;
   category: string;
@@ -30,62 +29,103 @@ export type InboxThread = {
   messages: InboxMessage[];
 };
 
-async function attachMessages<T extends Omit<InboxThread, "messages">>(threads: T[]): Promise<InboxThread[]> {
+type ThreadDoc = {
+  memberId: string;
+  bookingId: number | null;
+  subject: string;
+  category: string;
+  status: string;
+  lastMessageAt: FirebaseFirestore.Timestamp;
+  createdAt: FirebaseFirestore.Timestamp;
+  updatedAt: FirebaseFirestore.Timestamp;
+};
+
+type MessageDoc = {
+  senderType: string;
+  senderName: string;
+  body: string;
+  readByMember: boolean;
+  readByAdmin: boolean;
+  createdAt: FirebaseFirestore.Timestamp;
+};
+
+const threadsCollection = db.collection("messageThreads");
+
+function messagesCollection(threadId: string) {
+  return threadsCollection.doc(threadId).collection("messages");
+}
+
+function toMessage(threadId: string, doc: FirebaseFirestore.DocumentSnapshot): InboxMessage {
+  const data = doc.data() as MessageDoc;
+  return { id: doc.id, threadId, senderType: data.senderType, senderName: data.senderName, body: data.body, readByMember: data.readByMember, readByAdmin: data.readByAdmin, createdAt: data.createdAt?.toDate() ?? new Date() };
+}
+
+async function attachMessages<T extends { id: string }>(threads: T[]): Promise<Array<T & { messages: InboxMessage[] }>> {
   if (!threads.length) return [];
-  const messages = await db.select().from(threadMessages).where(inArray(threadMessages.threadId, threads.map((thread) => thread.id))).orderBy(threadMessages.createdAt);
-  const messagesByThread = new Map<number, InboxMessage[]>();
-  for (const message of messages) {
-    const group = messagesByThread.get(message.threadId) ?? [];
-    group.push(message);
-    messagesByThread.set(message.threadId, group);
-  }
-  return threads.map((thread) => ({ ...thread, messages: messagesByThread.get(thread.id) ?? [] }));
+  const withMessages = await Promise.all(threads.map(async (thread) => {
+    const snap = await messagesCollection(thread.id).orderBy("createdAt", "asc").get();
+    return { ...thread, messages: snap.docs.map((doc) => toMessage(thread.id, doc)) };
+  }));
+  return withMessages;
 }
 
-export async function getAdminInbox() {
-  const threads = await db.select({
-    id: messageThreads.id,
-    memberId: messageThreads.memberId,
-    bookingId: messageThreads.bookingId,
-    subject: messageThreads.subject,
-    category: messageThreads.category,
-    status: messageThreads.status,
-    lastMessageAt: messageThreads.lastMessageAt,
-    createdAt: messageThreads.createdAt,
-    updatedAt: messageThreads.updatedAt,
-    memberName: memberUsers.name,
-    memberEmail: memberUsers.email,
-  }).from(messageThreads).innerJoin(memberUsers, eq(messageThreads.memberId, memberUsers.id)).orderBy(desc(messageThreads.lastMessageAt));
-  return attachMessages(threads);
+async function attachMemberDetails(rows: Array<{ id: string; memberId: string; bookingId: number | null; subject: string; category: string; status: string; lastMessageAt: Date; createdAt: Date; updatedAt: Date }>): Promise<Array<Omit<InboxThread, "messages">>> {
+  const memberIds = Array.from(new Set(rows.map((row) => row.memberId)));
+  const memberDocs = memberIds.length ? await db.getAll(...memberIds.map((id) => db.collection("members").doc(id))) : [];
+  const memberById = new Map(memberDocs.map((doc) => [doc.id, doc.data() as { name?: string; email?: string } | undefined]));
+
+  return rows.map((row) => ({
+    ...row,
+    memberName: memberById.get(row.memberId)?.name ?? "Member",
+    memberEmail: memberById.get(row.memberId)?.email ?? "",
+  }));
 }
 
-export async function getMemberInbox(memberId: number) {
-  const threads = await db.select({
-    id: messageThreads.id,
-    memberId: messageThreads.memberId,
-    bookingId: messageThreads.bookingId,
-    subject: messageThreads.subject,
-    category: messageThreads.category,
-    status: messageThreads.status,
-    lastMessageAt: messageThreads.lastMessageAt,
-    createdAt: messageThreads.createdAt,
-    updatedAt: messageThreads.updatedAt,
-    memberName: memberUsers.name,
-    memberEmail: memberUsers.email,
-  }).from(messageThreads).innerJoin(memberUsers, eq(messageThreads.memberId, memberUsers.id)).where(eq(messageThreads.memberId, memberId)).orderBy(desc(messageThreads.lastMessageAt));
-  return attachMessages(threads);
+function threadRowFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  const data = doc.data() as ThreadDoc;
+  return {
+    id: doc.id,
+    memberId: data.memberId,
+    bookingId: data.bookingId ?? null,
+    subject: data.subject,
+    category: data.category,
+    status: data.status,
+    lastMessageAt: data.lastMessageAt?.toDate() ?? new Date(),
+    createdAt: data.createdAt?.toDate() ?? new Date(),
+    updatedAt: data.updatedAt?.toDate() ?? new Date(),
+  };
+}
+
+export async function getAdminInbox(): Promise<InboxThread[]> {
+  const snap = await threadsCollection.orderBy("lastMessageAt", "desc").get();
+  const rows = await attachMemberDetails(snap.docs.map(threadRowFromDoc));
+  return attachMessages(rows);
+}
+
+export async function getMemberInbox(memberId: string): Promise<InboxThread[]> {
+  const snap = await threadsCollection.where("memberId", "==", memberId).orderBy("lastMessageAt", "desc").get();
+  const rows = await attachMemberDetails(snap.docs.map(threadRowFromDoc));
+  return attachMessages(rows);
 }
 
 export async function getAdminUnreadCount() {
-  const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(threadMessages).where(and(eq(threadMessages.senderType, "member"), eq(threadMessages.readByAdmin, false)));
-  return row?.count ?? 0;
+  // collectionGroup query across every thread's messages subcollection.
+  const snap = await db.collectionGroup("messages").where("senderType", "==", "member").where("readByAdmin", "==", false).count().get();
+  return snap.data().count;
 }
 
-export async function getMemberUnreadCount(memberId: number) {
-  const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(threadMessages)
-    .innerJoin(messageThreads, eq(threadMessages.threadId, messageThreads.id))
-    .where(and(eq(messageThreads.memberId, memberId), eq(threadMessages.readByMember, false), or(eq(threadMessages.senderType, "admin"), eq(threadMessages.senderType, "system"))));
-  return row?.count ?? 0;
+export async function getMemberUnreadCount(memberId: string) {
+  const threadsSnap = await threadsCollection.where("memberId", "==", memberId).select().get();
+  if (threadsSnap.empty) return 0;
+  const counts = await Promise.all(threadsSnap.docs.map(async (threadDoc) => {
+    const snap = await messagesCollection(threadDoc.id)
+      .where("readByMember", "==", false)
+      .where("senderType", "in", ["admin", "system"])
+      .count()
+      .get();
+    return snap.data().count;
+  }));
+  return counts.reduce((sum, value) => sum + value, 0);
 }
 
 export async function sendBookingNotification({
@@ -95,29 +135,37 @@ export async function sendBookingNotification({
   body,
 }: {
   memberEmail: string;
+  // TODO(booking-migration): bookingId still comes from the not-yet-migrated Postgres bookings
+  // table (numeric serial id). Once bookings move to Firestore this should become a string.
   bookingId: number;
   subject: string;
   body: string;
 }) {
-  const [member] = await db.select({ id: memberUsers.id }).from(memberUsers).where(eq(memberUsers.email, memberEmail.toLowerCase())).limit(1);
-  if (!member) return null;
+  const memberSnap = await db.collection("members").where("email", "==", memberEmail.toLowerCase()).limit(1).get();
+  if (memberSnap.empty) return null;
+  const memberId = memberSnap.docs[0].id;
 
-  return db.transaction(async (tx) => {
-    let [thread] = await tx.select().from(messageThreads).where(and(eq(messageThreads.memberId, member.id), eq(messageThreads.bookingId, bookingId))).limit(1);
-    const now = new Date();
-    if (!thread) {
-      [thread] = await tx.insert(messageThreads).values({ memberId: member.id, bookingId, subject, category: "booking", status: "open", lastMessageAt: now }).returning();
-    } else {
-      await tx.update(messageThreads).set({ subject, status: "open", lastMessageAt: now, updatedAt: now }).where(eq(messageThreads.id, thread.id));
-    }
-    const [message] = await tx.insert(threadMessages).values({
-      threadId: thread.id,
-      senderType: "system",
-      senderName: "Jyotish Studio",
-      body: body.trim().slice(0, 3000),
-      readByAdmin: true,
-      readByMember: false,
-    }).returning();
-    return message;
+  const existingSnap = await threadsCollection.where("memberId", "==", memberId).where("bookingId", "==", bookingId).limit(1).get();
+  const now = FieldValue.serverTimestamp();
+
+  let threadRef: FirebaseFirestore.DocumentReference;
+  if (existingSnap.empty) {
+    threadRef = threadsCollection.doc();
+    await threadRef.set({ memberId, bookingId, subject, category: "booking", status: "open", lastMessageAt: now, createdAt: now, updatedAt: now });
+  } else {
+    threadRef = existingSnap.docs[0].ref;
+    await threadRef.update({ subject, status: "open", lastMessageAt: now, updatedAt: now });
+  }
+
+  const messageRef = messagesCollection(threadRef.id).doc();
+  await messageRef.set({
+    senderType: "system",
+    senderName: "Jyotish Studio",
+    body: body.trim().slice(0, 3000),
+    readByAdmin: true,
+    readByMember: false,
+    createdAt: now,
   });
+  const messageSnap = await messageRef.get();
+  return toMessage(threadRef.id, messageSnap);
 }

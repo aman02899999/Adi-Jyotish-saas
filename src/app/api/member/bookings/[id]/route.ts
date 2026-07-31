@@ -1,26 +1,22 @@
-import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { auditLogs, bookings } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { sendBookingNotification } from "@/lib/messaging";
 import { getStudioSettings } from "@/lib/studio-settings";
+import { bookingFromDoc } from "@/app/api/bookings/route";
 
 export const dynamic = "force-dynamic";
-
-function parseId(value: string) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
 
 export async function PUT(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const [member, settings] = await Promise.all([getCurrentMember(), getStudioSettings()]);
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
-  const { id: rawId } = await params;
-  const id = parseId(rawId);
-  if (!id) return Response.json({ error: "Invalid booking id." }, { status: 400 });
+  const { id } = await params;
 
-  const [booking] = await db.select().from(bookings).where(and(eq(bookings.id, id), eq(bookings.clientEmail, member.email))).limit(1);
-  if (!booking) return Response.json({ error: "Booking not found." }, { status: 404 });
+  const ref = db.collection("bookings").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return Response.json({ error: "Booking not found." }, { status: 404 });
+  const booking = bookingFromDoc(snap);
+  if (booking.clientEmail !== member.email) return Response.json({ error: "Booking not found." }, { status: 404 });
   if (!["pending", "confirmed"].includes(booking.status)) {
     return Response.json({ error: "This consultation can no longer be cancelled." }, { status: 409 });
   }
@@ -28,14 +24,16 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
     return Response.json({ error: `Please contact the studio for changes within ${settings.cancellationHours} hours.` }, { status: 409 });
   }
 
-  const [updated] = await db.update(bookings).set({ status: "cancelled", updatedAt: new Date() }).where(and(eq(bookings.id, id), eq(bookings.clientEmail, member.email))).returning();
-  await db.insert(auditLogs).values({
+  await ref.update({ status: "cancelled", updatedAt: FieldValue.serverTimestamp() });
+  const updated = { ...booking, status: "cancelled", updatedAt: new Date() };
+  await db.collection("auditLogs").add({
     adminId: null,
     adminName: `Member · ${member.name}`.slice(0, 120),
     action: "booking.cancelled_by_member",
     entityType: "booking",
     entityId: updated.reference,
     details: JSON.stringify({ priorStatus: booking.status, paymentStatus: booking.paymentStatus }),
+    createdAt: FieldValue.serverTimestamp(),
   });
   await sendBookingNotification({
     memberEmail: member.email,

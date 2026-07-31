@@ -134,6 +134,10 @@ function invoiceStatusForBooking(paymentStatus: string) {
   return "open";
 }
 
+function isAlreadyExists(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
+}
+
 /** Creates the invoice for a booking if one doesn't already exist. The invoice doc id is the
  * booking id itself — a booking has exactly one invoice, so `create()` (which fails on an
  * existing doc) replaces the old `onConflictDoNothing({ target: invoices.bookingId })` pattern:
@@ -164,7 +168,7 @@ export async function ensureInvoiceForBooking(booking: BookingForInvoice, member
         updatedAt: FieldValue.serverTimestamp(),
       });
     } catch (error) {
-      if (!(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6)) throw error;
+      if (!isAlreadyExists(error)) throw error;
     }
   }
   const snap = await ref.get();
@@ -220,7 +224,7 @@ export async function backfillInvoices(): Promise<void> {
           updatedAt: FieldValue.serverTimestamp(),
         });
       } catch (error) {
-        if (!(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6)) throw error;
+        if (!isAlreadyExists(error)) throw error;
       }
     }));
   }
