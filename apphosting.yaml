@@ -10,8 +10,10 @@
 #      then grant the backend access when prompted (or via
 #        firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
 #      ).
-#   4. Fill in the `value:` placeholders below with your real public config
-#      (NEXT_PUBLIC_* values are safe to commit — they ship to the browser anyway).
+#   4. Optional integrations not listed below (Razorpay live keys, Turnstile,
+#      Sentry, a custom NEXT_PUBLIC_SITE_URL, etc.) can be added the same way
+#      once you have real values — every one of them is optional and the app
+#      gracefully disables the feature when unset, matching .env.example.
 
 runConfig:
   minInstances: 0
@@ -24,96 +26,91 @@ env:
   # ── Database (required) ──────────────────────────────────────────
   - variable: DATABASE_URL
     secret: DATABASE_URL
-    availability: [BUILD, RUNTIME]
-
-  # ── Site URL ──────────────────────────────────────────────────────
-  - variable: NEXT_PUBLIC_SITE_URL
-    value: ""
-    availability: [BUILD, RUNTIME]
+    availability:
+      - BUILD
+      - RUNTIME
 
   # ── Razorpay payments ─────────────────────────────────────────────
   - variable: RAZORPAY_MODE
     value: "test"
-    availability: [RUNTIME]
-  - variable: RAZORPAY_TEST_KEY_ID
-    value: ""
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
   - variable: RAZORPAY_TEST_KEY_SECRET
     secret: RAZORPAY_TEST_KEY_SECRET
-    availability: [RUNTIME]
-  - variable: RAZORPAY_LIVE_KEY_ID
-    value: ""
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
   - variable: RAZORPAY_LIVE_KEY_SECRET
     secret: RAZORPAY_LIVE_KEY_SECRET
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
   - variable: RAZORPAY_WEBHOOK_SECRET
     secret: RAZORPAY_WEBHOOK_SECRET
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
 
   # ── Practitioner payout bank/UPI encryption ──────────────────────
   - variable: PAYOUT_ENCRYPTION_KEY
     secret: PAYOUT_ENCRYPTION_KEY
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
 
   # ── Transactional email (Resend) ─────────────────────────────────
   - variable: RESEND_API_KEY
     secret: RESEND_API_KEY
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
   - variable: RESEND_FROM_EMAIL
     value: "Jyotish Studio <onboarding@resend.dev>"
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
 
   # ── AI readings (Google Gemini) ───────────────────────────────────
   - variable: GEMINI_API_KEY
     secret: GEMINI_API_KEY
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
 
   # ── Realtime chat (Ably) ──────────────────────────────────────────
   - variable: ABLY_API_KEY
     secret: ABLY_API_KEY
-    availability: [RUNTIME]
+    availability:
+      - RUNTIME
 
   # ── Firebase Google sign-in ───────────────────────────────────────
   # Client config is public by design (Firebase secures access via Security
   # Rules/authorized domains, not secrecy) — safe to commit.
   - variable: NEXT_PUBLIC_FIREBASE_API_KEY
     value: "AIzaSyA1Pbcaa7D2_JhOo7Qs3bkw5OTkvy4Gdtw"
-    availability: [BUILD, RUNTIME]
+    availability:
+      - BUILD
+      - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
     value: "ask-astrologer-2c5b5.firebaseapp.com"
-    availability: [BUILD, RUNTIME]
+    availability:
+      - BUILD
+      - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
     value: "ask-astrologer-2c5b5"
-    availability: [BUILD, RUNTIME]
+    availability:
+      - BUILD
+      - RUNTIME
   - variable: NEXT_PUBLIC_FIREBASE_APP_ID
     value: "1:473989526170:web:a8bbdefc0a46c6c3e12523"
-    availability: [BUILD, RUNTIME]
+    availability:
+      - BUILD
+      - RUNTIME
   # Server-side service account JSON — a real secret, never paste it in chat.
   # Get it from Firebase Console → Project Settings → Service Accounts →
   # Generate new private key, then: firebase apphosting:secrets:set FIREBASE_SERVICE_ACCOUNT_KEY
   - variable: FIREBASE_SERVICE_ACCOUNT_KEY
     secret: FIREBASE_SERVICE_ACCOUNT_KEY
-    availability: [RUNTIME]
-
-  # ── Cloudflare Turnstile (CAPTCHA) ────────────────────────────────
-  - variable: NEXT_PUBLIC_TURNSTILE_SITE_KEY
-    value: ""
-    availability: [BUILD, RUNTIME]
-  - variable: TURNSTILE_SECRET_KEY
-    secret: TURNSTILE_SECRET_KEY
-    availability: [RUNTIME]
-
-  # ── Error tracking (Sentry) ───────────────────────────────────────
-  - variable: SENTRY_DSN
-    secret: SENTRY_DSN
-    availability: [RUNTIME]
-  - variable: NEXT_PUBLIC_SENTRY_DSN
-    value: ""
-    availability: [BUILD, RUNTIME]
+    availability:
+      - RUNTIME
 
   # ── Analytics (Google Analytics) ──────────────────────────────────
   # measurementId from the Firebase web config doubles as the GA4 ID.
   - variable: NEXT_PUBLIC_GA_ID
     value: "G-61D4BLFYET"
-    availability: [BUILD, RUNTIME]
+    availability:
+      - BUILD
+      - RUNTIME
