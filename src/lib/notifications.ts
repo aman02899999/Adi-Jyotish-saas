@@ -1,54 +1,106 @@
 import "server-only";
 
-import { and, desc, eq, isNull, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { notifications } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 type RecipientType = "member" | "admin" | "practitioner";
 
-export async function createNotification(input: { recipientType: RecipientType; recipientId: number; type: string; title: string; body?: string; link?: string }) {
-  await db.insert(notifications).values({
+type NotificationDoc = {
+  recipientType: RecipientType;
+  recipientId: string;
+  type: string;
+  title: string;
+  body: string | null;
+  link: string | null;
+  readAt: FirebaseFirestore.Timestamp | null;
+  createdAt: FirebaseFirestore.Timestamp;
+};
+
+function toNotification(doc: FirebaseFirestore.QueryDocumentSnapshot) {
+  const data = doc.data() as NotificationDoc;
+  return {
+    id: doc.id,
+    recipientType: data.recipientType,
+    recipientId: data.recipientId,
+    type: data.type,
+    title: data.title,
+    body: data.body,
+    link: data.link,
+    readAt: data.readAt ? data.readAt.toDate() : null,
+    createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
+  };
+}
+
+export async function createNotification(input: { recipientType: RecipientType; recipientId: string; type: string; title: string; body?: string; link?: string }) {
+  await db.collection("notifications").add({
     recipientType: input.recipientType,
     recipientId: input.recipientId,
     type: input.type.slice(0, 60),
     title: input.title.slice(0, 160),
-    body: input.body?.slice(0, 2000),
-    link: input.link?.slice(0, 300),
+    body: input.body?.slice(0, 2000) ?? null,
+    link: input.link?.slice(0, 300) ?? null,
+    readAt: null,
+    createdAt: FieldValue.serverTimestamp(),
   });
 }
 
 /** Fan-out helper for notifying every active admin who holds a given permission (e.g. all owners/managers about a new order). */
-export async function notifyAdmins(adminIds: number[], input: { type: string; title: string; body?: string; link?: string }) {
+export async function notifyAdmins(adminIds: string[], input: { type: string; title: string; body?: string; link?: string }) {
   if (!adminIds.length) return;
-  await db.insert(notifications).values(adminIds.map((recipientId) => ({
-    recipientType: "admin" as const,
-    recipientId,
-    type: input.type.slice(0, 60),
-    title: input.title.slice(0, 160),
-    body: input.body?.slice(0, 2000),
-    link: input.link?.slice(0, 300),
-  })));
+  const batch = db.batch();
+  const collection = db.collection("notifications");
+  for (const recipientId of adminIds) {
+    batch.set(collection.doc(), {
+      recipientType: "admin" as const,
+      recipientId,
+      type: input.type.slice(0, 60),
+      title: input.title.slice(0, 160),
+      body: input.body?.slice(0, 2000) ?? null,
+      link: input.link?.slice(0, 300) ?? null,
+      readAt: null,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+  }
+  await batch.commit();
 }
 
-export async function getNotifications(recipientType: RecipientType, recipientId: number, limit = 30) {
-  return db.select().from(notifications)
-    .where(and(eq(notifications.recipientType, recipientType), eq(notifications.recipientId, recipientId)))
-    .orderBy(desc(notifications.createdAt))
-    .limit(limit);
+export async function getNotifications(recipientType: RecipientType, recipientId: string, limit = 30) {
+  const snap = await db.collection("notifications")
+    .where("recipientType", "==", recipientType)
+    .where("recipientId", "==", recipientId)
+    .orderBy("createdAt", "desc")
+    .limit(limit)
+    .get();
+  return snap.docs.map(toNotification);
 }
 
-export async function getUnreadCount(recipientType: RecipientType, recipientId: number) {
-  const [row] = await db.select({ count: sql<number>`count(*)::int` }).from(notifications)
-    .where(and(eq(notifications.recipientType, recipientType), eq(notifications.recipientId, recipientId), isNull(notifications.readAt)));
-  return row?.count ?? 0;
+export async function getUnreadCount(recipientType: RecipientType, recipientId: string) {
+  const snap = await db.collection("notifications")
+    .where("recipientType", "==", recipientType)
+    .where("recipientId", "==", recipientId)
+    .where("readAt", "==", null)
+    .count()
+    .get();
+  return snap.data().count;
 }
 
-export async function markNotificationRead(id: number, recipientType: RecipientType, recipientId: number) {
-  await db.update(notifications).set({ readAt: new Date() })
-    .where(and(eq(notifications.id, id), eq(notifications.recipientType, recipientType), eq(notifications.recipientId, recipientId)));
+export async function markNotificationRead(id: string, recipientType: RecipientType, recipientId: string) {
+  const ref = db.collection("notifications").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return;
+  const data = snap.data() as NotificationDoc;
+  if (data.recipientType !== recipientType || data.recipientId !== recipientId) return;
+  await ref.update({ readAt: FieldValue.serverTimestamp() });
 }
 
-export async function markAllNotificationsRead(recipientType: RecipientType, recipientId: number) {
-  await db.update(notifications).set({ readAt: new Date() })
-    .where(and(eq(notifications.recipientType, recipientType), eq(notifications.recipientId, recipientId), isNull(notifications.readAt)));
+export async function markAllNotificationsRead(recipientType: RecipientType, recipientId: string) {
+  const snap = await db.collection("notifications")
+    .where("recipientType", "==", recipientType)
+    .where("recipientId", "==", recipientId)
+    .where("readAt", "==", null)
+    .get();
+  if (snap.empty) return;
+  const batch = db.batch();
+  for (const doc of snap.docs) batch.update(doc.ref, { readAt: FieldValue.serverTimestamp() });
+  await batch.commit();
 }

@@ -1,30 +1,65 @@
 import "server-only";
 
-import { and, desc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { gemstoneOrderItems, gemstoneOrders, gemstoneProducts, gemstoneReviews, type GemstoneReview } from "@/db/schema";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
 
 export class ReviewError extends Error {}
 
-export async function getPublishedReviews(productId: number): Promise<GemstoneReview[]> {
-  return db.select().from(gemstoneReviews).where(and(eq(gemstoneReviews.productId, productId), eq(gemstoneReviews.status, "published"))).orderBy(desc(gemstoneReviews.createdAt));
+const reviewsCol = db.collection("gemstoneReviews");
+const ordersCol = db.collection("gemstoneOrders");
+
+export type GemstoneReview = {
+  id: string;
+  productId: string;
+  memberId: string | null;
+  orderId: string | null;
+  reviewerName: string;
+  rating: number;
+  title: string;
+  body: string;
+  imageUrls: string;
+  status: string;
+  helpfulVotes: number;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function toDate(value: unknown): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date();
+}
+
+function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneReview {
+  const data = doc.data() as Omit<GemstoneReview, "id" | "createdAt" | "updatedAt"> & { createdAt?: Timestamp; updatedAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt), updatedAt: toDate(data.updatedAt) };
+}
+
+export async function getPublishedReviews(productId: string): Promise<GemstoneReview[]> {
+  // Requires a composite index: gemstoneReviews (productId ASC, status ASC, createdAt DESC) — see firestore.indexes.json.
+  const snap = await reviewsCol.where("productId", "==", productId).where("status", "==", "published").orderBy("createdAt", "desc").get();
+  return snap.docs.map(fromDoc);
 }
 
 export async function getAllReviewsAdmin(status?: string) {
-  const rows = await db.select({ review: gemstoneReviews, productName: gemstoneProducts.name })
-    .from(gemstoneReviews)
-    .innerJoin(gemstoneProducts, eq(gemstoneReviews.productId, gemstoneProducts.id))
-    .orderBy(desc(gemstoneReviews.createdAt));
-  const filtered = status && status !== "all" ? rows.filter((row) => row.review.status === status) : rows;
-  return filtered.map((row) => ({ ...row.review, productName: row.productName }));
+  const snap = await reviewsCol.orderBy("createdAt", "desc").get();
+  const reviews = snap.docs.map(fromDoc);
+  const filtered = status && status !== "all" ? reviews.filter((review) => review.status === status) : reviews;
+  if (!filtered.length) return [];
+
+  const productIds = [...new Set(filtered.map((review) => review.productId))];
+  const productSnaps = productIds.length ? await db.getAll(...productIds.map((id) => db.collection("gemstoneProducts").doc(id))) : [];
+  const productNameById = new Map(productSnaps.map((snap) => [snap.id, (snap.data()?.name as string | undefined) ?? "Deleted product"]));
+
+  return filtered.map((review) => ({ ...review, productName: productNameById.get(review.productId) ?? "Deleted product" }));
 }
 
 export async function createReview({ productId, memberId, orderId, reviewerName, rating, title, body, imageUrls }: {
-  productId: number;
-  memberId: number | null;
-  orderId?: number | null;
+  productId: string;
+  memberId: string | null;
+  orderId?: string | null;
   reviewerName: string;
   rating: number;
   title?: string;
@@ -35,17 +70,18 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
   if (!reviewerName.trim()) throw new ReviewError("Your name is required.");
   if (!body.trim() || body.trim().length < 8) throw new ReviewError("Please write a fuller review (at least a sentence).");
 
-  let verifiedOrderId: number | null = null;
+  let verifiedOrderId: string | null = null;
   if (memberId && orderId) {
-    const [match] = await db.select({ id: gemstoneOrders.id })
-      .from(gemstoneOrders)
-      .innerJoin(gemstoneOrderItems, eq(gemstoneOrderItems.orderId, gemstoneOrders.id))
-      .where(and(eq(gemstoneOrders.id, orderId), eq(gemstoneOrders.memberId, memberId), eq(gemstoneOrderItems.productId, productId), eq(gemstoneOrders.paymentStatus, "paid")))
-      .limit(1);
-    if (match) verifiedOrderId = match.id;
+    const orderSnap = await ordersCol.doc(orderId).get();
+    const order = orderSnap.data() as { memberId?: string | null; paymentStatus?: string } | undefined;
+    if (orderSnap.exists && order?.memberId === memberId && order.paymentStatus === "paid") {
+      const itemMatch = await ordersCol.doc(orderId).collection("items").where("productId", "==", productId).limit(1).get();
+      if (!itemMatch.empty) verifiedOrderId = orderId;
+    }
   }
 
-  const [created] = await db.insert(gemstoneReviews).values({
+  const ref = reviewsCol.doc();
+  await ref.set({
     productId,
     memberId,
     orderId: verifiedOrderId,
@@ -55,7 +91,11 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
     body: body.trim().slice(0, 3000),
     imageUrls: imageUrls?.trim() ?? "",
     status: "pending",
-  }).returning();
+    helpfulVotes: 0,
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const created = fromDoc(await ref.get());
 
   const adminIds = await getAdminIdsWithPermission("gemstones");
   await notifyAdmins(adminIds, {
@@ -68,18 +108,22 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
   return created;
 }
 
-export async function moderateReview(id: number, status: "published" | "hidden") {
-  const [updated] = await db.update(gemstoneReviews).set({ status, updatedAt: new Date() }).where(eq(gemstoneReviews.id, id)).returning();
-  if (!updated) throw new ReviewError("Review not found.");
-  return updated;
+export async function moderateReview(id: string, status: "published" | "hidden") {
+  const ref = reviewsCol.doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new ReviewError("Review not found.");
+  await ref.update({ status, updatedAt: FieldValue.serverTimestamp() });
+  return fromDoc(await ref.get());
 }
 
-export async function deleteReview(id: number) {
-  await db.delete(gemstoneReviews).where(eq(gemstoneReviews.id, id));
+export async function deleteReview(id: string) {
+  await reviewsCol.doc(id).delete();
 }
 
-export async function markReviewHelpful(id: number) {
-  const [updated] = await db.update(gemstoneReviews).set({ helpfulVotes: sql`${gemstoneReviews.helpfulVotes} + 1` }).where(eq(gemstoneReviews.id, id)).returning();
-  if (!updated) throw new ReviewError("Review not found.");
-  return updated;
+export async function markReviewHelpful(id: string) {
+  const ref = reviewsCol.doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new ReviewError("Review not found.");
+  await ref.update({ helpfulVotes: FieldValue.increment(1) });
+  return fromDoc(await ref.get());
 }

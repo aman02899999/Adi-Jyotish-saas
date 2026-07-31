@@ -1,8 +1,7 @@
 import "server-only";
 
-import { asc, desc } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings, memberUsers, services } from "@/db/schema";
+import { db } from "@/lib/firestore";
+import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
 
 export type ReportRange = "30d" | "90d" | "365d" | "all";
 
@@ -21,19 +20,29 @@ export function parseReportRange(value?: string) {
   return clampRange(value);
 }
 
+type MemberRow = { id: string; plan: string; active: boolean; onboardingComplete: boolean; createdAt: Date };
+type ServiceRow = { id: string; title: string; active: boolean };
+
 export async function getAnalytics(requestedRange: ReportRange = "30d") {
   const range = clampRange(requestedRange);
-  const [bookingRows, memberRows, serviceRows] = await Promise.all([
-    db.select().from(bookings).orderBy(desc(bookings.createdAt)),
-    db.select({
-      id: memberUsers.id,
-      plan: memberUsers.plan,
-      active: memberUsers.active,
-      onboardingComplete: memberUsers.onboardingComplete,
-      createdAt: memberUsers.createdAt,
-    }).from(memberUsers).orderBy(asc(memberUsers.createdAt)),
-    db.select({ id: services.id, title: services.title, active: services.active }).from(services).orderBy(asc(services.id)),
+  const [bookingsSnap, membersSnap, servicesSnap] = await Promise.all([
+    db.collection("bookings").orderBy("createdAt", "desc").get(),
+    db.collection("members").orderBy("createdAt", "asc").get(),
+    db.collection("services").get(),
   ]);
+
+  const bookingRows: BookingRecord[] = bookingsSnap.docs.map(bookingFromDoc);
+  const memberRows: MemberRow[] = membersSnap.docs.map((doc) => {
+    const data = doc.data();
+    return {
+      id: doc.id,
+      plan: data.plan,
+      active: data.active,
+      onboardingComplete: data.onboardingComplete,
+      createdAt: (data.createdAt as FirebaseFirestore.Timestamp)?.toDate() ?? new Date(),
+    };
+  });
+  const serviceRows: ServiceRow[] = servicesSnap.docs.map((doc) => ({ id: doc.id, title: doc.data().title, active: doc.data().active }));
 
   const now = new Date();
   const allDates = [...bookingRows.map((row) => row.createdAt), ...memberRows.map((row) => row.createdAt)];
@@ -46,9 +55,9 @@ export async function getAnalytics(requestedRange: ReportRange = "30d") {
   const previousBookings = bookingRows.filter((row) => row.createdAt >= previousStart && row.createdAt < start);
   const currentMembers = memberRows.filter((row) => row.createdAt >= start && row.createdAt <= now);
   const previousMembers = memberRows.filter((row) => row.createdAt >= previousStart && row.createdAt < start);
-  const paidRevenue = (rows: typeof bookingRows) => rows.filter((row) => row.paymentStatus === "paid").reduce((sum, row) => sum + row.servicePrice, 0);
-  const completedCount = (rows: typeof bookingRows) => rows.filter((row) => row.status === "completed").length;
-  const completionRate = (rows: typeof bookingRows) => rows.length ? Math.round(completedCount(rows) / rows.length * 100) : 0;
+  const paidRevenue = (rows: BookingRecord[]) => rows.filter((row) => row.paymentStatus === "paid").reduce((sum, row) => sum + row.servicePrice, 0);
+  const completedCount = (rows: BookingRecord[]) => rows.filter((row) => row.status === "completed").length;
+  const completionRate = (rows: BookingRecord[]) => rows.length ? Math.round(completedCount(rows) / rows.length * 100) : 0;
 
   const revenue = paidRevenue(currentBookings);
   const previousRevenue = paidRevenue(previousBookings);

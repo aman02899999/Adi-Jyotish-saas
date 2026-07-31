@@ -1,7 +1,7 @@
 import "server-only";
 
-import { db } from "@/db";
-import { gemstoneCategories, gemstoneProductImages, gemstoneProducts, gemstoneProductVariants } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 type SeedVariant = { label: string; weightRatti: string; weightCarat: string; certificationLevel: string; price: number; compareAtPrice?: number; stockQuantity: number; sku: string };
 type SeedProduct = {
@@ -170,17 +170,37 @@ const products: SeedProduct[] = [
   },
 ];
 
-export async function seedGemstoneCatalog() {
-  await db.insert(gemstoneCategories).values(categories).onConflictDoNothing({ target: gemstoneCategories.slug });
+const categoriesCol = db.collection("gemstoneCategories");
+const productsCol = db.collection("gemstoneProducts");
 
-  const categoryRows = await db.select().from(gemstoneCategories);
-  const categoryIdBySlug = new Map(categoryRows.map((row) => [row.slug, row.id]));
+/** Idempotent — seeds only what's missing, matched by slug/SKU, mirroring the old `onConflictDoNothing`
+ * behaviour. Safe to call on every catalog/category read (cheap once the catalog is seeded, since every
+ * lookup below is a targeted query rather than a full collection scan). */
+export async function seedGemstoneCatalog() {
+  const categorySlugs = categories.map((category) => category.slug);
+  const existingCategories = await Promise.all(categorySlugs.map((slug) => categoriesCol.where("slug", "==", slug).limit(1).get()));
+  const categoryIdBySlug = new Map<string, string>();
+
+  await Promise.all(categories.map(async (category, index) => {
+    const existing = existingCategories[index];
+    if (!existing.empty) {
+      categoryIdBySlug.set(category.slug, existing.docs[0].id);
+      return;
+    }
+    const ref = categoriesCol.doc();
+    await ref.set({ ...category, active: true, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    categoryIdBySlug.set(category.slug, ref.id);
+  }));
 
   for (const product of products) {
     const categoryId = categoryIdBySlug.get(product.categorySlug);
     if (!categoryId) continue;
 
-    const [created] = await db.insert(gemstoneProducts).values({
+    const existingProduct = await productsCol.where("slug", "==", product.slug).limit(1).get();
+    if (!existingProduct.empty) continue;
+
+    const ref = productsCol.doc();
+    await ref.set({
       categoryId,
       name: product.name,
       slug: product.slug,
@@ -194,6 +214,7 @@ export async function seedGemstoneCatalog() {
       color: product.color,
       treatment: product.treatment,
       certification: product.certification,
+      currency: "INR",
       sku: product.sku,
       featured: product.featured ?? false,
       trending: product.trending ?? false,
@@ -201,22 +222,29 @@ export async function seedGemstoneCatalog() {
       active: true,
       metaTitle: `${product.name} | Buy Gemstones`,
       metaDescription: product.shortDescription,
-    }).onConflictDoNothing({ target: gemstoneProducts.slug }).returning();
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
 
-    if (!created) continue;
+    await ref.collection("images").add({ productId: ref.id, url: product.image, alt: product.name, sortOrder: 0, isPrimary: true, createdAt: FieldValue.serverTimestamp() });
 
-    await db.insert(gemstoneProductImages).values({ productId: created.id, url: product.image, alt: product.name, sortOrder: 0, isPrimary: true }).onConflictDoNothing();
-    await db.insert(gemstoneProductVariants).values(product.variants.map((variant) => ({
-      productId: created.id,
-      label: variant.label,
-      weightCarat: variant.weightCarat,
-      weightRatti: variant.weightRatti,
-      certificationLevel: variant.certificationLevel,
-      price: variant.price,
-      compareAtPrice: variant.compareAtPrice ?? null,
-      stockQuantity: variant.stockQuantity,
-      sku: variant.sku,
-      active: true,
-    }))).onConflictDoNothing({ target: gemstoneProductVariants.sku });
+    const batch = db.batch();
+    for (const variant of product.variants) {
+      batch.set(ref.collection("variants").doc(), {
+        productId: ref.id,
+        label: variant.label,
+        weightCarat: variant.weightCarat,
+        weightRatti: variant.weightRatti,
+        certificationLevel: variant.certificationLevel,
+        price: variant.price,
+        compareAtPrice: variant.compareAtPrice ?? null,
+        stockQuantity: variant.stockQuantity,
+        sku: variant.sku,
+        active: true,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+      });
+    }
+    await batch.commit();
   }
 }
