@@ -23,13 +23,6 @@ runConfig:
   memoryMiB: 512
 
 env:
-  # ── Database (required) ──────────────────────────────────────────
-  - variable: DATABASE_URL
-    secret: DATABASE_URL
-    availability:
-      - BUILD
-      - RUNTIME
-
   # ── Razorpay payments ─────────────────────────────────────────────
   - variable: RAZORPAY_MODE
     value: "test"
