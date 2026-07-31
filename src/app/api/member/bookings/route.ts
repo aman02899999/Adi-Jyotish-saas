@@ -1,13 +1,12 @@
-import { desc, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
+import { bookingFromDoc } from "@/app/api/bookings/route";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
-  const rows = await db.select().from(bookings).where(eq(bookings.clientEmail, member.email)).orderBy(desc(bookings.scheduledAt));
-  return Response.json(rows);
+  const snap = await db.collection("bookings").where("clientEmail", "==", member.email).orderBy("scheduledAt", "desc").get();
+  return Response.json(snap.docs.map(bookingFromDoc));
 }
