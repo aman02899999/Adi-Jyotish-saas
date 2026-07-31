@@ -1,7 +1,7 @@
 import "server-only";
 
-import { db } from "@/db";
-import { numerologyReadings } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 export class NumerologyError extends Error {}
 
@@ -71,7 +71,7 @@ function buildNarrative({ name, lifePathNumber, destinyNumber }: { name: string;
   return paragraphs.join("\n\n");
 }
 
-export async function createNumerologyReading({ memberId, name, birthDate }: { memberId: number | null; name: string; birthDate: string }) {
+export async function createNumerologyReading({ memberId, name, birthDate }: { memberId: string | null; name: string; birthDate: string }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) throw new NumerologyError("Please enter a valid birth date.");
   if (!name.trim()) throw new NumerologyError("Please enter a name.");
   const lifePathNumber = computeLifePathNumber(birthDate);
@@ -79,6 +79,6 @@ export async function createNumerologyReading({ memberId, name, birthDate }: { m
 
   const narrative = buildNarrative({ name, lifePathNumber, destinyNumber });
 
-  const [saved] = await db.insert(numerologyReadings).values({ memberId, name, birthDate, lifePathNumber, destinyNumber, narrative }).returning();
-  return saved;
+  const ref = await db.collection("numerologyReadings").add({ memberId, name, birthDate, lifePathNumber, destinyNumber, narrative, createdAt: FieldValue.serverTimestamp() });
+  return { id: ref.id, memberId, name, birthDate, lifePathNumber, destinyNumber, narrative };
 }

@@ -1,22 +1,22 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings, memberSessions, memberUsers } from "@/db/schema";
-import { getCurrentAdmin, hasAdminPermission, hashPassword, normalizeEmail, recordAudit } from "@/lib/admin-auth";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
+import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
 
 const plans = ["member", "premium", "concierge"];
 type MemberPayload = { name?: string; email?: string; password?: string; phone?: string; birthDate?: string; birthTime?: string; birthPlace?: string; plan?: string; active?: boolean };
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_manage")) return Response.json({ error: "Member management permission required." }, { status: 403 });
-  const { id: rawId } = await params; const id = parseId(rawId);
-  if (!id) return Response.json({ error: "Invalid member id." }, { status: 400 });
-  const [existing] = await db.select().from(memberUsers).where(eq(memberUsers.id, id)).limit(1);
-  if (!existing) return Response.json({ error: "Member not found." }, { status: 404 });
+  const { id } = await params;
+  const ref = db.collection("members").doc(id);
+  const existingSnap = await ref.get();
+  if (!existingSnap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
+  const existing = existingSnap.data() as { name: string; email: string; plan: string; active: boolean };
 
   const body = await request.json() as MemberPayload;
   const name = body.name?.trim().slice(0, 120) ?? "";
@@ -28,24 +28,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const birthTime = body.birthTime?.trim().slice(0, 8) || null;
   const birthPlace = body.birthPlace?.trim().slice(0, 180) || null;
   const active = body.active ?? existing.active;
+  const phone = body.phone?.trim().slice(0, 40) || null;
 
   try {
-    const updated = await db.transaction(async (tx) => {
-      if (email !== existing.email) await tx.update(bookings).set({ clientEmail: email, updatedAt: new Date() }).where(eq(bookings.clientEmail, existing.email));
-      if (!active) await tx.delete(memberSessions).where(eq(memberSessions.memberId, id));
-      const [row] = await tx.update(memberUsers).set({
-        name, email, phone: body.phone?.trim().slice(0, 40) || null, birthDate, birthTime, birthPlace,
-        plan, active, onboardingComplete: Boolean(birthDate && birthTime && birthPlace),
-        ...(body.password ? { passwordHash: hashPassword(body.password) } : {}), updatedAt: new Date(),
-      }).where(eq(memberUsers.id, id)).returning({
-        id: memberUsers.id, name: memberUsers.name, email: memberUsers.email, phone: memberUsers.phone,
-        birthDate: memberUsers.birthDate, birthTime: memberUsers.birthTime, birthPlace: memberUsers.birthPlace,
-        plan: memberUsers.plan, onboardingComplete: memberUsers.onboardingComplete, active: memberUsers.active,
-        lastLoginAt: memberUsers.lastLoginAt, createdAt: memberUsers.createdAt, updatedAt: memberUsers.updatedAt,
-      });
-      return row;
-    });
-    await recordAudit(admin, "member.updated", "member", updated.id, { email: updated.email, plan: updated.plan, active: updated.active, passwordReset: Boolean(body.password) });
+    const authUpdate: { email?: string; password?: string; disabled?: boolean } = {};
+    if (email !== existing.email) authUpdate.email = email;
+    if (body.password) authUpdate.password = body.password;
+    if (active === false) authUpdate.disabled = true;
+    else if (active === true) authUpdate.disabled = false;
+    if (Object.keys(authUpdate).length) await getAuth().updateUser(id, authUpdate);
+    if (active === false) await getAuth().revokeRefreshTokens(id);
+
+    if (email !== existing.email) {
+      const staleBookings = await db.collection("bookings").where("clientEmail", "==", existing.email).get();
+      const batch = db.batch();
+      for (const doc of staleBookings.docs) batch.update(doc.ref, { clientEmail: email, updatedAt: FieldValue.serverTimestamp() });
+      if (staleBookings.size) await batch.commit();
+    }
+
+    const onboardingComplete = Boolean(birthDate && birthTime && birthPlace);
+    await ref.update({ name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete, updatedAt: FieldValue.serverTimestamp() });
+
+    const updated = { id, name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete };
+    await recordAudit(admin, "member.updated", "member", id, { email, plan, active, passwordReset: Boolean(body.password) });
     return Response.json(updated);
   } catch {
     return Response.json({ error: "This email is already assigned to another member." }, { status: 409 });
@@ -56,10 +61,18 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_manage")) return Response.json({ error: "Member management permission required." }, { status: 403 });
-  const { id: rawId } = await params; const id = parseId(rawId);
-  if (!id) return Response.json({ error: "Invalid member id." }, { status: 400 });
-  const [deleted] = await db.delete(memberUsers).where(eq(memberUsers.id, id)).returning({ id: memberUsers.id, email: memberUsers.email });
-  if (!deleted) return Response.json({ error: "Member not found." }, { status: 404 });
-  await recordAudit(admin, "member.deleted", "member", deleted.id, { email: deleted.email });
-  return Response.json({ ok: true, id: deleted.id });
+  const { id } = await params;
+  const ref = db.collection("members").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
+  const email = (snap.data() as { email: string }).email;
+
+  await ref.delete();
+  try {
+    await getAuth().deleteUser(id);
+  } catch {
+    // Auth account already gone — Firestore doc removal is what matters for the app's own data.
+  }
+  await recordAudit(admin, "member.deleted", "member", id, { email });
+  return Response.json({ ok: true, id });
 }

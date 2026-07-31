@@ -17,7 +17,7 @@ import {
 } from "lucide-react";
 
 export type AdminService = {
-  id: number;
+  id: string;
   title: string;
   slug: string;
   category: string;

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Check, Edit3, Gem, Plus, Trash2, X } from "lucide-react";
-import type { GemstoneCategory } from "@/db/schema";
+import type { GemstoneCategory } from "@/lib/gemstones";
 
 type CategoryRow = GemstoneCategory & { productCount: number };
 

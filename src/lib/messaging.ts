@@ -17,7 +17,7 @@ export type InboxMessage = {
 export type InboxThread = {
   id: string;
   memberId: string;
-  bookingId: number | null;
+  bookingId: string | null;
   subject: string;
   category: string;
   status: string;
@@ -31,7 +31,7 @@ export type InboxThread = {
 
 type ThreadDoc = {
   memberId: string;
-  bookingId: number | null;
+  bookingId: string | null;
   subject: string;
   category: string;
   status: string;
@@ -69,7 +69,7 @@ async function attachMessages<T extends { id: string }>(threads: T[]): Promise<A
   return withMessages;
 }
 
-async function attachMemberDetails(rows: Array<{ id: string; memberId: string; bookingId: number | null; subject: string; category: string; status: string; lastMessageAt: Date; createdAt: Date; updatedAt: Date }>): Promise<Array<Omit<InboxThread, "messages">>> {
+async function attachMemberDetails(rows: Array<{ id: string; memberId: string; bookingId: string | null; subject: string; category: string; status: string; lastMessageAt: Date; createdAt: Date; updatedAt: Date }>): Promise<Array<Omit<InboxThread, "messages">>> {
   const memberIds = Array.from(new Set(rows.map((row) => row.memberId)));
   const memberDocs = memberIds.length ? await db.getAll(...memberIds.map((id) => db.collection("members").doc(id))) : [];
   const memberById = new Map(memberDocs.map((doc) => [doc.id, doc.data() as { name?: string; email?: string } | undefined]));
@@ -135,9 +135,7 @@ export async function sendBookingNotification({
   body,
 }: {
   memberEmail: string;
-  // TODO(booking-migration): bookingId still comes from the not-yet-migrated Postgres bookings
-  // table (numeric serial id). Once bookings move to Firestore this should become a string.
-  bookingId: number;
+  bookingId: string;
   subject: string;
   body: string;
 }) {

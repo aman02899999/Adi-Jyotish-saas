@@ -1,6 +1,5 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { memberUsers, messageThreads, threadMessages } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { getAdminInbox } from "@/lib/messaging";
 
@@ -17,21 +16,32 @@ export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "messages")) return Response.json({ error: "Message permission required." }, { status: 403 });
-  const body = await request.json() as { memberId?: number; subject?: string; message?: string; category?: string };
-  const memberId = Number(body.memberId);
+  const body = await request.json() as { memberId?: string; subject?: string; message?: string; category?: string };
+  const memberId = body.memberId?.trim();
   const subject = body.subject?.trim().slice(0, 160) ?? "";
   const messageBody = body.message?.trim().slice(0, 3000) ?? "";
   const category = ["support", "booking", "billing", "general"].includes(body.category ?? "") ? body.category! : "general";
-  if (!Number.isInteger(memberId) || !subject || !messageBody) return Response.json({ error: "Member, subject, and message are required." }, { status: 400 });
-  const [member] = await db.select({ id: memberUsers.id, name: memberUsers.name, email: memberUsers.email }).from(memberUsers).where(eq(memberUsers.id, memberId)).limit(1);
-  if (!member) return Response.json({ error: "Member not found." }, { status: 404 });
+  if (!memberId || !subject || !messageBody) return Response.json({ error: "Member, subject, and message are required." }, { status: 400 });
+  const memberSnap = await db.collection("members").doc(memberId).get();
+  if (!memberSnap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
+  const member = memberSnap.data() as { name: string; email: string };
 
-  const now = new Date();
-  const created = await db.transaction(async (tx) => {
-    const [thread] = await tx.insert(messageThreads).values({ memberId, subject, category, status: "open", lastMessageAt: now }).returning();
-    const [message] = await tx.insert(threadMessages).values({ threadId: thread.id, senderType: "admin", senderName: admin.name, body: messageBody, readByAdmin: true, readByMember: false }).returning();
-    return { ...thread, memberName: member.name, memberEmail: member.email, messages: [message] };
-  });
-  await recordAudit(admin, "message.thread_created", "message_thread", created.id, { memberId, category });
+  const now = FieldValue.serverTimestamp();
+  const threadRef = db.collection("messageThreads").doc();
+  await threadRef.set({ memberId, bookingId: null, subject, category, status: "open", lastMessageAt: now, createdAt: now, updatedAt: now });
+  const messageRef = threadRef.collection("messages").doc();
+  await messageRef.set({ senderType: "admin", senderName: admin.name, body: messageBody, readByAdmin: true, readByMember: false, createdAt: now });
+
+  await recordAudit(admin, "message.thread_created", "message_thread", threadRef.id, { memberId, category });
+
+  const [threadSnap, messageSnap] = await Promise.all([threadRef.get(), messageRef.get()]);
+  const threadData = threadSnap.data() as { subject: string; category: string; status: string; lastMessageAt: FirebaseFirestore.Timestamp; createdAt: FirebaseFirestore.Timestamp; updatedAt: FirebaseFirestore.Timestamp };
+  const messageData = messageSnap.data() as { senderType: string; senderName: string; body: string; readByMember: boolean; readByAdmin: boolean; createdAt: FirebaseFirestore.Timestamp };
+  const created = {
+    id: threadRef.id, memberId, bookingId: null, subject: threadData.subject, category: threadData.category, status: threadData.status,
+    lastMessageAt: threadData.lastMessageAt.toDate(), createdAt: threadData.createdAt.toDate(), updatedAt: threadData.updatedAt.toDate(),
+    memberName: member.name, memberEmail: member.email,
+    messages: [{ id: messageRef.id, threadId: threadRef.id, senderType: messageData.senderType, senderName: messageData.senderName, body: messageData.body, readByMember: messageData.readByMember, readByAdmin: messageData.readByAdmin, createdAt: messageData.createdAt.toDate() }],
+  };
   return Response.json(created, { status: 201 });
 }

@@ -1,17 +1,12 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { practitioners } from "@/db/schema";
+import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { ChatSessionEndedError, ChatSessionNotFoundError, getSessionOr404, sendMessage } from "@/lib/chat";
 import { getCurrentMember } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id: raw } = await params;
-  const id = parseId(raw);
-  if (!id) return Response.json({ error: "Invalid session id." }, { status: 400 });
+  const { id } = await params;
 
   const body = (await request.json()) as { body?: string };
   const text = body.body?.trim();
@@ -28,8 +23,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return Response.json(message, { status: 201 });
     }
     if (isAdmin) {
-      const [practitioner] = await db.select().from(practitioners).where(eq(practitioners.id, session.practitionerId)).limit(1);
-      const message = await sendMessage({ sessionId: id, senderType: "practitioner", senderName: practitioner?.name ?? "Studio", body: text });
+      const practitionerSnap = await db.collection("practitioners").doc(session.practitionerId).get();
+      const practitionerName = practitionerSnap.exists ? (practitionerSnap.data() as { name?: string }).name : undefined;
+      const message = await sendMessage({ sessionId: id, senderType: "practitioner", senderName: practitionerName ?? "Studio", body: text });
       return Response.json(message, { status: 201 });
     }
     return Response.json({ error: "You do not have access to this chat." }, { status: 403 });

@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { signInWithEmailAndPassword } from "@/lib/firebase-client";
 
 export function PractitionerAuthForm() {
   const [email, setEmail] = useState("");
@@ -16,10 +17,11 @@ export function PractitionerAuthForm() {
     setError("");
     setSubmitting(true);
     try {
+      const idToken = await signInWithEmailAndPassword(email, password);
       const response = await fetch("/api/auth/practitioner-login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ email, password }),
+        body: JSON.stringify({ idToken }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Access could not be verified.");

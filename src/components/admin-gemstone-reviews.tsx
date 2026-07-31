@@ -4,14 +4,14 @@ import { useState } from "react";
 import { Check, EyeOff, Star, Trash2, X } from "lucide-react";
 
 export type AdminReviewRow = {
-  id: number;
+  id: string;
   productName: string;
   reviewerName: string;
   rating: number;
   title: string;
   body: string;
   status: string;
-  orderId: number | null;
+  orderId: string | null;
   createdAt: string | Date;
 };
 

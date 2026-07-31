@@ -1,6 +1,4 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { practitioners } from "@/db/schema";
+import { db } from "@/lib/firestore";
 import { PractitionerShell } from "@/components/practitioner-shell";
 import { PractitionerProfileForm } from "@/components/practitioner-profile-form";
 import { PractitionerPayoutDetailsForm } from "@/components/practitioner-payout-details-form";
@@ -10,17 +8,15 @@ export const dynamic = "force-dynamic";
 
 export default async function PractitionerProfilePage() {
   const practitioner = await requirePractitionerPage();
-  const [row] = await db.select({
-    bio: practitioners.bio,
-    specialties: practitioners.specialties,
-    languages: practitioners.languages,
-    consultationModes: practitioners.consultationModes,
-    photoUrl: practitioners.photoUrl,
-    bankAccountName: practitioners.bankAccountName,
-    bankIfsc: practitioners.bankIfsc,
-    hasBankAccount: practitioners.bankAccountNumberEnc,
-    hasUpi: practitioners.upiIdEnc,
-  }).from(practitioners).where(eq(practitioners.id, practitioner.id)).limit(1);
+  const snap = await db.collection("practitioners").doc(practitioner.id).get();
+  const data = snap.data() as {
+    bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null;
+    bankAccountName: string | null; bankIfsc: string | null; bankAccountNumberEnc: string | null; upiIdEnc: string | null;
+  };
+  const row = {
+    bio: data.bio, specialties: data.specialties, languages: data.languages, consultationModes: data.consultationModes, photoUrl: data.photoUrl,
+    bankAccountName: data.bankAccountName, bankIfsc: data.bankIfsc, hasBankAccount: data.bankAccountNumberEnc, hasUpi: data.upiIdEnc,
+  };
 
   return (
     <PractitionerShell practitioner={practitioner} active="Profile">

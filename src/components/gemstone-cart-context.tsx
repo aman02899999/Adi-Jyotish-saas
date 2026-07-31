@@ -3,8 +3,8 @@
 import { createContext, ReactNode, useCallback, useContext, useEffect, useMemo, useState } from "react";
 
 export type CartLine = {
-  variantId: number;
-  productId: number;
+  variantId: string;
+  productId: string;
   slug: string;
   productName: string;
   variantLabel: string;
@@ -21,8 +21,8 @@ const STORAGE_KEY = "jyotish_gem_cart_v1";
 type CartContextValue = {
   lines: CartLine[];
   addLine: (line: Omit<CartLine, "quantity">, quantity?: number) => void;
-  updateQuantity: (variantId: number, quantity: number) => void;
-  removeLine: (variantId: number) => void;
+  updateQuantity: (variantId: string, quantity: number) => void;
+  removeLine: (variantId: string) => void;
   clearCart: () => void;
   subtotal: number;
   itemCount: number;
@@ -64,13 +64,13 @@ export function GemstoneCartProvider({ children }: { children: ReactNode }) {
     });
   }, []);
 
-  const updateQuantity = useCallback((variantId: number, quantity: number) => {
+  const updateQuantity = useCallback((variantId: string, quantity: number) => {
     setLines((current) => current
       .map((item) => item.variantId === variantId ? { ...item, quantity: Math.min(item.maxQuantity, Math.max(1, quantity)) } : item)
       .filter((item) => item.quantity > 0));
   }, []);
 
-  const removeLine = useCallback((variantId: number) => {
+  const removeLine = useCallback((variantId: string) => {
     setLines((current) => current.filter((item) => item.variantId !== variantId));
   }, []);
 

@@ -1,39 +1,22 @@
-import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { practitioners } from "@/db/schema";
-import { normalizeEmail, verifyPassword } from "@/lib/admin-auth";
-import { createPractitionerSession } from "@/lib/practitioner-auth";
-import { createTwoFactorChallenge } from "@/lib/practitioner-2fa";
-import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
+import { createPractitionerSession, getCurrentPractitioner } from "@/lib/practitioner-auth";
 
 export const dynamic = "force-dynamic";
 
+/** Completes practitioner sign-in: the client already authenticated with Firebase Auth
+ * (email/password or Google) and hands us the resulting ID token to verify and mint a session
+ * cookie. The practitioner record (and its firebaseUid link) must already exist. */
 export async function POST(request: Request) {
-  const body = (await request.json()) as { email?: string; password?: string };
-  const email = normalizeEmail(body.email ?? "");
-  const password = body.password ?? "";
-  if (!email || !password || password.length > 128) {
+  const body = (await request.json()) as { idToken?: string };
+  if (!body.idToken) return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
+
+  try {
+    await createPractitionerSession(body.idToken);
+  } catch {
     return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
   }
 
-  const throttle = await checkAuthThrottle("practitioner-login", email, request);
-  if (!throttle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(throttle.retryAfter) } });
+  const practitioner = await getCurrentPractitioner();
+  if (!practitioner) return Response.json({ error: "This account does not have practitioner portal access." }, { status: 403 });
 
-  const [practitioner] = await db.select().from(practitioners).where(and(eq(practitioners.email, email), eq(practitioners.active, true))).limit(1);
-  const passwordValid = practitioner?.passwordHash ? verifyPassword(password, practitioner.passwordHash) : verifyPassword(password, null);
-  if (!practitioner || !practitioner.passwordHash || !passwordValid) {
-    await recordAuthFailure(throttle.keyHash);
-    return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
-  }
-
-  await clearAuthFailures(throttle.keyHash);
-
-  if (practitioner.totpEnabled) {
-    const challengeToken = await createTwoFactorChallenge(practitioner.id);
-    return Response.json({ requiresTotp: true, challengeToken });
-  }
-
-  await db.update(practitioners).set({ lastLoginAt: new Date(), updatedAt: new Date() }).where(eq(practitioners.id, practitioner.id));
-  await createPractitionerSession(practitioner.id);
   return Response.json({ ok: true });
 }

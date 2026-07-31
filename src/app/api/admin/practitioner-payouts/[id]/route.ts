@@ -1,6 +1,4 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { practitioners } from "@/db/schema";
+import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { PayoutError, updatePayoutStatus } from "@/lib/practitioner-portal";
 import { createNotification } from "@/lib/notifications";
@@ -9,17 +7,12 @@ import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 
-function parseId(value: string) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
-
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "billing")) return Response.json({ error: "Billing permission required." }, { status: 403 });
 
-  const id = parseId((await params).id);
+  const id = (await params).id;
   if (!id) return Response.json({ error: "Invalid payout id." }, { status: 400 });
 
   const body = (await request.json()) as { status?: "approved" | "paid" | "rejected"; adminNotes?: string; transactionRef?: string };
@@ -39,7 +32,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       link: "/practitioner/earnings",
     }).catch(() => {});
 
-    const [practitioner] = await db.select({ name: practitioners.name, email: practitioners.email }).from(practitioners).where(eq(practitioners.id, updated.practitionerId)).limit(1);
+    const practitionerSnap = await db.collection("practitioners").doc(updated.practitionerId).get();
+    const practitioner = practitionerSnap.exists ? (practitionerSnap.data() as { name: string; email: string }) : null;
     if (practitioner) {
       const statusCopy = body.status === "paid" ? `has been paid${updated.transactionRef ? ` (ref: ${updated.transactionRef})` : ""}.` : body.status === "approved" ? "was approved and will be paid soon." : "was rejected.";
       await sendEmail({

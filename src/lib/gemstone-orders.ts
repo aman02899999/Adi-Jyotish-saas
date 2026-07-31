@@ -279,10 +279,7 @@ async function notifyOrderPaid(order: GemstoneOrder) {
   if (order.memberId) {
     await createNotification({
       recipientType: "member",
-      // TODO(cross-domain): notifications.ts (src/lib/notifications.ts) still stores recipientId as a
-      // Postgres numeric id and hasn't migrated to Firestore/Firebase-UID string ids yet. Once it has,
-      // drop this cast.
-      recipientId: order.memberId as unknown as number,
+      recipientId: order.memberId,
       type: "gemstone_order.paid",
       title: "Your order is confirmed",
       body: `Order ${order.orderNumber} is being processed.`,
@@ -370,8 +367,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
   if (updated.memberId) {
     await createNotification({
       recipientType: "member",
-      // TODO(cross-domain): see notifyOrderPaid() above — notifications.ts hasn't migrated off numeric ids yet.
-      recipientId: updated.memberId as unknown as number,
+      recipientId: updated.memberId,
       type: "gemstone_order.status",
       title: `Order ${updated.orderNumber} is now ${status}`,
       link: `/gemstones/order/${updated.orderNumber}`,

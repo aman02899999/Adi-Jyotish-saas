@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Check, PlusCircle, Wallet as WalletIcon, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
-export type WalletEntryRow = { id: number; type: string; amount: number; balanceAfter: number; referenceType: string | null; createdAt: Date | string };
+export type WalletEntryRow = { id: string; type: string; amount: number; balanceAfter: number; referenceType: string | null; createdAt: Date | string };
 
 const PRESETS = [100, 250, 500, 1000];
 

@@ -48,7 +48,7 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
         method: "POST",
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
-          lines: lines.map((line) => ({ variantId: line.variantId, quantity: line.quantity })),
+          lines: lines.map((line) => ({ productId: line.productId, variantId: line.variantId, quantity: line.quantity })),
           couponCode: couponCode || undefined,
           guestName: member ? undefined : form.name,
           guestEmail: member ? undefined : form.email,

@@ -2,15 +2,13 @@ import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-au
 import { CartValidationError, getOrderById, getOrderItems, OrderNotFoundError, updateOrderStatus } from "@/lib/gemstone-orders";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export async function GET(_: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "gemstones")) return Response.json({ error: "Gemstones permission required." }, { status: 403 });
 
-  const { id: raw } = await params;
-  const id = parseId(raw);
+  const { id } = await params;
   if (!id) return Response.json({ error: "Invalid order id." }, { status: 400 });
 
   const order = await getOrderById(id);
@@ -24,8 +22,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "gemstones")) return Response.json({ error: "Gemstones permission required." }, { status: 403 });
 
-  const { id: raw } = await params;
-  const id = parseId(raw);
+  const { id } = await params;
   if (!id) return Response.json({ error: "Invalid order id." }, { status: 400 });
 
   const body = (await request.json()) as { status?: string };

@@ -1,6 +1,5 @@
-import { desc } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { db } from "@/lib/firestore";
+import { bookingFromDoc } from "@/app/api/bookings/route";
 import { AdminBookings } from "@/components/admin-bookings";
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
@@ -9,7 +8,8 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminBookingsPage() {
   await requireAdminPage("bookings");
-  const rows = await db.select().from(bookings).orderBy(desc(bookings.scheduledAt));
+  const snap = await db.collection("bookings").orderBy("scheduledAt", "desc").get();
+  const rows = snap.docs.map((doc) => bookingFromDoc(doc));
 
   return (
     <AdminShell active="Bookings">

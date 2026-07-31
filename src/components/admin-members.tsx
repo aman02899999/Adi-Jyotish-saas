@@ -20,7 +20,7 @@ import {
 } from "lucide-react";
 
 export type AdminMember = {
-  id: number; name: string; email: string; phone: string | null; birthDate: string | null;
+  id: string; name: string; email: string; phone: string | null; birthDate: string | null;
   birthTime: string | null; birthPlace: string | null; plan: string; onboardingComplete: boolean;
   active: boolean; lastLoginAt: Date | string | null; createdAt: Date | string; updatedAt: Date | string;
 };

@@ -4,6 +4,8 @@ import { getAllActiveProductSlugs, getActiveCategories } from "@/lib/gemstones";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { getSiteUrl } from "@/lib/site-url";
 
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const site = getSiteUrl();
   const updated = new Date();

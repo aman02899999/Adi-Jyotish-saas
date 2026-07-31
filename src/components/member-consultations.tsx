@@ -16,9 +16,9 @@ import {
 } from "lucide-react";
 
 export type MemberBooking = {
-  id: number;
+  id: string;
   reference: string;
-  serviceId: number | null;
+  serviceId: string | null;
   serviceTitle: string;
   servicePrice: number;
   practitionerName: string | null;

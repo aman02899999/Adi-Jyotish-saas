@@ -2,15 +2,13 @@ import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-au
 import { deleteReview, moderateReview, ReviewError } from "@/lib/gemstone-reviews";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "gemstones")) return Response.json({ error: "Gemstones permission required." }, { status: 403 });
 
-  const { id: raw } = await params;
-  const id = parseId(raw);
+  const { id } = await params;
   if (!id) return Response.json({ error: "Invalid review id." }, { status: 400 });
 
   const body = (await request.json()) as { status?: string };
@@ -30,8 +28,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "gemstones")) return Response.json({ error: "Gemstones permission required." }, { status: 403 });
 
-  const { id: raw } = await params;
-  const id = parseId(raw);
+  const { id } = await params;
   if (!id) return Response.json({ error: "Invalid review id." }, { status: 400 });
 
   await deleteReview(id);

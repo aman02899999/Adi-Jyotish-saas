@@ -1,8 +1,7 @@
 import "server-only";
 
-import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { dailyHoroscopes } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { tropicalLongitudeOf } from "@/lib/astro-engine";
 import { dateInTimeZone } from "@/lib/scheduling";
 import { getStudioSettings } from "@/lib/studio-settings";
@@ -84,18 +83,32 @@ function generateHoroscopeText(signIndex: number) {
   return `${theme}\n\nThe Moon is currently transiting ${ZODIAC_SIGNS[moonSignIndex].name}. Use today's mood as information, not instruction — notice it, then choose deliberately.`;
 }
 
-export async function getDailyHoroscope(sign: ZodiacSignKey) {
+export type DailyHoroscope = { id: string; sign: string; date: string; content: string; createdAt: Date };
+
+export async function getDailyHoroscope(sign: ZodiacSignKey): Promise<DailyHoroscope> {
   const definition = ZODIAC_SIGNS.find((entry) => entry.key === sign);
   if (!definition) throw new Error("Unknown zodiac sign.");
   const signIndex = ZODIAC_SIGNS.findIndex((entry) => entry.key === sign);
   const date = await todayCivilDate();
+  const docId = `${sign}_${date}`;
+  const ref = db.collection("dailyHoroscopes").doc(docId);
 
-  const [existing] = await db.select().from(dailyHoroscopes).where(and(eq(dailyHoroscopes.sign, sign), eq(dailyHoroscopes.date, date))).limit(1);
-  if (existing) return existing;
+  const existing = await ref.get();
+  if (existing.exists) {
+    const data = existing.data() as { sign: string; date: string; content: string; createdAt: FirebaseFirestore.Timestamp };
+    return { id: docId, sign: data.sign, date: data.date, content: data.content, createdAt: data.createdAt?.toDate() ?? new Date() };
+  }
 
   const content = generateHoroscopeText(signIndex);
+  // create() rather than set() so a concurrent request for the same sign+date races safely —
+  // the loser's create() throws (doc already exists) and we just re-read what won.
+  try {
+    await ref.create({ sign, date, content, createdAt: FieldValue.serverTimestamp() });
+  } catch {
+    // Already created by a concurrent request — fall through to read it below.
+  }
 
-  await db.insert(dailyHoroscopes).values({ sign, date, content }).onConflictDoNothing({ target: [dailyHoroscopes.sign, dailyHoroscopes.date] });
-  const [row] = await db.select().from(dailyHoroscopes).where(and(eq(dailyHoroscopes.sign, sign), eq(dailyHoroscopes.date, date))).limit(1);
-  return row!;
+  const finalSnap = await ref.get();
+  const data = finalSnap.data() as { sign: string; date: string; content: string; createdAt: FirebaseFirestore.Timestamp };
+  return { id: docId, sign: data.sign, date: data.date, content: data.content, createdAt: data.createdAt?.toDate() ?? new Date() };
 }

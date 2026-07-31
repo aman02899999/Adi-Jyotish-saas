@@ -2,10 +2,10 @@
 
 import { Realtime } from "ably";
 
-export function createChatRealtimeClient(sessionId: number) {
+export function createChatRealtimeClient(sessionId: string) {
   return new Realtime({
     authUrl: "/api/ably/auth",
-    authParams: { sessionId: String(sessionId) },
+    authParams: { sessionId },
     autoConnect: true,
   });
 }

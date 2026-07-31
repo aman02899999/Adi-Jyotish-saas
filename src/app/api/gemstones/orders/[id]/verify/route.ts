@@ -4,13 +4,11 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 type VerifyPayload = { razorpay_order_id?: string; razorpay_payment_id?: string; razorpay_signature?: string };
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id: raw } = await params;
-  const id = parseId(raw);
+  const { id } = await params;
   if (!id) return Response.json({ error: "Invalid order id." }, { status: 400 });
 
   const razorpay = getRazorpay();

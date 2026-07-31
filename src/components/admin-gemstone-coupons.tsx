@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Check, Edit3, Plus, TicketPercent, X } from "lucide-react";
-import type { GemstoneCoupon } from "@/db/schema";
+import type { GemstoneCoupon } from "@/lib/gemstone-coupons";
 
 type FormState = {
   code: string; description: string; discountType: string; discountValue: string;

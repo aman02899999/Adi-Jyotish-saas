@@ -5,7 +5,7 @@ import Link from "next/link";
 import { Check, Clock3, RefreshCw, Sparkles, X } from "lucide-react";
 
 export type MemberAiReading = {
-  id: number;
+  id: string;
   readingType: string;
   clientName: string;
   question: string | null;
@@ -19,12 +19,12 @@ export type MemberAiReading = {
 
 export function MemberAiReadings({ initialReadings }: { initialReadings: MemberAiReading[] }) {
   const [readings, setReadings] = useState(initialReadings);
-  const [retrying, setRetrying] = useState<number | null>(null);
+  const [retrying, setRetrying] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
   const answered = readings.filter((r) => r.status === "answered").length;
 
-  async function retry(id: number) {
+  async function retry(id: string) {
     setRetrying(id);
     setNotice("");
     try {

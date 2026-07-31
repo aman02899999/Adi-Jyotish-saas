@@ -6,13 +6,10 @@ import { ChatSessionNotFoundError, getSessionForAdmin, listSessionMessages } fro
 import { getActiveHold, getOrCreateWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export default async function AdminChatSessionPage({ params }: { params: Promise<{ id: string }> }) {
   await requireAdminPage("messages");
-  const { id: raw } = await params;
-  const id = parseId(raw);
-  if (!id) notFound();
+  const { id } = await params;
 
   let session;
   try {
@@ -24,7 +21,7 @@ export default async function AdminChatSessionPage({ params }: { params: Promise
 
   const [messages, hold, wallet] = await Promise.all([
     listSessionMessages(id),
-    getActiveHold(session.walletHoldId),
+    getActiveHold(session.memberId, session.walletHoldId),
     getOrCreateWallet(session.memberId),
   ]);
   const holdMinutes = hold ? Math.max(1, Math.round(hold.amount / session.ratePerMinute)) : 1;

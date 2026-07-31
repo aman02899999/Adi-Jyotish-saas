@@ -3,6 +3,7 @@
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
 
 export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login" | "register" }) {
   const [mode, setMode] = useState(initialMode);
@@ -20,10 +21,13 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
     if (mode === "register" && password !== confirm) return setError("Passwords do not match.");
     setSubmitting(true);
     try {
+      const idToken = mode === "register"
+        ? await createUserWithEmailAndPassword(email, password)
+        : await signInWithEmailAndPassword(email, password);
       const response = await fetch(`/api/member/${mode === "register" ? "register" : "login"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ name, idToken }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Your account could not be verified.");

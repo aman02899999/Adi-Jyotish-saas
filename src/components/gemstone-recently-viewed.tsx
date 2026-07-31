@@ -6,7 +6,7 @@ import type { ProductListItem } from "@/lib/gemstones";
 
 const RECENTLY_VIEWED_KEY = "jyotish_gem_recently_viewed";
 
-export function GemstoneRecentlyViewed({ excludeSlug, wishlistIds, signedIn }: { excludeSlug?: string; wishlistIds: number[]; signedIn: boolean }) {
+export function GemstoneRecentlyViewed({ excludeSlug, wishlistIds, signedIn }: { excludeSlug?: string; wishlistIds: string[]; signedIn: boolean }) {
   const [items, setItems] = useState<ProductListItem[]>([]);
 
   useEffect(() => {

@@ -13,9 +13,9 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
 
-  const body = (await request.json()) as { productId?: number };
-  const productId = Number(body.productId);
-  if (!Number.isInteger(productId) || productId <= 0) return Response.json({ error: "Invalid product id." }, { status: 400 });
+  const body = (await request.json()) as { productId?: string };
+  const productId = body.productId?.trim();
+  if (!productId) return Response.json({ error: "Invalid product id." }, { status: 400 });
 
   const result = await toggleWishlist(member.id, productId);
   return Response.json(result);

@@ -6,12 +6,12 @@ import { useEffect, useMemo, useState } from "react";
 import { Check, CheckCircle2, Gem, Heart, Minus, MessageSquarePlus, Plus, RotateCcw, ShieldCheck, ShoppingBag, Star, Truck, X } from "lucide-react";
 import { useGemstoneCart } from "@/components/gemstone-cart-context";
 
-type Variant = { id: number; label: string; weightCarat: string; weightRatti: string; certificationLevel: string; price: number; compareAtPrice: number | null; stockQuantity: number };
+type Variant = { id: string; label: string; weightCarat: string; weightRatti: string; certificationLevel: string; price: number; compareAtPrice: number | null; stockQuantity: number };
 type ProductImage = { url: string; alt: string };
-type Review = { id: number; reviewerName: string; rating: number; title: string; body: string; verified: boolean; createdAt: string };
+type Review = { id: string; reviewerName: string; rating: number; title: string; body: string; verified: boolean; createdAt: string };
 
 type ProductDetail = {
-  id: number; slug: string; name: string; shortDescription: string; description: string; benefits: string; whoShouldWear: string;
+  id: string; slug: string; name: string; shortDescription: string; description: string; benefits: string; whoShouldWear: string;
   recommendedZodiac: string; recommendedPlanets: string; origin: string; color: string; treatment: string; certification: string;
   currency: string; categoryName: string; ratingAverage: number; ratingCount: number;
   images: ProductImage[]; variants: Variant[];

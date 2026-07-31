@@ -1,7 +1,5 @@
-import { eq } from "drizzle-orm";
 import { notFound, redirect } from "next/navigation";
-import { db } from "@/db";
-import { practitioners } from "@/db/schema";
+import { db } from "@/lib/firestore";
 import { ChatRoom } from "@/components/chat-room";
 import { MemberAppShell } from "@/components/member-app-shell";
 import { ChatSessionNotFoundError, getSessionOr404, listSessionMessages } from "@/lib/chat";
@@ -9,14 +7,11 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { getActiveHold, getOrCreateWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export default async function MemberChatPage({ params }: { params: Promise<{ id: string }> }) {
   const member = await getCurrentMember();
   if (!member) redirect("/account");
-  const { id: raw } = await params;
-  const id = parseId(raw);
-  if (!id) notFound();
+  const { id } = await params;
 
   let session;
   try {
@@ -27,12 +22,13 @@ export default async function MemberChatPage({ params }: { params: Promise<{ id:
   }
   if (session.memberId !== member.id) notFound();
 
-  const [practitioner, messages, hold, wallet] = await Promise.all([
-    db.select().from(practitioners).where(eq(practitioners.id, session.practitionerId)).limit(1).then((rows) => rows[0]),
+  const [practitionerSnap, messages, hold, wallet] = await Promise.all([
+    db.collection("practitioners").doc(session.practitionerId).get(),
     listSessionMessages(id),
-    getActiveHold(session.walletHoldId),
+    getActiveHold(session.memberId, session.walletHoldId),
     getOrCreateWallet(member.id),
   ]);
+  const practitioner = practitionerSnap.exists ? (practitionerSnap.data() as { name: string }) : null;
   const holdMinutes = hold ? Math.max(1, Math.round(hold.amount / session.ratePerMinute)) : 1;
 
   return (

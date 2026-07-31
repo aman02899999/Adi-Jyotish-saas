@@ -4,15 +4,15 @@ import { useMemo, useState } from "react";
 import { Banknote, Check, ChevronDown, Clock3, ReceiptText, Search, Wallet, X } from "lucide-react";
 
 export type AdminPayoutRow = {
-  id: number;
-  practitionerId: number;
+  id: string;
+  practitionerId: string;
   amount: number;
   currency: string;
   status: string;
   notes: string | null;
   adminNotes: string | null;
   transactionRef: string | null;
-  processedBy: number | null;
+  processedBy: string | null;
   requestedAt: Date | string;
   processedAt: Date | string | null;
   updatedAt: Date | string;
@@ -29,7 +29,7 @@ export function AdminPayouts({ initialPayouts }: { initialPayouts: AdminPayoutRo
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [notice, setNotice] = useState("");
-  const [saving, setSaving] = useState<number | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
 
   const filtered = useMemo(
     () =>

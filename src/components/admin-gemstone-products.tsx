@@ -2,14 +2,14 @@
 
 import { FormEvent, useState } from "react";
 import { Check, Copy, Edit3, Gem, ImagePlus, Plus, Trash2, X } from "lucide-react";
-import type { GemstoneCategory } from "@/db/schema";
+import type { GemstoneCategory } from "@/lib/gemstones";
 
 export type AdminProductRow = {
-  id: number;
+  id: string;
   name: string;
   slug: string;
   sku: string;
-  categoryId: number;
+  categoryId: string;
   categoryName: string;
   active: boolean;
   featured: boolean;
@@ -21,8 +21,8 @@ export type AdminProductRow = {
   currency: string;
 };
 
-type VariantForm = { id?: number; label: string; weightCarat: string; weightRatti: string; certificationLevel: string; price: string; compareAtPrice: string; stockQuantity: string; sku: string; active: boolean };
-type ImageForm = { id?: number; url: string; alt: string; isPrimary: boolean };
+type VariantForm = { id?: string; label: string; weightCarat: string; weightRatti: string; certificationLevel: string; price: string; compareAtPrice: string; stockQuantity: string; sku: string; active: boolean };
+type ImageForm = { id?: string; url: string; alt: string; isPrimary: boolean };
 
 type FormState = {
   categoryId: string;
@@ -66,7 +66,7 @@ function emptyForm(defaultCategoryId: string): FormState {
 
 export function AdminGemstoneProducts({ initialProducts, categories }: { initialProducts: AdminProductRow[]; categories: GemstoneCategory[] }) {
   const [items, setItems] = useState(initialProducts);
-  const [editingId, setEditingId] = useState<number | null>(null);
+  const [editingId, setEditingId] = useState<string | null>(null);
   const [form, setForm] = useState<FormState>(() => emptyForm(String(categories[0]?.id ?? "")));
   const [open, setOpen] = useState(false);
   const [saving, setSaving] = useState(false);
@@ -94,8 +94,8 @@ export function AdminGemstoneProducts({ initialProducts, categories }: { initial
         recommendedZodiac: p.recommendedZodiac, recommendedPlanets: p.recommendedPlanets, origin: p.origin, color: p.color, treatment: p.treatment, certification: p.certification,
         metaTitle: p.metaTitle, metaDescription: p.metaDescription,
         featured: p.featured, trending: p.trending, bestseller: p.bestseller, active: p.active,
-        images: data.images.length ? data.images.map((i: { id: number; url: string; alt: string; isPrimary: boolean }) => ({ id: i.id, url: i.url, alt: i.alt, isPrimary: i.isPrimary })) : [{ ...emptyImage, isPrimary: true }],
-        variants: data.variants.map((v: { id: number; label: string; weightCarat: string; weightRatti: string; certificationLevel: string; price: number; compareAtPrice: number | null; stockQuantity: number; sku: string; active: boolean }) => ({ id: v.id, label: v.label, weightCarat: v.weightCarat, weightRatti: v.weightRatti, certificationLevel: v.certificationLevel, price: String(v.price), compareAtPrice: v.compareAtPrice != null ? String(v.compareAtPrice) : "", stockQuantity: String(v.stockQuantity), sku: v.sku, active: v.active })),
+        images: data.images.length ? data.images.map((i: { id: string; url: string; alt: string; isPrimary: boolean }) => ({ id: i.id, url: i.url, alt: i.alt, isPrimary: i.isPrimary })) : [{ ...emptyImage, isPrimary: true }],
+        variants: data.variants.map((v: { id: string; label: string; weightCarat: string; weightRatti: string; certificationLevel: string; price: number; compareAtPrice: number | null; stockQuantity: number; sku: string; active: boolean }) => ({ id: v.id, label: v.label, weightCarat: v.weightCarat, weightRatti: v.weightRatti, certificationLevel: v.certificationLevel, price: String(v.price), compareAtPrice: v.compareAtPrice != null ? String(v.compareAtPrice) : "", stockQuantity: String(v.stockQuantity), sku: v.sku, active: v.active })),
       });
     } catch (error) {
       setNotice(error instanceof Error ? error.message : "Could not load product.");
@@ -124,7 +124,7 @@ export function AdminGemstoneProducts({ initialProducts, categories }: { initial
     setNotice("");
     const payload = {
       ...form,
-      categoryId: Number(form.categoryId),
+      categoryId: form.categoryId,
       images: form.images.filter((image) => image.url.trim()),
       variants: form.variants.filter((variant) => variant.label.trim() && variant.sku.trim()).map((variant) => ({
         ...variant,

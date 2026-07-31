@@ -4,7 +4,7 @@ import { useState } from "react";
 import { ChevronDown, FileText, LoaderCircle, ScrollText } from "lucide-react";
 
 export type PractitionerBooking = {
-  id: number;
+  id: string;
   reference: string;
   clientName: string;
   birthDate: string;
@@ -20,11 +20,11 @@ export type PractitionerBooking = {
 
 export function PractitionerBookings({ initialBookings }: { initialBookings: PractitionerBooking[] }) {
   const [bookings, setBookings] = useState(initialBookings);
-  const [openId, setOpenId] = useState<number | null>(null);
-  const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [openId, setOpenId] = useState<string | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
-  async function generateKundli(id: number) {
+  async function generateKundli(id: string) {
     setLoadingId(id);
     setError("");
     try {

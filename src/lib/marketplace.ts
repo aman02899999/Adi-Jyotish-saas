@@ -94,7 +94,10 @@ export async function getEligibleReviewBookings(memberEmail: string, practitione
   const reviewed = new Set(existingSnap.docs.map((doc) => doc.data().bookingId as string));
   return completedSnap.docs
     .filter((doc) => !reviewed.has(doc.id))
-    .map((doc) => ({ id: doc.id, ...doc.data() }));
+    .map((doc) => {
+      const data = doc.data() as { serviceTitle: string; scheduledAt: FirebaseFirestore.Timestamp };
+      return { id: doc.id, serviceTitle: data.serviceTitle, scheduledAt: data.scheduledAt.toDate() };
+    });
 }
 
 export async function getAdminReviews() {

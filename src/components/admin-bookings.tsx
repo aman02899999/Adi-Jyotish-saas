@@ -20,13 +20,13 @@ import {
 } from "lucide-react";
 
 export type AdminBooking = {
-  id: number;
+  id: string;
   reference: string;
-  serviceId: number | null;
+  serviceId: string | null;
   serviceTitle: string;
   servicePrice: number;
   serviceDuration: number;
-  practitionerId: number | null;
+  practitionerId: string | null;
   practitionerName: string | null;
   clientName: string;
   clientEmail: string;

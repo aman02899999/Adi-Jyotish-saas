@@ -17,8 +17,8 @@ export const metadata: Metadata = {
 export default async function BookPage({ searchParams }: { searchParams: Promise<{ service?: string; practitioner?: string }> }) {
   const [services, query, member, settings] = await Promise.all([getPublishedServices(), searchParams, getCurrentMember(), getStudioSettings()]);
   const discountPercent = member ? await getMemberDiscountPercent(member.id) : 0;
-  const initialServiceId = query.service ? Number(query.service) : undefined;
-  const initialPractitionerId = query.practitioner ? Number(query.practitioner) : undefined;
+  const initialServiceId = query.service || undefined;
+  const initialPractitionerId = query.practitioner || undefined;
 
   return (
     <main className="booking-page">

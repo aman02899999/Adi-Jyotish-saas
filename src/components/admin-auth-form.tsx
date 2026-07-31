@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
 
 export function AdminAuthForm({ setup }: { setup: boolean }) {
   const [name, setName] = useState("");
@@ -21,10 +22,13 @@ export function AdminAuthForm({ setup }: { setup: boolean }) {
     }
     setSubmitting(true);
     try {
+      const idToken = setup
+        ? await createUserWithEmailAndPassword(email, password)
+        : await signInWithEmailAndPassword(email, password);
       const response = await fetch(setup ? "/api/auth/setup" : "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ idToken, name }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Access could not be verified.");

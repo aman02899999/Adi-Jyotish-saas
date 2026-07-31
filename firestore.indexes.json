@@ -1,0 +1,71 @@
+{
+  "indexes": [
+    {
+      "collectionGroup": "gemstoneCategories",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "sortOrder", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gemstoneProducts",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "categoryId", "order": "ASCENDING" },
+        { "fieldPath": "active", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gemstoneOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberId", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gemstoneOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gemstoneOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberId", "order": "ASCENDING" },
+        { "fieldPath": "paymentStatus", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gemstoneReviews",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" },
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "createdAt", "order": "DESCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "variants",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "active", "order": "ASCENDING" },
+        { "fieldPath": "stockQuantity", "order": "ASCENDING" }
+      ]
+    }
+  ],
+  "fieldOverrides": [
+    {
+      "collectionGroup": "items",
+      "fieldPath": "productId",
+      "indexes": [
+        { "order": "ASCENDING", "queryScope": "COLLECTION_GROUP" },
+        { "order": "ASCENDING", "queryScope": "COLLECTION" }
+      ]
+    }
+  ]
+}

@@ -9,10 +9,9 @@ import {
   Star,
   SunMedium,
 } from "lucide-react";
-import { and, asc, eq, gt } from "drizzle-orm";
 import { MemberAppShell } from "@/components/member-app-shell";
-import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { db } from "@/lib/firestore";
+import { bookingFromDoc } from "@/app/api/bookings/route";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPublishedServices } from "@/lib/services";
 
@@ -21,14 +20,14 @@ export const dynamic = "force-dynamic";
 export default async function DashboardPage() {
   const member = await getCurrentMember();
   if (!member) return null;
-  const [services, upcoming] = await Promise.all([
+  const [services, upcomingSnap] = await Promise.all([
     getPublishedServices(),
-    db.select().from(bookings).where(and(eq(bookings.clientEmail, member.email), gt(bookings.scheduledAt, new Date()))).orderBy(asc(bookings.scheduledAt)).limit(1),
+    db.collection("bookings").where("clientEmail", "==", member.email).where("scheduledAt", ">", new Date()).orderBy("scheduledAt", "asc").limit(1).get(),
   ]);
   const firstName = member.name.split(" ")[0];
   const location = member.birthPlace?.split(",")[0] || "Your location";
   const today = new Date().toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric" });
-  const nextBooking = upcoming[0];
+  const nextBooking = upcomingSnap.docs[0] ? bookingFromDoc(upcomingSnap.docs[0]) : undefined;
 
   return (
     <MemberAppShell member={member} active="Dashboard">

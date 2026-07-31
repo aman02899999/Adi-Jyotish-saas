@@ -4,7 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { MessageCircle } from "lucide-react";
 
-export function InstantChatButton({ practitionerId, online, memberSignedIn }: { practitionerId: number; online: boolean; memberSignedIn: boolean }) {
+export function InstantChatButton({ practitionerId, online, memberSignedIn }: { practitionerId: string; online: boolean; memberSignedIn: boolean }) {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 

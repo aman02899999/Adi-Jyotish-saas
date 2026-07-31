@@ -4,8 +4,8 @@ import { useMemo, useState } from "react";
 import { Check, ChevronDown, Eye, EyeOff, Search, Star, Trash2, X } from "lucide-react";
 
 export type AdminReview = {
-  id: number;
-  practitionerId: number;
+  id: string;
+  practitionerId: string;
   practitionerName: string;
   practitionerSlug: string;
   reviewerName: string;
@@ -22,7 +22,7 @@ export function AdminReviews({ initialReviews }: { initialReviews: AdminReview[]
   const [items, setItems] = useState(initialReviews);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
-  const [saving, setSaving] = useState<number | null>(null);
+  const [saving, setSaving] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
 
   const filtered = useMemo(() => items.filter((item) => `${item.practitionerName} ${item.reviewerName} ${item.body}`.toLowerCase().includes(query.toLowerCase()) && (filter === "all" || item.status === filter)), [items, query, filter]);

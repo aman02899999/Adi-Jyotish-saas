@@ -1,74 +1,161 @@
 import "server-only";
 
-import { and, asc, desc, eq, gte, sql } from "drizzle-orm";
-import { db } from "@/db";
-import {
-  availabilityRules,
-  bookings,
-  practitionerPayouts,
-  practitionerReviews,
-  practitionerTimeOff,
-  practitioners,
-} from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
+import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
 import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
 import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
 
 export class PayoutError extends Error {}
 export class KundliSummaryError extends Error {}
 
-export async function getPractitionerStats(practitionerId: number) {
-  const [earningsRow] = await db.select({
-    totalEarned: sql<number>`coalesce(sum(${bookings.servicePrice}) filter (where ${bookings.paymentStatus} = 'paid'), 0)::int`,
-    completedCount: sql<number>`count(*) filter (where ${bookings.status} = 'completed')::int`,
-    upcomingCount: sql<number>`count(*) filter (where ${bookings.status} in ('pending','confirmed') and ${bookings.scheduledAt} >= now())::int`,
-  }).from(bookings).where(eq(bookings.practitionerId, practitionerId));
+export type PractitionerPayout = {
+  id: string;
+  practitionerId: string;
+  amount: number;
+  currency: string;
+  status: string;
+  payoutMethod: string;
+  transactionRef: string | null;
+  notes: string | null;
+  adminNotes: string | null;
+  processedBy: string | null;
+  requestedAt: Date;
+  processedAt: Date | null;
+  updatedAt: Date;
+};
 
-  const [payoutRow] = await db.select({
-    paidOut: sql<number>`coalesce(sum(${practitionerPayouts.amount}) filter (where ${practitionerPayouts.status} = 'paid'), 0)::int`,
-    pendingOut: sql<number>`coalesce(sum(${practitionerPayouts.amount}) filter (where ${practitionerPayouts.status} in ('requested','approved')), 0)::int`,
-  }).from(practitionerPayouts).where(eq(practitionerPayouts.practitionerId, practitionerId));
+function toDate(value: FirebaseFirestore.Timestamp | Date | undefined | null): Date {
+  if (!value) return new Date();
+  return value instanceof Date ? value : value.toDate();
+}
+function toDateOrNull(value: FirebaseFirestore.Timestamp | Date | undefined | null): Date | null {
+  if (!value) return null;
+  return value instanceof Date ? value : value.toDate();
+}
 
-  const [reviewRow] = await db.select({
-    avgRating: sql<number>`coalesce(avg(${practitionerReviews.rating}), 0)::float`,
-    reviewCount: sql<number>`count(*)::int`,
-  }).from(practitionerReviews).where(and(eq(practitionerReviews.practitionerId, practitionerId), eq(practitionerReviews.status, "published")));
+function payoutsCollection() {
+  return db.collection("practitionerPayouts");
+}
 
-  const totalEarned = earningsRow?.totalEarned ?? 0;
-  const paidOut = payoutRow?.paidOut ?? 0;
-  const pendingOut = payoutRow?.pendingOut ?? 0;
+function payoutFromSnap(snap: FirebaseFirestore.DocumentSnapshot | FirebaseFirestore.QueryDocumentSnapshot): PractitionerPayout {
+  const data = snap.data() as Record<string, unknown>;
+  return {
+    id: snap.id,
+    practitionerId: data.practitionerId as string,
+    amount: data.amount as number,
+    currency: (data.currency as string) ?? "INR",
+    status: (data.status as string) ?? "requested",
+    payoutMethod: (data.payoutMethod as string) ?? "bank_transfer",
+    transactionRef: (data.transactionRef as string | null) ?? null,
+    notes: (data.notes as string | null) ?? null,
+    adminNotes: (data.adminNotes as string | null) ?? null,
+    processedBy: (data.processedBy as string | null) ?? null,
+    requestedAt: toDate(data.requestedAt as FirebaseFirestore.Timestamp),
+    processedAt: toDateOrNull(data.processedAt as FirebaseFirestore.Timestamp | undefined),
+    updatedAt: toDate(data.updatedAt as FirebaseFirestore.Timestamp),
+  };
+}
+
+async function payoutTotalsForPractitioner(practitionerId: string) {
+  const snap = await payoutsCollection().where("practitionerId", "==", practitionerId).get();
+  let paidOut = 0;
+  let pendingOut = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data() as { amount: number; status: string };
+    if (data.status === "paid") paidOut += data.amount;
+    else if (data.status === "requested" || data.status === "approved") pendingOut += data.amount;
+  }
+  return { paidOut, pendingOut };
+}
+
+export async function getPractitionerStats(practitionerId: string) {
+  const [bookingsSnap, reviewsSnap, { paidOut, pendingOut }] = await Promise.all([
+    db.collection("bookings").where("practitionerId", "==", practitionerId).get(),
+    db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published").get(),
+    payoutTotalsForPractitioner(practitionerId),
+  ]);
+
+  let totalEarned = 0;
+  let completedCount = 0;
+  let upcomingCount = 0;
+  const now = Date.now();
+  for (const doc of bookingsSnap.docs) {
+    const row = bookingFromDoc(doc);
+    if (row.paymentStatus === "paid") totalEarned += row.servicePrice;
+    if (row.status === "completed") completedCount += 1;
+    if ((row.status === "pending" || row.status === "confirmed") && row.scheduledAt.getTime() >= now) upcomingCount += 1;
+  }
+
+  let ratingSum = 0;
+  for (const doc of reviewsSnap.docs) {
+    ratingSum += (doc.data().rating as number) ?? 0;
+  }
+  const reviewCount = reviewsSnap.size;
+  const avgRating = reviewCount ? ratingSum / reviewCount : 0;
+
   const availableBalance = Math.max(0, totalEarned - paidOut - pendingOut);
 
   return {
     totalEarned,
-    completedCount: earningsRow?.completedCount ?? 0,
-    upcomingCount: earningsRow?.upcomingCount ?? 0,
+    completedCount,
+    upcomingCount,
     paidOut,
     pendingOut,
     availableBalance,
-    avgRating: Math.round((reviewRow?.avgRating ?? 0) * 10) / 10,
-    reviewCount: reviewRow?.reviewCount ?? 0,
+    avgRating: Math.round(avgRating * 10) / 10,
+    reviewCount,
   };
 }
 
-export async function getPractitionerBookings(practitionerId: number) {
-  return db.select().from(bookings).where(eq(bookings.practitionerId, practitionerId)).orderBy(desc(bookings.scheduledAt));
+export async function getPractitionerBookings(practitionerId: string): Promise<BookingRecord[]> {
+  const snap = await db.collection("bookings").where("practitionerId", "==", practitionerId).orderBy("scheduledAt", "desc").get();
+  return snap.docs.map((doc) => bookingFromDoc(doc));
 }
 
-export async function getPractitionerReviews(practitionerId: number) {
-  return db.select().from(practitionerReviews)
-    .where(and(eq(practitionerReviews.practitionerId, practitionerId), eq(practitionerReviews.status, "published")))
-    .orderBy(desc(practitionerReviews.createdAt));
+export type PractitionerReview = {
+  id: string;
+  reviewerName: string;
+  rating: number;
+  clarity: number;
+  empathy: number;
+  usefulness: number;
+  body: string;
+  createdAt: Date;
+};
+
+export async function getPractitionerReviews(practitionerId: string): Promise<PractitionerReview[]> {
+  const snap = await db.collection("practitionerReviews")
+    .where("practitionerId", "==", practitionerId)
+    .where("status", "==", "published")
+    .orderBy("createdAt", "desc")
+    .get();
+  return snap.docs.map((doc) => {
+    const data = doc.data() as { reviewerName: string; rating: number; clarity: number; empathy: number; usefulness: number; body: string; createdAt: FirebaseFirestore.Timestamp };
+    return { id: doc.id, reviewerName: data.reviewerName, rating: data.rating, clarity: data.clarity, empathy: data.empathy, usefulness: data.usefulness, body: data.body, createdAt: data.createdAt?.toDate() ?? new Date() };
+  });
 }
 
-export async function getPractitionerSchedule(practitionerId: number) {
-  const [rules, timeOff] = await Promise.all([
-    db.select().from(availabilityRules).where(eq(availabilityRules.practitionerId, practitionerId)).orderBy(asc(availabilityRules.weekday)),
-    db.select().from(practitionerTimeOff).where(and(eq(practitionerTimeOff.practitionerId, practitionerId), gte(practitionerTimeOff.endsAt, new Date()))).orderBy(asc(practitionerTimeOff.startsAt)),
+export async function getPractitionerSchedule(practitionerId: string) {
+  const practitionerRef = db.collection("practitioners").doc(practitionerId);
+  const [rulesSnap, timeOffSnap] = await Promise.all([
+    practitionerRef.collection("availabilityRules").orderBy("weekday", "asc").get(),
+    practitionerRef.collection("timeOff").where("endsAt", ">=", new Date()).orderBy("endsAt", "asc").get(),
   ]);
+  const rules = rulesSnap.docs.map((doc) => {
+    const data = doc.data() as { weekday: number; startTime: string; endTime: string; active: boolean };
+    return { id: doc.id, weekday: data.weekday, startTime: data.startTime, endTime: data.endTime, active: data.active };
+  });
+  const timeOff = timeOffSnap.docs
+    .map((doc) => {
+      const data = doc.data() as { startsAt: FirebaseFirestore.Timestamp; endsAt: FirebaseFirestore.Timestamp; reason: string | null };
+      return { id: doc.id, reason: data.reason, startsAt: toDate(data.startsAt), endsAt: toDate(data.endsAt) };
+    })
+    .sort((a, b) => a.startsAt.getTime() - b.startsAt.getTime());
   return { rules, timeOff };
 }
 
-export async function updatePractitionerSchedule(practitionerId: number, input: {
+export async function updatePractitionerSchedule(practitionerId: string, input: {
   rules: Array<{ weekday: number; startTime: string; endTime: string; active?: boolean }>;
   timeOff: Array<{ startsAt: string; endsAt: string; reason?: string }>;
 }) {
@@ -79,85 +166,126 @@ export async function updatePractitionerSchedule(practitionerId: number, input: 
     .map((item) => ({ startsAt: new Date(item.startsAt), endsAt: new Date(item.endsAt), reason: item.reason?.trim().slice(0, 180) || null }))
     .filter((item) => !Number.isNaN(item.startsAt.getTime()) && !Number.isNaN(item.endsAt.getTime()) && item.startsAt < item.endsAt);
 
-  await db.transaction(async (tx) => {
-    await tx.delete(availabilityRules).where(eq(availabilityRules.practitionerId, practitionerId));
-    await tx.delete(practitionerTimeOff).where(eq(practitionerTimeOff.practitionerId, practitionerId));
-    if (rules.length) await tx.insert(availabilityRules).values(rules.map((rule) => ({ ...rule, practitionerId, active: rule.active ?? true })));
-    if (timeOff.length) await tx.insert(practitionerTimeOff).values(timeOff.map((item) => ({ ...item, practitionerId })));
-  });
+  const practitionerRef = db.collection("practitioners").doc(practitionerId);
+  const rulesCol = practitionerRef.collection("availabilityRules");
+  const timeOffCol = practitionerRef.collection("timeOff");
+
+  const [existingRules, existingTimeOff] = await Promise.all([rulesCol.get(), timeOffCol.get()]);
+
+  const batch = db.batch();
+  for (const doc of existingRules.docs) batch.delete(doc.ref);
+  for (const doc of existingTimeOff.docs) batch.delete(doc.ref);
+  for (const rule of rules) batch.set(rulesCol.doc(), { ...rule, active: rule.active ?? true });
+  for (const item of timeOff) batch.set(timeOffCol.doc(), item);
+  await batch.commit();
 }
 
-export async function updatePractitionerProfile(practitionerId: number, input: {
+export async function updatePractitionerProfile(practitionerId: string, input: {
   bio?: string; specialties?: string; languages?: string; consultationModes?: string; photoUrl?: string | null;
 }) {
-  const patch: Partial<typeof practitioners.$inferInsert> = { updatedAt: new Date() };
+  const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (input.bio !== undefined) patch.bio = input.bio.trim().slice(0, 4000);
   if (input.specialties !== undefined) patch.specialties = input.specialties.trim().slice(0, 400);
   if (input.languages !== undefined) patch.languages = input.languages.trim().slice(0, 240) || "English, Hindi";
   if (input.consultationModes !== undefined) patch.consultationModes = input.consultationModes.trim().slice(0, 160) || "Video, Audio, Chat";
   if (input.photoUrl !== undefined) patch.photoUrl = input.photoUrl?.trim() || null;
 
-  const [updated] = await db.update(practitioners).set(patch).where(eq(practitioners.id, practitionerId)).returning();
-  return updated;
+  const ref = db.collection("practitioners").doc(practitionerId);
+  await ref.update(patch);
+  const updated = await ref.get();
+  return { id: updated.id, ...updated.data() };
 }
 
-export async function getPractitionerPayouts(practitionerId: number) {
-  return db.select().from(practitionerPayouts).where(eq(practitionerPayouts.practitionerId, practitionerId)).orderBy(desc(practitionerPayouts.requestedAt));
+// --- practitionerPayouts -------------------------------------------------------------------
+
+export async function getPractitionerPayouts(practitionerId: string): Promise<PractitionerPayout[]> {
+  const snap = await payoutsCollection().where("practitionerId", "==", practitionerId).orderBy("requestedAt", "desc").get();
+  return snap.docs.map((doc) => payoutFromSnap(doc));
 }
 
-export async function requestPayout(practitionerId: number, amount: number, notes?: string) {
+export async function requestPayout(practitionerId: string, amount: number, notes?: string): Promise<PractitionerPayout> {
   if (!Number.isInteger(amount) || amount < 100) throw new PayoutError("Enter an amount of at least ₹100.");
   const stats = await getPractitionerStats(practitionerId);
   if (amount > stats.availableBalance) throw new PayoutError(`You can request up to ₹${stats.availableBalance} right now.`);
 
-  const [created] = await db.insert(practitionerPayouts).values({
+  const ref = payoutsCollection().doc();
+  const now = FieldValue.serverTimestamp();
+  await ref.set({
     practitionerId,
     amount,
+    currency: "INR",
+    status: "requested",
+    payoutMethod: "bank_transfer",
+    transactionRef: null,
     notes: notes?.trim().slice(0, 500) || null,
-  }).returning();
-  return created;
+    adminNotes: null,
+    processedBy: null,
+    requestedAt: now,
+    processedAt: null,
+    updatedAt: now,
+  });
+  return payoutFromSnap(await ref.get());
+}
+
+type PractitionerLite = { name: string; email: string; bankAccountName: string | null; bankAccountNumber: string | null; bankIfsc: string | null; upiId: string | null };
+
+async function practitionerLiteById(practitionerId: string): Promise<PractitionerLite> {
+  const snap = await db.collection("practitioners").doc(practitionerId).get();
+  const data = snap.data() as Record<string, unknown> | undefined;
+  const bankAccountNumberEnc = data?.bankAccountNumberEnc as string | undefined;
+  const upiIdEnc = data?.upiIdEnc as string | undefined;
+  return {
+    name: (data?.name as string | undefined) ?? "Unknown practitioner",
+    email: (data?.email as string | undefined) ?? "",
+    bankAccountName: (data?.bankAccountName as string | undefined) ?? null,
+    bankAccountNumber: bankAccountNumberEnc ? decryptPayoutField(bankAccountNumberEnc) : null,
+    bankIfsc: (data?.bankIfsc as string | undefined) ?? null,
+    upiId: upiIdEnc ? decryptPayoutField(upiIdEnc) : null,
+  };
 }
 
 export async function getAllPayoutsAdmin(status?: string) {
-  const rows = await db.select({
-    payout: practitionerPayouts,
-    practitionerName: practitioners.name,
-    practitionerEmail: practitioners.email,
-    bankAccountName: practitioners.bankAccountName,
-    bankAccountNumberEnc: practitioners.bankAccountNumberEnc,
-    bankIfsc: practitioners.bankIfsc,
-    upiIdEnc: practitioners.upiIdEnc,
-  })
-    .from(practitionerPayouts)
-    .innerJoin(practitioners, eq(practitionerPayouts.practitionerId, practitioners.id))
-    .orderBy(desc(practitionerPayouts.requestedAt));
-  const filtered = status && status !== "all" ? rows.filter((row) => row.payout.status === status) : rows;
-  return filtered.map((row) => ({
-    ...row.payout,
-    practitionerName: row.practitionerName,
-    practitionerEmail: row.practitionerEmail,
-    bankAccountName: row.bankAccountName,
-    bankAccountNumber: row.bankAccountNumberEnc ? decryptPayoutField(row.bankAccountNumberEnc) : null,
-    bankIfsc: row.bankIfsc,
-    upiId: row.upiIdEnc ? decryptPayoutField(row.upiIdEnc) : null,
-  }));
+  const query = status && status !== "all"
+    ? payoutsCollection().where("status", "==", status).orderBy("requestedAt", "desc")
+    : payoutsCollection().orderBy("requestedAt", "desc");
+  const snap = await query.get();
+  const payouts = snap.docs.map((doc) => payoutFromSnap(doc));
+  const practitionerIds = Array.from(new Set(payouts.map((payout) => payout.practitionerId)));
+  const practitionerLites = await Promise.all(practitionerIds.map((id) => practitionerLiteById(id)));
+  const practitionerById = new Map(practitionerIds.map((id, index) => [id, practitionerLites[index]]));
+
+  return payouts.map((payout) => {
+    const practitioner = practitionerById.get(payout.practitionerId);
+    return {
+      ...payout,
+      practitionerName: practitioner?.name ?? "Unknown practitioner",
+      practitionerEmail: practitioner?.email ?? "",
+      bankAccountName: practitioner?.bankAccountName ?? null,
+      bankAccountNumber: practitioner?.bankAccountNumber ?? null,
+      bankIfsc: practitioner?.bankIfsc ?? null,
+      upiId: practitioner?.upiId ?? null,
+    };
+  });
 }
 
-export async function updatePayoutStatus(id: number, status: "approved" | "paid" | "rejected", adminId: number, adminNotes?: string, transactionRef?: string) {
+export async function updatePayoutStatus(id: string, status: "approved" | "paid" | "rejected", adminId: string, adminNotes?: string, transactionRef?: string): Promise<PractitionerPayout> {
   if (status === "paid" && !transactionRef?.trim()) throw new PayoutError("Enter a bank transaction reference before marking this payout paid.");
-  const [updated] = await db.update(practitionerPayouts).set({
+  const ref = payoutsCollection().doc(id);
+  const existing = await ref.get();
+  if (!existing.exists) throw new PayoutError("Payout request not found.");
+
+  await ref.update({
     status,
     adminNotes: adminNotes?.trim().slice(0, 500) || null,
     transactionRef: transactionRef?.trim().slice(0, 120) || null,
     processedBy: adminId,
-    processedAt: new Date(),
-    updatedAt: new Date(),
-  }).where(eq(practitionerPayouts.id, id)).returning();
-  if (!updated) throw new PayoutError("Payout request not found.");
-  return updated;
+    processedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  return payoutFromSnap(await ref.get());
 }
 
-export async function updatePractitionerPayoutDetails(practitionerId: number, input: { bankAccountName: string; bankAccountNumber: string; bankIfsc: string; upiId: string }) {
+export async function updatePractitionerPayoutDetails(practitionerId: string, input: { bankAccountName: string; bankAccountNumber: string; bankIfsc: string; upiId: string }) {
   const bankAccountName = input.bankAccountName.trim().slice(0, 120);
   const bankAccountNumber = input.bankAccountNumber.trim().slice(0, 34);
   const bankIfsc = input.bankIfsc.trim().toUpperCase().slice(0, 20);
@@ -171,8 +299,8 @@ export async function updatePractitionerPayoutDetails(practitionerId: number, in
   }
 
   // Blank bank/UPI fields mean "keep what's already saved" (the form never pre-fills
-  // secrets), so only touch a group of columns when its input was actually provided.
-  await db.update(practitioners).set({
+  // secrets), so only touch a group of fields when its input was actually provided.
+  await db.collection("practitioners").doc(practitionerId).update({
     ...(bankAccountNumber
       ? {
           bankAccountName,
@@ -181,16 +309,19 @@ export async function updatePractitionerPayoutDetails(practitionerId: number, in
         }
       : {}),
     ...(upiId ? { upiIdEnc: encryptPayoutField(upiId) } : {}),
-    payoutDetailsUpdatedAt: new Date(),
-    updatedAt: new Date(),
-  }).where(eq(practitioners.id, practitionerId));
+    payoutDetailsUpdatedAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 }
 
 /** Generates (or returns the cached) Kundli summary for a booking's client from the real chart
  * engine, using the birth details already captured at booking time. No AI involved. */
-export async function getBookingKundliSummary(bookingId: number, practitionerId: number) {
-  const [booking] = await db.select().from(bookings).where(and(eq(bookings.id, bookingId), eq(bookings.practitionerId, practitionerId))).limit(1);
-  if (!booking) throw new KundliSummaryError("Booking not found.");
+export async function getBookingKundliSummary(bookingId: string, practitionerId: string) {
+  const ref = db.collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new KundliSummaryError("Booking not found.");
+  const booking = bookingFromDoc(snap);
+  if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
   if (booking.kundliSummary) return booking;
 
   let summary: string;
@@ -202,6 +333,6 @@ export async function getBookingKundliSummary(bookingId: number, practitionerId:
     throw error;
   }
 
-  const [updated] = await db.update(bookings).set({ kundliSummary: summary, kundliGeneratedAt: new Date() }).where(eq(bookings.id, bookingId)).returning();
-  return updated ?? booking;
+  await ref.update({ kundliSummary: summary, kundliGeneratedAt: FieldValue.serverTimestamp() });
+  return { ...booking, kundliSummary: summary, kundliGeneratedAt: new Date() };
 }

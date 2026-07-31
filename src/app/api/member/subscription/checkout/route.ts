@@ -4,16 +4,16 @@ import { startSubscriptionCheckout } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
 
-type CheckoutPayload = { planId?: number; interval?: "monthly" | "yearly" };
+type CheckoutPayload = { planId?: string; interval?: "monthly" | "yearly" };
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Sign in to choose a membership plan." }, { status: 401 });
 
   const body = (await request.json()) as CheckoutPayload;
-  const planId = Number(body.planId);
+  const planId = body.planId?.trim();
   const interval = body.interval === "yearly" ? "yearly" : "monthly";
-  if (!Number.isInteger(planId) || planId <= 0) return Response.json({ error: "Invalid plan." }, { status: 400 });
+  if (!planId) return Response.json({ error: "Invalid plan." }, { status: 400 });
 
   const plan = await getPlanById(planId);
   if (!plan || !plan.active) return Response.json({ error: "This plan is no longer available." }, { status: 404 });

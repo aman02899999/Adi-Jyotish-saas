@@ -13,9 +13,10 @@ export type StudioSettings = {
   replySlaHours: number;
   gstRate: number;
   gstin: string | null;
+  updatedAt: Date;
 };
 
-const defaults: StudioSettings = {
+const defaults: Omit<StudioSettings, "updatedAt"> = {
   studioName: "Jyotish Studio",
   supportEmail: "support@jyotish.studio",
   timezone: "Asia/Kolkata",
@@ -33,9 +34,10 @@ export async function getStudioSettings(): Promise<StudioSettings> {
   const snap = await ref.get();
   if (!snap.exists) {
     await ref.set({ ...defaults, updatedAt: FieldValue.serverTimestamp() });
-    return defaults;
+    return { ...defaults, updatedAt: new Date() };
   }
-  return { ...defaults, ...(snap.data() as Partial<StudioSettings>) };
+  const data = snap.data() as Partial<StudioSettings> & { updatedAt?: FirebaseFirestore.Timestamp };
+  return { ...defaults, ...data, updatedAt: data.updatedAt?.toDate() ?? new Date() };
 }
 
 export async function updateStudioSettings(patch: Partial<StudioSettings>) {

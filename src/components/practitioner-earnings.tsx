@@ -3,7 +3,7 @@
 import { useState } from "react";
 import { Check, Coins, Send, X } from "lucide-react";
 
-type Payout = { id: number; amount: number; currency: string; status: string; notes: string | null; adminNotes: string | null; requestedAt: string };
+type Payout = { id: string; amount: number; currency: string; status: string; notes: string | null; adminNotes: string | null; requestedAt: string };
 type Stats = { totalEarned: number; paidOut: number; pendingOut: number; availableBalance: number };
 
 export function PractitionerEarnings({ initialStats, initialPayouts }: { initialStats: Stats; initialPayouts: Payout[] }) {

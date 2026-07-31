@@ -3,9 +3,9 @@
 import { FormEvent, useMemo, useState } from "react";
 import { Check, ChevronDown, Inbox, LockKeyhole, MailPlus, MessageSquareText, MoreHorizontal, Search, Send, Trash2, UserRound, X } from "lucide-react";
 
-export type MessageItem={id:number;threadId:number;senderType:string;senderName:string;body:string;readByMember:boolean;readByAdmin:boolean;createdAt:Date|string};
-export type MessageThreadItem={id:number;memberId:number;bookingId:number|null;subject:string;category:string;status:string;lastMessageAt:Date|string;createdAt:Date|string;updatedAt:Date|string;memberName:string;memberEmail:string;messages:MessageItem[]};
-type MemberOption={id:number;name:string;email:string};
+export type MessageItem={id:string;threadId:string;senderType:string;senderName:string;body:string;readByMember:boolean;readByAdmin:boolean;createdAt:Date|string};
+export type MessageThreadItem={id:string;memberId:string;bookingId:string|null;subject:string;category:string;status:string;lastMessageAt:Date|string;createdAt:Date|string;updatedAt:Date|string;memberName:string;memberEmail:string;messages:MessageItem[]};
+type MemberOption={id:string;name:string;email:string};
 
 export function AdminMessages({initialThreads,members}:{initialThreads:MessageThreadItem[];members:MemberOption[]}){
   const [threads,setThreads]=useState(initialThreads);const [selectedId,setSelectedId]=useState(initialThreads[0]?.id??null);const [query,setQuery]=useState("");const [filter,setFilter]=useState("all");const [reply,setReply]=useState("");const [sending,setSending]=useState(false);const [compose,setCompose]=useState(false);const [notice,setNotice]=useState("");const [draft,setDraft]=useState({memberId:String(members[0]?.id??""),subject:"",category:"general",message:""});

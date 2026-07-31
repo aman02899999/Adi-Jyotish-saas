@@ -1,7 +1,7 @@
 "use client";
 
 import { getApps, initializeApp } from "firebase/app";
-import { GoogleAuthProvider, getAuth, signInWithPopup, signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword } from "firebase/auth";
+import { GoogleAuthProvider, getAuth, signInWithPopup, signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword, createUserWithEmailAndPassword as firebaseCreateUserWithEmailAndPassword } from "firebase/auth";
 
 // Password reset (sendPasswordResetEmail) and email verification (sendEmailVerification) are
 // now handled entirely by Firebase Auth's client SDK — see MDN-style usage at
@@ -36,5 +36,13 @@ export async function signInWithGoogle() {
 export async function signInWithEmailAndPassword(email: string, password: string) {
   const auth = getAuth(getFirebaseApp());
   const result = await firebaseSignInWithEmailAndPassword(auth, email, password);
+  return result.user.getIdToken();
+}
+
+/** Creates a brand-new Firebase Auth account (member self-registration, admin first-run setup)
+ * and returns a fresh ID token to hand to our backend to mint a session cookie. */
+export async function createUserWithEmailAndPassword(email: string, password: string) {
+  const auth = getAuth(getFirebaseApp());
+  const result = await firebaseCreateUserWithEmailAndPassword(auth, email, password);
   return result.user.getIdToken();
 }

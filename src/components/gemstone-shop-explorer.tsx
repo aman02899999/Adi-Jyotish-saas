@@ -21,12 +21,12 @@ export function GemstoneShopExplorer({ initialItems, total, page, pageSize, cate
   pageSize: number;
   categories: CategorySummary[];
   initialFilters: FilterState;
-  wishlistIds: number[];
+  wishlistIds: string[];
   signedIn: boolean;
 }) {
   const router = useRouter();
   const [search, setSearch] = useState(initialFilters.search ?? "");
-  const [compareIds, setCompareIds] = useState<number[]>([]);
+  const [compareIds, setCompareIds] = useState<string[]>([]);
   const [filtersOpen, setFiltersOpen] = useState(false);
   const [draft, setDraft] = useState<FilterState>(initialFilters);
   const totalPages = Math.max(1, Math.ceil(total / pageSize));
@@ -69,7 +69,7 @@ export function GemstoneShopExplorer({ initialItems, total, page, pageSize, cate
     setFiltersOpen(false);
   }
 
-  function toggleCompare(id: number) {
+  function toggleCompare(id: string) {
     setCompareIds((current) => current.includes(id) ? current.filter((item) => item !== id) : current.length < 3 ? [...current, id] : current);
   }
 

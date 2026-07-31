@@ -11,7 +11,7 @@ export async function GET(request: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
   const [settings, rows] = await Promise.all([getStudioSettings(), getMemberBilling(member.id, member.email)]);
-  const invoice = rows.find((row) => row.id === Number(id));
+  const invoice = rows.find((row) => row.id === id);
   if (!invoice) return Response.json({ error: "Invoice not found." }, { status: 404 });
 
   const pdfBytes = await generateInvoicePdf(invoice, settings);

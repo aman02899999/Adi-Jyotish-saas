@@ -2,7 +2,7 @@
 
 import { useMemo, useState } from "react";
 import { Check, Eye, Package, Search, X } from "lucide-react";
-import type { GemstoneOrder, GemstoneOrderItem } from "@/db/schema";
+import type { GemstoneOrder, GemstoneOrderItem } from "@/lib/gemstone-orders";
 
 const STATUS_OPTIONS = ["pending", "processing", "packed", "shipped", "delivered", "cancelled", "refunded"];
 

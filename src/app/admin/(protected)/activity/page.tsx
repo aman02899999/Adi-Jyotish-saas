@@ -1,7 +1,5 @@
-import { desc } from "drizzle-orm";
 import { Activity, KeyRound, ShieldCheck } from "lucide-react";
-import { db } from "@/db";
-import { auditLogs } from "@/db/schema";
+import { db } from "@/lib/firestore";
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
 
@@ -13,7 +11,11 @@ function formatAction(action: string) {
 
 export default async function AdminActivityPage() {
   await requireAdminPage("activity");
-  const rows = await db.select().from(auditLogs).orderBy(desc(auditLogs.createdAt)).limit(150);
+  const snap = await db.collection("auditLogs").orderBy("createdAt", "desc").limit(150).get();
+  const rows = snap.docs.map((doc) => {
+    const data = doc.data() as { adminId: string | null; adminName: string; action: string; entityType: string; entityId: string | null; details: string | null; createdAt: FirebaseFirestore.Timestamp };
+    return { id: doc.id, ...data, createdAt: data.createdAt?.toDate() ?? new Date() };
+  });
 
   return (
     <AdminShell active="Activity">

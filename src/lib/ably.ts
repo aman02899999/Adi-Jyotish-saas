@@ -14,11 +14,11 @@ export function getAbly() {
   return rest;
 }
 
-export function chatChannelName(sessionId: number) {
+export function chatChannelName(sessionId: string) {
   return `chat-${sessionId}`;
 }
 
-export async function publishChatEvent(sessionId: number, event: string, payload: unknown) {
+export async function publishChatEvent(sessionId: string, event: string, payload: unknown) {
   const client = getAbly();
   if (!client) return;
   await client.channels.get(chatChannelName(sessionId)).publish(event, payload);

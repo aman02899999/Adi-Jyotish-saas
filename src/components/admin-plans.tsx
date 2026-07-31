@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Check, Crown, Edit3, Plus, ShieldCheck, Sparkles, X } from "lucide-react";
-import type { MembershipPlan } from "@/db/schema";
+import type { MembershipPlan } from "@/lib/plans";
 
 type FormState = {
   key: string;
