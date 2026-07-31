@@ -1,8 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import Link from "next/link";
-import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 
 export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login" | "register" }) {
@@ -14,8 +13,6 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [challengeToken, setChallengeToken] = useState("");
-  const [totpCode, setTotpCode] = useState("");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -30,31 +27,7 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Your account could not be verified.");
-      if (data.requiresTotp) {
-        setChallengeToken(data.challengeToken);
-      } else {
-        window.location.assign(mode === "register" || !data.onboardingComplete ? "/onboarding" : "/dashboard");
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitTotp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/member/login/verify-2fa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challengeToken, code: totpCode }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "That code is incorrect.");
-      window.location.assign(!data.onboardingComplete ? "/onboarding" : "/dashboard");
+      window.location.assign(mode === "register" || !data.onboardingComplete ? "/onboarding" : "/dashboard");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong.");
     } finally {
@@ -66,20 +39,6 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
     setMode(next); setError(""); setPassword(""); setConfirm("");
   }
 
-  if (challengeToken) {
-    return (
-      <form className="admin-auth-form member-auth-form" onSubmit={submitTotp}>
-        <label>
-          <span>Two-factor code</span>
-          <div><KeyRound size={16} /><input autoFocus inputMode="numeric" autoComplete="one-time-code" required value={totpCode} onChange={(event) => setTotpCode(event.target.value.trim())} placeholder="6-digit code or backup code" /></div>
-          <small>Open your authenticator app, or use one of your backup codes.</small>
-        </label>
-        {error && <p className="admin-auth-error" role="alert">{error}</p>}
-        <button className="button admin-auth-submit" disabled={submitting}>{submitting ? "Verifying…" : "Verify and continue"}<ArrowRight size={16} /></button>
-      </form>
-    );
-  }
-
   return (
     <>
       <div className="member-auth-tabs"><button className={mode === "login" ? "active" : ""} onClick={() => changeMode("login")}>Sign in</button><button className={mode === "register" ? "active" : ""} onClick={() => changeMode("register")}>Create account</button></div>
@@ -88,7 +47,6 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
         <label><span>Email address</span><div><Mail size={16} /><input autoComplete="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></div></label>
         <label><span>Password</span><div><LockKeyhole size={16} /><input autoComplete={mode === "register" ? "new-password" : "current-password"} type={visible ? "text" : "password"} required minLength={mode === "register" ? 10 : undefined} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === "register" ? "At least 10 characters" : "Your password"} /><button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
         {mode === "register" && <label><span>Confirm password</span><div><ShieldCheck size={16} /><input autoComplete="new-password" type={visible ? "text" : "password"} required minLength={10} maxLength={128} value={confirm} onChange={(event) => setConfirm(event.target.value)} placeholder="Repeat your password" /></div></label>}
-        {mode === "login" && <Link href="/forgot-password" className="member-auth-forgot">Forgot your password?</Link>}
         {error && <p className="admin-auth-error" role="alert">{error}</p>}
         <button className="button admin-auth-submit" disabled={submitting}>{submitting ? "Opening your sky…" : mode === "register" ? "Create my chart" : "Open my dashboard"}<ArrowRight size={16} /></button>
       </form>
