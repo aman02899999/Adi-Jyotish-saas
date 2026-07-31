@@ -17,7 +17,6 @@ import {
   Menu,
   MessageSquareText,
   Search,
-  ShieldCheck,
   Sparkles,
   SunMedium,
   UserRound,
@@ -41,7 +40,6 @@ const navItems = [
   { label: "Studio Inbox", icon: MessageSquareText, href: "/dashboard/messages" },
   { label: "Wallet", icon: Coins, href: "/dashboard/wallet" },
   { label: "Billing & Receipts", icon: WalletCards, href: "/dashboard/billing" },
-  { label: "Security", icon: ShieldCheck, href: "/dashboard/security" },
   { label: "Daily Horoscope", icon: SunMedium, href: "/dashboard#insights" },
   { label: "Panchang", icon: CalendarDays, href: "/dashboard#insights" },
   { label: "Connections", icon: HeartHandshake, href: "/dashboard#services-list" },
@@ -49,7 +47,7 @@ const navItems = [
   { label: "Your Rewards", icon: Gift, href: "/dashboard#services-list" },
 ];
 
-function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Security" }) {
+function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" }) {
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return (
     <>
@@ -57,7 +55,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashbo
       <nav className="app-nav" aria-label="Member navigation">
         <p>My cosmos</p>
         {navItems.map(({ label, icon: Icon, href }) => {
-          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "AI Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Security" && label === "Security");
+          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "AI Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist");
           return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
         })}
         <p className="app-nav__lower">Account</p>
@@ -72,7 +70,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashbo
   );
 }
 
-export async function MemberAppShell({ member, active, children }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Security"; children: ReactNode }) {
+export async function MemberAppShell({ member, active, children }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist"; children: ReactNode }) {
   const unreadCount = await getMemberUnreadCount(member.id);
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return (
