@@ -28,7 +28,7 @@ export async function POST(request: Request) {
     amount: amount * 100,
     currency: wallet.currency,
     receipt: `wallet-${member.id}-${Date.now()}`,
-    notes: { memberId: String(member.id) },
+    notes: { memberId: String(member.id), purpose: "wallet_recharge" },
   });
 
   return Response.json({ orderId: order.id, amount: order.amount, currency: order.currency, key: getRazorpayKeyId() });

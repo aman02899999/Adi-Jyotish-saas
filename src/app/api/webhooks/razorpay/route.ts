@@ -98,8 +98,13 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
   if (!payment?.order_id) return;
   const paymentsSnap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
   if (paymentsSnap.empty) {
+    // Wallet recharges are the only flow whose Razorpay order has no matching `payments` doc AND
+    // is meant to be actioned here — every other order type (gemstone checkout, subscriptions)
+    // also stamps notes.memberId for tracking, so `purpose` is the required discriminator, not
+    // just memberId's presence. Without it, a gemstone order payment would silently double as a
+    // wallet top-up for the same amount.
     const memberId = payment.notes?.memberId;
-    if (memberId && payment.amount != null) {
+    if (memberId && payment.notes?.purpose === "wallet_recharge" && payment.amount != null) {
       await rechargeWallet({ memberId, amount: Math.round(payment.amount / 100), razorpayPaymentId: payment.id });
     }
     return;
