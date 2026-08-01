@@ -17,6 +17,9 @@
   --shadow: 0 24px 60px rgba(78, 58, 43, 0.1);
   --serif: Georgia, "Times New Roman", serif;
   --sans: Arial, Helvetica, sans-serif;
+  --night: #171009;
+  --night-2: #221708;
+  --starlight: #f6ead7;
 }
 
 * { box-sizing: border-box; }
@@ -96,6 +99,45 @@ button { border: 0; }
 .floating-note--bottom { right: -2px; bottom: 64px; }
 .floating-note span { display: flex; flex-direction: column; gap: 3px; }
 .floating-note strong { font:500 14px var(--serif); }
+
+/* cinematic cosmic hero */
+.hero-cosmic { position: relative; overflow: hidden; padding-block: 46px 0; background: radial-gradient(130% 150% at 80% 12%, #2e1e0f 0%, var(--night) 52%, var(--night-2) 100%); border-radius: 0 0 46px 46px; color: var(--starlight); }
+.hero-cosmic::before { content: ""; position: absolute; inset: 0; opacity: .55; pointer-events: none; background-image:
+    radial-gradient(1.5px 1.5px at 12% 22%, rgba(255,255,255,.55), transparent 60%),
+    radial-gradient(1.5px 1.5px at 82% 15%, rgba(255,255,255,.4), transparent 60%),
+    radial-gradient(1px 1px at 60% 72%, rgba(255,255,255,.35), transparent 60%),
+    radial-gradient(1px 1px at 28% 85%, rgba(255,255,255,.3), transparent 60%),
+    radial-gradient(1.5px 1.5px at 92% 55%, rgba(255,255,255,.35), transparent 60%),
+    radial-gradient(1px 1px at 46% 12%, rgba(255,255,255,.3), transparent 60%); }
+.hero-cosmic .hero { position: relative; z-index: 1; }
+.hero-cosmic .eyebrow { color: var(--copper-pale); }
+.hero-cosmic .eyebrow span { background: var(--copper-pale); }
+.hero-cosmic h1 { color: var(--starlight); }
+.hero-cosmic .hero-lead { color: rgba(246,234,215,.74); }
+.hero-cosmic .hero-proof strong { color: var(--starlight); }
+.hero-cosmic .hero-proof small { color: rgba(246,234,215,.58); }
+.hero-cosmic .avatar-stack span { border-color: var(--night); }
+.hero-cosmic .button--ghost { color: var(--starlight); border-color: rgba(246,234,215,.24); }
+.hero-cosmic .button--ghost:hover { background: rgba(246,234,215,.08); border-color: rgba(246,234,215,.4); box-shadow: none; }
+
+/* 3D zodiac wheel — the homepage's signature moment */
+.zodiac-scene { width: calc(100% + 40px); height: 590px; position: relative; display: flex; align-items: center; justify-content: center; }
+.zodiac-scene__canvas { width: 100% !important; height: 100% !important; }
+.zodiac-scene__glyph { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(23,16,9,.6); border: 1px solid rgba(246,234,215,.3); color: var(--starlight); font-size: 15px; backdrop-filter: blur(3px); cursor: pointer; transition: background .2s ease, transform .2s ease, border-color .2s ease; }
+.zodiac-scene__glyph:hover { background: rgba(201,130,47,.4); border-color: rgba(246,234,215,.55); transform: scale(1.12); }
+.zodiac-scene__glyph:focus-visible { outline: 2px solid var(--copper-pale); outline-offset: 2px; }
+.zodiac-scene__static { position: relative; width: 300px; height: 300px; }
+.zodiac-scene__static-sun { position: absolute; top: 50%; left: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f3c98a, #c9822f 65%, #8a5623); box-shadow: 0 0 40px 10px rgba(217,140,84,.45); }
+.zodiac-scene__static-mark { position: absolute; top: 50%; left: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 1px solid rgba(246,234,215,.28); border-radius: 50%; background: rgba(23,16,9,.55); color: var(--starlight); font-size: 16px; cursor: pointer; transition: background .2s ease; }
+.zodiac-scene__static-mark:hover { background: rgba(201,130,47,.35); }
+.zodiac-scene__static-mark em { font-style: normal; font-size: 8px; letter-spacing: .05em; text-transform: uppercase; opacity: .75; }
+@media (max-width: 900px) {
+  .zodiac-scene { width: 100%; height: 420px; }
+}
+
+/* pointer-tilt card wrapper (used for category tiles, senior spotlight cards) */
+.tilt-card { display: flex; height: 100%; }
+.tilt-card > a, .tilt-card > article { flex: 1; }
 .floating-note small { color: var(--muted); font-size:12px; }
 .trust-strip { border-block: 1px solid var(--line); background: var(--paper); }
 .trust-grid { min-height: 115px; display: grid; grid-template-columns: repeat(4,1fr); align-items: center; }

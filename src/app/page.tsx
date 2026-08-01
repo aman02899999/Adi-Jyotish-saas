@@ -30,6 +30,9 @@ import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnl
 import { getPublishedServices } from "@/lib/services";
 import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
+import { HeroZodiacScene } from "@/components/hero-zodiac-scene";
+import { TiltCard } from "@/components/tilt-card";
+import { StatCounter } from "@/components/stat-counter";
 
 export const dynamic = "force-dynamic";
 
@@ -80,45 +83,38 @@ export default async function HomePage() {
       }} />
       <SiteHeader />
 
-      <section className="hero shell">
-        <div className="hero-copy reveal">
-          <p className="eyebrow"><span /> Ancient clarity, beautifully modern</p>
-          <h1>Your stars.<br /><em>Your story.</em></h1>
-          <p className="hero-lead">
-            Authentic Vedic astrology translated into thoughtful, personal guidance for the life you are living now.
-          </p>
-          <div className="hero-actions">
-            <Link href="/dashboard" className="button">Explore your chart <ArrowRight size={17} /></Link>
-            <Link href="#method" className="button button--ghost">How it works</Link>
-          </div>
-          <div className="hero-proof">
-            <div className="avatar-stack" aria-hidden="true">
-              {liveExperts.slice(0, 3).map((expert) => <span key={expert.id}>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>)}
+      <section className="hero-cosmic">
+        <div className="hero shell">
+          <div className="hero-copy reveal">
+            <p className="eyebrow"><span /> Ancient clarity, beautifully modern</p>
+            <h1>Your stars.<br /><em>Your story.</em></h1>
+            <p className="hero-lead">
+              Authentic Vedic astrology translated into thoughtful, personal guidance for the life you are living now.
+            </p>
+            <div className="hero-actions">
+              <Link href="/dashboard" className="button">Explore your chart <ArrowRight size={17} /></Link>
+              <Link href="#method" className="button button--ghost">How it works</Link>
             </div>
-            <div><strong>{stats.averageRating || "—"}</strong> <span className="stars">★★★★★</span><small>{stats.consultationsDelivered >= 100 ? `Trusted by ${stats.consultationsDelivered}+ seekers` : "Trusted by a growing community"}</small></div>
+            <div className="hero-proof">
+              <div className="avatar-stack" aria-hidden="true">
+                {liveExperts.slice(0, 3).map((expert) => <span key={expert.id}>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>)}
+              </div>
+              <div><strong>{stats.averageRating || "—"}</strong> <span className="stars">★★★★★</span><small>{stats.consultationsDelivered >= 100 ? `Trusted by ${stats.consultationsDelivered}+ seekers` : "Trusted by a growing community"}</small></div>
+            </div>
           </div>
-        </div>
 
-        <div className="hero-art reveal reveal--delay">
-          <div className="hero-art__halo" />
-          <Image
-            src="/images/vedic-hero.jpg"
-            alt="Jyotish astrology app surrounded by Vedic symbols"
-            fill
-            priority
-            sizes="(max-width: 800px) 100vw, 58vw"
-          />
-          <div className="floating-note floating-note--top"><Sparkles size={15} /> Personal to your birth time</div>
-          <div className="floating-note floating-note--bottom"><Orbit size={17} /><span><strong>Jupiter returns</strong><small>A new cycle begins</small></span></div>
+          <div className="reveal reveal--delay">
+            <HeroZodiacScene signs={ZODIAC_SIGNS.map((entry) => ({ key: entry.key, name: entry.name, symbol: entry.symbol }))} />
+          </div>
         </div>
       </section>
 
       <section className="trust-strip" aria-label="Jyotish highlights">
         <div className="shell trust-grid">
-          <div><strong>{stats.consultationsDelivered >= 100 ? `${stats.consultationsDelivered}+` : stats.consultationsDelivered}</strong><span>Consultations delivered</span></div>
-          <div><strong>{stats.practitionerCount}</strong><span>Vedic astrologers</span></div>
-          <div><strong>{stats.averageRating || "—"}/5</strong><span>Average reading</span></div>
-          <div><strong>100%</strong><span>Private & personal</span></div>
+          <div><strong>{stats.consultationsDelivered >= 100 ? <><StatCounter value={stats.consultationsDelivered} />+</> : <StatCounter value={stats.consultationsDelivered} />}</strong><span>Consultations delivered</span></div>
+          <div><strong><StatCounter value={stats.practitionerCount} /></strong><span>Vedic astrologers</span></div>
+          <div><strong>{stats.averageRating ? <><StatCounter value={stats.averageRating} decimals={1} />/5</> : "—/5"}</strong><span>Average reading</span></div>
+          <div><strong><StatCounter value={100} suffix="%" /></strong><span>Private & personal</span></div>
         </div>
       </section>
 
@@ -128,11 +124,15 @@ export default async function HomePage() {
         </div>
         <div className="category-grid">
           {categories.map(({ icon: Icon, label, note, query }) => (
-            <Link href={`/astrologers?q=${encodeURIComponent(query)}`} className="category-tile reveal" key={label}>
-              <span><Icon size={21} strokeWidth={1.4} /></span>
-              <strong>{label}</strong>
-              <small>{note}</small>
-            </Link>
+            <div className="reveal" key={label}>
+              <TiltCard>
+                <Link href={`/astrologers?q=${encodeURIComponent(query)}`} className="category-tile">
+                  <span><Icon size={21} strokeWidth={1.4} /></span>
+                  <strong>{label}</strong>
+                  <small>{note}</small>
+                </Link>
+              </TiltCard>
+            </div>
           ))}
         </div>
       </section>
@@ -144,28 +144,32 @@ export default async function HomePage() {
           </div>
           <div className="senior-main-grid">
             {seniorMain.map((expert) => (
-              <article className="senior-main-card reveal" key={expert.id}>
-                <div className="senior-main-card__photo">
-                  {expert.photoUrl ? <img src={expert.photoUrl} alt={expert.name} /> : <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>}
-                  {expert.verified && <em><CheckCircle2 size={13} /> Verified</em>}
-                </div>
-                <div className="senior-main-card__body">
-                  <p className="senior-main-card__title">{expert.title}</p>
-                  <h3>{expert.name}</h3>
-                  <div className="senior-main-card__meta">
-                    <span>{expert.experienceYears}+ years experience</span>
-                    <span>₹{expert.chatRatePerMinute}/min</span>
-                  </div>
-                  <p className="senior-main-card__bio">{expert.bio}</p>
-                  <div className="senior-main-card__tags">
-                    {expert.specialties.split(",").slice(0, 7).map((tag) => <span key={tag}>{tag.trim()}</span>)}
-                  </div>
-                  <div className="senior-main-card__actions">
-                    <Link href={`/astrologers/${expert.slug}`} className="button">View profile <ArrowRight size={15} /></Link>
-                    <Link href={`/book?practitioner=${expert.id}`} className="button button--ghost">Book consultation</Link>
-                  </div>
-                </div>
-              </article>
+              <div className="reveal" key={expert.id}>
+                <TiltCard strength={4}>
+                  <article className="senior-main-card">
+                    <div className="senior-main-card__photo">
+                      {expert.photoUrl ? <img src={expert.photoUrl} alt={expert.name} /> : <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>}
+                      {expert.verified && <em><CheckCircle2 size={13} /> Verified</em>}
+                    </div>
+                    <div className="senior-main-card__body">
+                      <p className="senior-main-card__title">{expert.title}</p>
+                      <h3>{expert.name}</h3>
+                      <div className="senior-main-card__meta">
+                        <span>{expert.experienceYears}+ years experience</span>
+                        <span>₹{expert.chatRatePerMinute}/min</span>
+                      </div>
+                      <p className="senior-main-card__bio">{expert.bio}</p>
+                      <div className="senior-main-card__tags">
+                        {expert.specialties.split(",").slice(0, 7).map((tag) => <span key={tag}>{tag.trim()}</span>)}
+                      </div>
+                      <div className="senior-main-card__actions">
+                        <Link href={`/astrologers/${expert.slug}`} className="button">View profile <ArrowRight size={15} /></Link>
+                        <Link href={`/book?practitioner=${expert.id}`} className="button button--ghost">Book consultation</Link>
+                      </div>
+                    </div>
+                  </article>
+                </TiltCard>
+              </div>
             ))}
           </div>
           {seniorRest.length > 0 && (
