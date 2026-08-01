@@ -14,6 +14,10 @@
 #      Sentry, a custom NEXT_PUBLIC_SITE_URL, etc.) can be added the same way
 #      once you have real values — every one of them is optional and the app
 #      gracefully disables the feature when unset, matching .env.example.
+#   5. Every `secret:` entry below needs Secret Manager Secret Accessor
+#      granted to firebase-app-hosting-compute@<project>.iam.gserviceaccount.com
+#      for the *build* to even start (App Hosting resolves all secrets at
+#      the preparer step, not just the ones marked RUNTIME).
 
 runConfig:
   minInstances: 0
