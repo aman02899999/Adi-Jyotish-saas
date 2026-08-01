@@ -169,7 +169,7 @@ button { border: 0; }
 .cta > p:not(.eyebrow) { margin: 20px 0 25px; color: #efd0be; font:15px/1.6 var(--sans); }
 .footer { min-height: 170px; display: grid; grid-template-columns: 1.2fr 1fr 1fr auto; align-items: center; gap: 20px 35px; padding-block: 40px; border-top: 1px solid var(--line); }
 .footer > p { color: var(--muted); font-size:13px; line-height: 1.6; }
-.footer > div { display:flex; gap:20px; font-size:13px; }
+.footer > div { display:flex; flex-wrap:wrap; row-gap:10px; column-gap:20px; font-size:13px; }
 .footer > div a:hover { color: var(--copper); }
 .footer > small { color: var(--faint); font-size:13px; }
 .footer__legal { grid-column: 1 / -1; display:flex; flex-wrap:wrap; align-items:center; gap: 8px 20px; margin-top: 6px; padding-top: 20px; border-top: 1px solid var(--line); font-size:12px; }
