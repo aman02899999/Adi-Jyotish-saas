@@ -205,24 +205,47 @@ export async function getPractitionerPayouts(practitionerId: string): Promise<Pr
 
 export async function requestPayout(practitionerId: string, amount: number, notes?: string): Promise<PractitionerPayout> {
   if (!Number.isInteger(amount) || amount < 100) throw new PayoutError("Enter an amount of at least ₹100.");
-  const stats = await getPractitionerStats(practitionerId);
-  if (amount > stats.availableBalance) throw new PayoutError(`You can request up to ₹${stats.availableBalance} right now.`);
+
+  // totalEarned only grows via paid bookings, not this action, so it's safe to read outside the
+  // transaction — but paidOut/pendingOut come from the payouts collection this function itself
+  // writes to, so that read-check-write needs to be atomic or two concurrent requests (double
+  // click, two tabs) could both pass the balance check against the same stale total and together
+  // request more than the practitioner has actually earned.
+  const bookingsSnap = await db.collection("bookings").where("practitionerId", "==", practitionerId).get();
+  let totalEarned = 0;
+  for (const doc of bookingsSnap.docs) {
+    const row = bookingFromDoc(doc);
+    if (row.paymentStatus === "paid") totalEarned += row.servicePrice;
+  }
 
   const ref = payoutsCollection().doc();
   const now = FieldValue.serverTimestamp();
-  await ref.set({
-    practitionerId,
-    amount,
-    currency: "INR",
-    status: "requested",
-    payoutMethod: "bank_transfer",
-    transactionRef: null,
-    notes: notes?.trim().slice(0, 500) || null,
-    adminNotes: null,
-    processedBy: null,
-    requestedAt: now,
-    processedAt: null,
-    updatedAt: now,
+  await db.runTransaction(async (tx) => {
+    const payoutsSnap = await tx.get(payoutsCollection().where("practitionerId", "==", practitionerId));
+    let paidOut = 0;
+    let pendingOut = 0;
+    for (const doc of payoutsSnap.docs) {
+      const data = doc.data() as { amount: number; status: string };
+      if (data.status === "paid") paidOut += data.amount;
+      else if (data.status === "requested" || data.status === "approved") pendingOut += data.amount;
+    }
+    const availableBalance = Math.max(0, totalEarned - paidOut - pendingOut);
+    if (amount > availableBalance) throw new PayoutError(`You can request up to ₹${availableBalance} right now.`);
+
+    tx.set(ref, {
+      practitionerId,
+      amount,
+      currency: "INR",
+      status: "requested",
+      payoutMethod: "bank_transfer",
+      transactionRef: null,
+      notes: notes?.trim().slice(0, 500) || null,
+      adminNotes: null,
+      processedBy: null,
+      requestedAt: now,
+      processedAt: null,
+      updatedAt: now,
+    });
   });
   return payoutFromSnap(await ref.get());
 }
