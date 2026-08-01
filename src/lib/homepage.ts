@@ -20,6 +20,11 @@ export async function getHomepageStats() {
   };
 }
 
+export async function getOnlineNowCount() {
+  const agg = await db.collection("practitioners").where("active", "==", true).where("online", "==", true).count().get();
+  return agg.data().count;
+}
+
 export async function getLivePractitioners(limit = 6) {
   const people = await getMarketplacePractitioners();
   return [...people]

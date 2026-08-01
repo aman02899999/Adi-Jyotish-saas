@@ -26,8 +26,10 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
-import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getSeniorAstrologers } from "@/lib/homepage";
+import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnlineNowCount, getSeniorAstrologers } from "@/lib/homepage";
 import { getPublishedServices } from "@/lib/services";
+import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
+import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
 
 export const dynamic = "force-dynamic";
 
@@ -41,12 +43,12 @@ const iconMap = {
 };
 
 const categories = [
-  { icon: Heart, label: "Love & Relationships", note: "Understand the heart's timing" },
-  { icon: Users, label: "Marriage", note: "Compatibility & muhurat" },
-  { icon: BriefcaseBusiness, label: "Career & Business", note: "Growth cycles & timing" },
-  { icon: HeartPulse, label: "Health & Wellness", note: "Vitality through the chart" },
-  { icon: Home, label: "Family & Home", note: "Harmony & remedies" },
-  { icon: GraduationCap, label: "Education", note: "Focus & academic timing" },
+  { icon: Heart, label: "Love & Relationships", note: "Understand the heart's timing", query: "relationship" },
+  { icon: Users, label: "Marriage", note: "Compatibility & muhurat", query: "marriage" },
+  { icon: BriefcaseBusiness, label: "Career & Business", note: "Growth cycles & timing", query: "career" },
+  { icon: HeartPulse, label: "Health & Wellness", note: "Vitality through the chart", query: "health" },
+  { icon: Home, label: "Family & Home", note: "Harmony & remedies", query: "vastu" },
+  { icon: GraduationCap, label: "Education", note: "Focus & academic timing", query: "education" },
 ];
 
 const freeTools = [
@@ -60,8 +62,8 @@ const freeTools = [
 ];
 
 export default async function HomePage() {
-  const [services, stats, liveExperts, testimonials, seniorAstrologers] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers()]);
-  const onlineCount = liveExperts.filter((expert) => expert.online).length;
+  const defaultSign = ZODIAC_SIGNS[0];
+  const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null)]);
   const seniorMain = seniorAstrologers.slice(0, 2);
   const seniorRest = seniorAstrologers.slice(2);
 
@@ -125,8 +127,8 @@ export default async function HomePage() {
           <div><p className="eyebrow"><span /> Browse by concern</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>What&apos;s on your<br /><em>mind today?</em></h2></div>
         </div>
         <div className="category-grid">
-          {categories.map(({ icon: Icon, label, note }) => (
-            <Link href="/astrologers" className="category-tile reveal" key={label}>
+          {categories.map(({ icon: Icon, label, note, query }) => (
+            <Link href={`/astrologers?q=${encodeURIComponent(query)}`} className="category-tile reveal" key={label}>
               <span><Icon size={21} strokeWidth={1.4} /></span>
               <strong>{label}</strong>
               <small>{note}</small>
@@ -274,6 +276,19 @@ export default async function HomePage() {
             </Link>
           ))}
         </div>
+      </section>
+
+      <section className="horoscope-strip shell" aria-label="Your daily horoscope">
+        <div className="section-heading reveal">
+          <div><p className="eyebrow"><span /> Your daily horoscope</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Pick your sign,<br /><em>see today&rsquo;s sky.</em></h2></div>
+          <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>
+        </div>
+        <HomeHoroscopeTeaser
+          signs={ZODIAC_SIGNS.map((entry) => ({ key: entry.key, name: entry.name, symbol: entry.symbol }))}
+          initialSign={defaultSign.key}
+          initialContent={defaultHoroscope?.content ?? "Today's reading is not available right now. Please check back shortly."}
+          initialDateLabel={new Date(`${defaultHoroscope?.date ?? new Date().toISOString().slice(0, 10)}T00:00:00`).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
+        />
       </section>
 
       <section className="method-section" id="method">
