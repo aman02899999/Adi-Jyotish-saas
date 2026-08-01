@@ -3,6 +3,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { publishChatEvent } from "@/lib/ably";
+import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
 
 const MAX_HOLD_MINUTES = 30;
 const MIN_HOLD_MINUTES = 1;
@@ -83,36 +84,11 @@ function elapsedMinutesSince(date: Date) {
 }
 
 // --- Wallet integration -----------------------------------------------------------------------
-// TODO(billing-wallet-migration): wallets/{memberId} and its holds subcollection are owned by the
-// billing/wallet migration (src/lib/wallet.ts, still Postgres-backed at the time of this pass).
-// The helpers below read/write that collection directly using the walletHolds field shape
-// (amount, status) per the migration brief, without touching wallet balance debit/credit
-// invariants (ledger entries, locking) — those stay wallet.ts's responsibility. Once wallet.ts
-// moves to Firestore, this inline logic should be replaced with its shared helpers.
-
-async function readWalletBalance(memberId: string): Promise<{ balance: number; currency: string }> {
-  const snap = await db.collection("wallets").doc(memberId).get();
-  const data = snap.data() as { balance?: number; currency?: string } | undefined;
-  return { balance: data?.balance ?? 0, currency: data?.currency ?? "INR" };
-}
-
-async function createWalletHold(memberId: string, amount: number) {
-  const ref = db.collection("wallets").doc(memberId).collection("holds").doc();
-  await ref.set({ amount, status: "active", createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-  return { id: ref.id, amount, status: "active" as const };
-}
-
-async function getWalletHold(memberId: string, holdId: string) {
-  const snap = await db.collection("wallets").doc(memberId).collection("holds").doc(holdId).get();
-  if (!snap.exists) return null;
-  const data = snap.data() as { amount: number; status: string };
-  return { id: snap.id, amount: data.amount, status: data.status };
-}
-
-async function captureWalletHold(memberId: string, holdId: string, capturedAmount: number) {
-  await db.collection("wallets").doc(memberId).collection("holds").doc(holdId)
-    .set({ status: "captured", capturedAmount, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-}
+// Delegates the actual balance debit/credit to wallet.ts's transactional hold functions, which
+// keep the wallets/{memberId}.balance field, the ledger entries, and the hold docs consistent.
+// An earlier version of this file reimplemented holds locally (writing hold docs directly under
+// wallets/{memberId}/holds without ever touching .balance) — that silently never charged members
+// for instant chat at all. Route everything through wallet.ts instead of duplicating it.
 
 // TODO(billing-subscriptions-migration): member session discounts (src/lib/subscriptions.ts) are
 // still Postgres-backed and keyed by numeric member ids, incompatible with the Firebase UID
@@ -143,7 +119,7 @@ export async function startChatSession(memberId: string, practitionerId: string)
   const existing = await getMemberActiveSession(memberId);
   if (existing) throw new ChatSessionConflictError("You already have an active chat. Finish it before starting another.");
 
-  const wallet = await readWalletBalance(memberId);
+  const wallet = await getOrCreateWallet(memberId);
   const discountPercent = await getMemberDiscountPercent(memberId);
   const rate = Math.max(1, applyDiscount(practitioner.chatRatePerMinute, discountPercent));
   const affordableMinutes = Math.floor(wallet.balance / rate);
@@ -152,22 +128,35 @@ export async function startChatSession(memberId: string, practitionerId: string)
   }
 
   const holdMinutes = Math.min(MAX_HOLD_MINUTES, affordableMinutes);
-  const hold = await createWalletHold(memberId, rate * holdMinutes);
+  let hold;
+  try {
+    hold = await createWalletHold({ memberId, amount: rate * holdMinutes, referenceType: "chat_session" });
+  } catch (error) {
+    if (error instanceof WalletInsufficientBalanceError) throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${rate} to your wallet to start this chat.`);
+    throw error;
+  }
 
   const now = FieldValue.serverTimestamp();
   const sessionRef = sessionsCollection.doc();
-  await sessionRef.set({
-    memberId,
-    practitionerId,
-    walletHoldId: hold.id,
-    ratePerMinute: rate,
-    status: "active",
-    capturedAmount: null,
-    startedAt: now,
-    endedAt: null,
-    createdAt: now,
-    updatedAt: now,
-  });
+  try {
+    await sessionRef.set({
+      memberId,
+      practitionerId,
+      walletHoldId: hold.id,
+      ratePerMinute: rate,
+      status: "active",
+      capturedAmount: null,
+      startedAt: now,
+      endedAt: null,
+      createdAt: now,
+      updatedAt: now,
+    });
+  } catch (error) {
+    // The hold already reserved real wallet balance — release it back rather than leaving funds
+    // stuck against a session that was never created.
+    await releaseWalletHold({ memberId, holdId: hold.id, referenceType: "chat_session" }).catch(() => {});
+    throw error;
+  }
 
   await messagesCollection(sessionRef.id).add({
     senderType: "system",
@@ -216,7 +205,7 @@ export async function endChatSession(sessionId: string, endedBy: "member" | "pra
   const hold = await getWalletHold(session.memberId, session.walletHoldId);
   const elapsed = elapsedMinutesSince(session.startedAt);
   const capturedAmount = Math.min(elapsed * session.ratePerMinute, hold?.amount ?? elapsed * session.ratePerMinute);
-  await captureWalletHold(session.memberId, session.walletHoldId, capturedAmount);
+  await captureWalletHold({ memberId: session.memberId, holdId: session.walletHoldId, capturedAmount, referenceType: "chat_session" });
 
   await sessionsCollection.doc(sessionId).update({ status: "ended", endedAt: FieldValue.serverTimestamp(), capturedAmount, updatedAt: FieldValue.serverTimestamp() });
   await messagesCollection(sessionId).add({ senderType: "system", senderName: "Jyotish Studio", body: "Chat ended. Thank you for connecting with Jyotish Studio.", createdAt: FieldValue.serverTimestamp() });
