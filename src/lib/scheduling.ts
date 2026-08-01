@@ -194,7 +194,19 @@ export async function getPractitionerDirectory(activeOnly = false): Promise<Prac
     docs.map(async (doc) => {
       const person = practitionerFromDoc(doc);
       const [rulesSnap, timeOffSnap] = await Promise.all([
-        doc.ref.collection("availabilityRules").orderBy("weekday", "asc").orderBy("startTime", "asc").get(),
+        // Falls back to unsorted (then sorts in JS) if the (weekday, startTime) composite index
+        // isn't built yet — a practitioner's own weekly schedule editor still needs correct
+        // ordering, but the public directory just needs *some* rules, so this degrades safely.
+        (async () => {
+          try {
+            return await doc.ref.collection("availabilityRules").orderBy("weekday", "asc").orderBy("startTime", "asc").get();
+          } catch (error) {
+            if (!isIndexBuildingError(error)) throw error;
+            const snap = await doc.ref.collection("availabilityRules").get();
+            snap.docs.sort((a, b) => (a.data().weekday as number) - (b.data().weekday as number) || (a.data().startTime as string).localeCompare(b.data().startTime as string));
+            return snap;
+          }
+        })(),
         doc.ref.collection("timeOff").where("endsAt", ">=", now).orderBy("endsAt", "asc").get(),
       ]);
       return {
