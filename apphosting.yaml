@@ -69,3 +69,11 @@ env:
     availability:
       - BUILD
       - RUNTIME
+
+  # ── Ask Live / Gemini (the /ask free-form reading + Kundli-summary text) ──
+  # Get a key from https://aistudio.google.com/apikey, then:
+  #   firebase apphosting:secrets:set GEMINI_API_KEY --project=ask-astrologer-2c5b5
+  - variable: GEMINI_API_KEY
+    secret: GEMINI_API_KEY
+    availability:
+      - RUNTIME
