@@ -28,7 +28,7 @@ runConfig:
   concurrency: 80
   cpu: 1
   memoryMiB: 512
-# (retrigger: FIREBASE_SERVICE_ACCOUNT_KEY secret created + access granted)
+# (retrigger: FIREBASE_SERVICE_ACCOUNT_KEY secret content fixed, version 2)
 
 env:
   # ── Firebase Google sign-in ───────────────────────────────────────
