@@ -40,3 +40,24 @@ if (process.env.NODE_ENV !== "production") {
 
 export const storage = getStorage(getFirebaseAdminApp());
 export const bucket = () => storage.bucket();
+
+/** gRPC FAILED_PRECONDITION: thrown for a missing composite index, and (transiently) while a
+ * just-deployed one is still building. Distinguishes that from real query bugs. */
+export function isIndexBuildingError(error: unknown): boolean {
+  return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === 9;
+}
+
+/** Runs a Firestore query that depends on a composite index and falls back instead of crashing
+ * the whole page if that index doesn't exist yet or is still building — logs loudly so it's
+ * still visible in Cloud Run logs, but degrades one section instead of the entire request. */
+export async function withIndexFallback<T>(query: () => Promise<T>, fallback: T): Promise<T> {
+  try {
+    return await query();
+  } catch (error) {
+    if (isIndexBuildingError(error)) {
+      console.error("Firestore composite index unavailable, using fallback:", error);
+      return fallback;
+    }
+    throw error;
+  }
+}

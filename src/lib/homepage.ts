@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db } from "@/lib/firestore";
+import { db, withIndexFallback } from "@/lib/firestore";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 
 export async function getHomepageStats() {
@@ -35,12 +35,18 @@ export async function getSeniorAstrologers(limit = 4) {
 }
 
 export async function getFeaturedTestimonials(limit = 3) {
-  const snap = await db.collection("practitionerReviews")
-    .where("status", "==", "published")
-    .orderBy("rating", "desc")
-    .orderBy("createdAt", "desc")
-    .limit(limit * 4)
-    .get();
+  // Falls back to an empty list (not a page crash) if the (status, rating, createdAt) composite
+  // index isn't built yet — testimonials are non-critical, unlike the directory/stats above.
+  const snap = await withIndexFallback(
+    () =>
+      db.collection("practitionerReviews")
+        .where("status", "==", "published")
+        .orderBy("rating", "desc")
+        .orderBy("createdAt", "desc")
+        .limit(limit * 4)
+        .get(),
+    { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
+  );
   return snap.docs
     .map((doc) => doc.data() as { reviewerName: string; body: string; rating: number })
     .filter((review) => review.body.length > 40)

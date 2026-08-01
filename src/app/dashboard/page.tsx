@@ -10,7 +10,7 @@ import {
   SunMedium,
 } from "lucide-react";
 import { MemberAppShell } from "@/components/member-app-shell";
-import { db } from "@/lib/firestore";
+import { db, withIndexFallback } from "@/lib/firestore";
 import { bookingFromDoc } from "@/app/api/bookings/route";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPublishedServices } from "@/lib/services";
@@ -22,7 +22,12 @@ export default async function DashboardPage() {
   if (!member) return null;
   const [services, upcomingSnap] = await Promise.all([
     getPublishedServices(),
-    db.collection("bookings").where("clientEmail", "==", member.email).where("scheduledAt", ">", new Date()).orderBy("scheduledAt", "asc").limit(1).get(),
+    // Falls back to no "next session" card (not a page crash) if the (clientEmail, scheduledAt)
+    // composite index isn't built yet.
+    withIndexFallback(
+      () => db.collection("bookings").where("clientEmail", "==", member.email).where("scheduledAt", ">", new Date()).orderBy("scheduledAt", "asc").limit(1).get(),
+      { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
+    ),
   ]);
   const firstName = member.name.split(" ")[0];
   const location = member.birthPlace?.split(",")[0] || "Your location";

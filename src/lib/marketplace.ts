@@ -1,6 +1,6 @@
 import "server-only";
 
-import { db } from "@/lib/firestore";
+import { db, withIndexFallback } from "@/lib/firestore";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 
 export type PractitionerReview = {
@@ -45,9 +45,14 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
 };
 
 export async function getMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
+  // Reviews fall back to empty (practitioners still list, just without ratings) if the
+  // (status, createdAt) composite index isn't built yet.
   const [directory, reviewsSnap] = await Promise.all([
     getPractitionerDirectory(true),
-    db.collection("practitionerReviews").where("status", "==", "published").orderBy("createdAt", "desc").get(),
+    withIndexFallback(
+      () => db.collection("practitionerReviews").where("status", "==", "published").orderBy("createdAt", "desc").get(),
+      { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
+    ),
   ]);
   const reviews = reviewsSnap.docs.map(reviewFromDoc);
   return directory.map((person) => {

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
+import { db, isIndexBuildingError } from "@/lib/firestore";
 import { getStudioSettings } from "@/lib/studio-settings";
 
 export type Practitioner = {
@@ -177,12 +177,21 @@ export async function getPractitionerDirectory(activeOnly = false): Promise<Prac
   await seedPractitioners();
   const collection = db.collection("practitioners");
   const query = activeOnly ? collection.where("active", "==", true) : collection;
-  const snap = await query.orderBy("name", "asc").get();
-  if (snap.empty) return [];
+  // Falls back to an unsorted read (then sorts in JS) if the (active, name) composite index
+  // isn't built yet, so a fresh deploy shows practitioners out of order instead of a 500.
+  let docs: FirebaseFirestore.QueryDocumentSnapshot[];
+  try {
+    docs = (await query.orderBy("name", "asc").get()).docs;
+  } catch (error) {
+    if (!isIndexBuildingError(error)) throw error;
+    console.error("Firestore composite index unavailable for practitioners directory, sorting in JS:", error);
+    docs = (await query.get()).docs.sort((a, b) => (a.data().name as string).localeCompare(b.data().name as string));
+  }
+  if (!docs.length) return [];
 
   const now = new Date();
   return Promise.all(
-    snap.docs.map(async (doc) => {
+    docs.map(async (doc) => {
       const person = practitionerFromDoc(doc);
       const [rulesSnap, timeOffSnap] = await Promise.all([
         doc.ref.collection("availabilityRules").orderBy("weekday", "asc").orderBy("startTime", "asc").get(),
