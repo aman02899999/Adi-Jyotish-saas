@@ -63,8 +63,7 @@ button { border: 0; }
 .header-cart:hover { background: #f4ece1; }
 .header-cart__badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px; color: #fff; background: var(--copper); font-size:12px; font-weight: 700; }
 .mobile-menu { display: none; position: relative; margin-left: 10px; }
-.mobile-menu summary { list-style: none; width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; }
-.mobile-menu summary::-webkit-details-marker { display: none; }
+.mobile-menu button { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
 .mobile-menu nav { position: absolute; right: 0; top: 52px; width: 210px; padding: 12px; display: grid; gap: 2px; border: 1px solid var(--line); border-radius: 16px; background: rgba(249,246,240,.98); box-shadow: var(--shadow); }
 .mobile-menu nav a { padding: 12px 14px; border-radius: 10px; font-size:15px; }
 .mobile-menu nav a:hover { background: var(--paper-deep); }
