@@ -194,7 +194,7 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
   const answer = reading.readingType === "kundli"
     ? renderKundliReport(buildKundliChart({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace }))
     : await (async () => {
-        if (!isGeminiConfigured()) throw new Error("AI readings are not configured yet. Please try again shortly.");
+        if (!isGeminiConfigured()) throw new Error("Live readings are not configured yet. Please try again shortly.");
         return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
       })();
 

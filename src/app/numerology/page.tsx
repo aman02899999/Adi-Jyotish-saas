@@ -7,7 +7,7 @@ import { SiteFooter } from "@/components/site-footer";
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Numerology Reading · Free Life Path & Destiny Numbers",
-  description: "Discover your Life Path and Destiny numbers with a free AI-guided numerology reading from our Jyotish guide, Shree Santram Shashtri.",
+  description: "Discover your Life Path and Destiny numbers with a free Live-guided numerology reading from our Jyotish guide, Shree Santram Shashtri.",
   openGraph: { title: "Numerology Reading · Free Life Path & Destiny Numbers", description: "Your name and birth date, decoded through numerology.", url: "/numerology" },
 };
 
@@ -31,7 +31,7 @@ export default function NumerologyPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Hash size={26} /></div>
             <strong>Shree Santram Shashtri</strong>
-            <span>AI Jyotish Guide · Free tool</span>
+            <span>Live Jyotish Guide · Free tool</span>
             <ul>
               <li><CheckCircle2 size={13} /> Life Path number, calculated from your birth date</li>
               <li><CheckCircle2 size={13} /> Destiny number, calculated from your name</li>

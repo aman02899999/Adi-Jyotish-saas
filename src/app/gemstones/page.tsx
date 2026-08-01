@@ -108,8 +108,8 @@ export default async function GemstonesLandingPage() {
         <div className="cta-zodiac" aria-hidden="true">✦</div>
         <p className="eyebrow"><span /> Find your stone</p>
         <h2>Wear what<br /><em>the sky recommends.</em></h2>
-        <p>Share your birth date and let our AI guide point you to your stone from the full collection.</p>
-        <Link href="/gemstones/recommend" className="button button--light">Get an AI recommendation <Sparkles size={16} /></Link>
+        <p>Share your birth date and let our Live guide point you to your stone from the full collection.</p>
+        <Link href="/gemstones/recommend" className="button button--light">Get a Live recommendation <Sparkles size={16} /></Link>
       </section>
     <SiteFooter />
     </main>

@@ -7,9 +7,9 @@ import { ZODIAC_SIGNS, getDailyHoroscope, isZodiacSign, todayCivilDate, type Zod
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Today's Horoscope · AI Daily Reading",
-  description: "A fresh, AI-generated Vedic horoscope for every zodiac sign, updated daily by our Jyotish guide Shree Santram Shashtri.",
-  openGraph: { title: "Today's Horoscope · AI Daily Reading", description: "A fresh Vedic horoscope for every sign, generated daily.", url: "/horoscope" },
+  title: "Today's Horoscope · Live Daily Reading",
+  description: "A fresh, Live-generated Vedic horoscope for every zodiac sign, updated daily by our Jyotish guide Shree Santram Shashtri.",
+  openGraph: { title: "Today's Horoscope · Live Daily Reading", description: "A fresh Vedic horoscope for every sign, generated daily.", url: "/horoscope" },
 };
 
 export default async function HoroscopePage({ searchParams }: { searchParams: Promise<{ sign?: string }> }) {
@@ -24,7 +24,7 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
       <SiteHeader />
 
       <section className="zodiac-hero shell">
-        <p className="eyebrow"><span /> AI daily horoscope</p>
+        <p className="eyebrow"><span /> Live daily horoscope</p>
         <h1>Today&rsquo;s sky,<br /><em>sign by sign.</em></h1>
         <p className="zodiac-hero__lead">Shree Santram Shashtri reads the day&rsquo;s planetary transits for every sign — choose yours below.</p>
       </section>

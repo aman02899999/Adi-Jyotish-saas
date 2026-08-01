@@ -7,9 +7,9 @@ import { getCurrentMember } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "AI Gemstone Recommendation · Find Your Stone",
-  description: "Share your name and birth date to get an AI-guided Vedic gemstone recommendation from our Jyotish guide, Shree Santram Shashtri — free, in seconds.",
-  openGraph: { title: "AI Gemstone Recommendation · Find Your Stone", description: "Free AI-guided gemstone recommendation based on your zodiac sign.", url: "/gemstones/recommend" },
+  title: "Live Gemstone Recommendation · Find Your Stone",
+  description: "Share your name and birth date to get a Live-guided Vedic gemstone recommendation from our Jyotish guide, Shree Santram Shashtri — free, in seconds.",
+  openGraph: { title: "Live Gemstone Recommendation · Find Your Stone", description: "Free Live-guided gemstone recommendation based on your zodiac sign.", url: "/gemstones/recommend" },
 };
 
 export default async function GemstoneRecommendPage() {
@@ -21,7 +21,7 @@ export default async function GemstoneRecommendPage() {
 
       <section className="ask-hero shell">
         <div className="ask-hero__copy reveal">
-          <p className="eyebrow"><span /> AI gemstone recommendation</p>
+          <p className="eyebrow"><span /> Live gemstone recommendation</p>
           <h1>Find the stone<br /><em>meant for you.</em></h1>
           <p className="ask-hero__lead">Share your name and birth date. Shree Santram Shashtri will read your sign&rsquo;s ruling planet and point you to the gemstones in our collection that classically suit it.</p>
           <ul className="ask-hero__points">
@@ -34,7 +34,7 @@ export default async function GemstoneRecommendPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Gem size={26} /></div>
             <strong>Shree Santram Shashtri</strong>
-            <span>AI Jyotish Guide · Free tool</span>
+            <span>Live Jyotish Guide · Free tool</span>
             <ul>
               <li><CheckCircle2 size={13} /> Grounded in classical planetary rulership</li>
               <li><CheckCircle2 size={13} /> Only recommends stones we actually stock</li>

@@ -33,8 +33,8 @@ export default async function RefundPolicyPage() {
         <h2>3. Memberships</h2>
         <p>You can cancel a membership at any time from your dashboard — this stops future renewals immediately. We do not provide partial or prorated refunds for the remainder of a billing cycle already paid for, but you keep full membership benefits until the end of that paid period. If you were charged in error (for example, a duplicate renewal), contact <a href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a> for a review.</p>
 
-        <h2>4. AI readings &amp; digital reports</h2>
-        <p>AI-generated readings, Kundli reports, Panchang, numerology, and matching results are delivered instantly and are non-refundable once generated, since the content has already been produced and delivered. If a reading fails to generate due to a technical error on our side, it is automatically retried or refunded — you will not be charged for a failed generation.</p>
+        <h2>4. Live readings &amp; digital reports</h2>
+        <p>Live-generated readings, Kundli reports, Panchang, numerology, and matching results are delivered instantly and are non-refundable once generated, since the content has already been produced and delivered. If a reading fails to generate due to a technical error on our side, it is automatically retried or refunded — you will not be charged for a failed generation.</p>
 
         <h2>5. Gemstone orders</h2>
         <p>Unused, undamaged gemstones and accessories can be returned within 7 days of delivery for a refund to your original payment method, minus any return shipping cost. To start a return, contact <a href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a> with your order number. Because natural gemstones vary slightly from listing photos in tone and inclusion, minor natural variation is not grounds for return — visible damage or an incorrect item is. Items that have been custom-energized or ritually prepared at your request cannot be returned once that process has begun.</p>

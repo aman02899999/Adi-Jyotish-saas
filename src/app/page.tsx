@@ -53,8 +53,8 @@ const categories = [
 
 const freeTools = [
   { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by your sign", href: "/horoscope" },
-  { icon: MessageCircle, label: "Ask AI a Question", note: "Instant answer, one question", href: "/ask" },
-  { icon: Gem, label: "Gemstone Match", note: "Free AI recommendation", href: "/gemstones/recommend" },
+  { icon: MessageCircle, label: "Ask Live a Question", note: "Instant answer, one question", href: "/ask" },
+  { icon: Gem, label: "Gemstone Match", note: "Free Live recommendation", href: "/gemstones/recommend" },
   { icon: HeartHandshake, label: "Kundli Matching", note: "Free compatibility reading", href: "/kundli-matching" },
   { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat", href: "/panchang" },
   { icon: Hash, label: "Numerology", note: "Life Path & Destiny numbers", href: "/numerology" },
@@ -227,7 +227,7 @@ export default async function HomePage() {
         <div className="promo-banner promo-banner--dark reveal">
           <div className="promo-banner__copy">
             <strong>Or ask Shree Santram Shashtri instantly.</strong>
-            <span>Our AI Jyotish guide answers one focused question in under a minute. Your first reading is free.</span>
+            <span>Our Live Jyotish guide answers one focused question in under a minute. Your first reading is free.</span>
           </div>
           <Link href="/ask" className="button button--light">Ask now <ArrowRight size={16} /></Link>
         </div>

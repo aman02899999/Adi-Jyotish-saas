@@ -10,9 +10,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Ask Shree Santram Shashtri · Instant AI Reading",
-  description: "Get an instant, personal Vedic astrology answer from our AI Jyotish guide, Shree Santram Shashtri — pay once, receive your reading in moments.",
-  openGraph: { title: "Ask Shree Santram Shashtri · Instant AI Reading", description: "Pay once, ask your question, receive an instant personal Jyotish reading.", url: "/ask" },
+  title: "Ask Shree Santram Shashtri · Instant Live Reading",
+  description: "Get an instant, personal Vedic astrology answer from our Live Jyotish guide, Shree Santram Shashtri — pay once, receive your reading in moments.",
+  openGraph: { title: "Ask Shree Santram Shashtri · Instant Live Reading", description: "Pay once, ask your question, receive an instant personal Jyotish reading.", url: "/ask" },
 };
 
 export default async function AskPage() {
@@ -25,9 +25,9 @@ export default async function AskPage() {
 
       <section className="ask-hero shell">
         <div className="ask-hero__copy reveal">
-          <p className="eyebrow"><span /> Instant AI reading</p>
+          <p className="eyebrow"><span /> Instant Live reading</p>
           <h1>Ask<br /><em>Shree Santram Shashtri.</em></h1>
-          <p className="ask-hero__lead">Share your birth details and your question. Our AI Jyotish guide studies your chart and answers in moments — no waiting for an appointment.</p>
+          <p className="ask-hero__lead">Share your birth details and your question. Our Live Jyotish guide studies your chart and answers in moments — no waiting for an appointment.</p>
           <ul className="ask-hero__points">
             <li><Sparkles size={15} /> Personal answer, generated just for you</li>
             <li><Clock3 size={15} /> Ready in under a minute after payment</li>
@@ -38,7 +38,7 @@ export default async function AskPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Sparkles size={26} /></div>
             <strong>Shree Santram Shashtri</strong>
-            <span>AI Jyotish Guide · Available instantly</span>
+            <span>Live Jyotish Guide · Available instantly</span>
             <div className="ask-persona-price">{isFreeEligible ? "Free" : `${AI_READING_CURRENCY} ${AI_READING_PRICE}`}<small>{isFreeEligible ? "your first reading" : "per reading"}</small></div>
             <ul>
               <li><CheckCircle2 size={13} /> One focused question, one clear answer</li>

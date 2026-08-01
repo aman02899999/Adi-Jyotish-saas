@@ -82,7 +82,7 @@ export default async function DashboardPage() {
 
         <article className="glass-card insight-card" id="insights">
           <div className="insight-icon"><Sparkles size={21} /></div>
-          <div><p>Personal intelligence</p><h2>AI Insight</h2></div>
+          <div><p>Personal intelligence</p><h2>Live Insight</h2></div>
           <p>The shift you feel is not a disruption—it is an invitation to be more visible. Choose one brave, specific action today.</p>
           <Link href="#services-list">Read full insight <ArrowRight size={14} /></Link>
           <span className="insight-star">✦</span>

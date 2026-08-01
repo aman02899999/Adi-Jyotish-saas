@@ -42,7 +42,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
 
   return (
     <>
-      <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>AI Answers</h1><span>Every question and Kundli report you&apos;ve requested from our AI Jyotish guide.</span></div><div className="hero-actions"><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link><Link href="/kundli" className="button button--ghost button--small">Get full Kundli report</Link></div></div>
+      <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>Live Answers</h1><span>Every question and Kundli report you&apos;ve requested from our Live Jyotish guide.</span></div><div className="hero-actions"><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link><Link href="/kundli" className="button button--ghost button--small">Get full Kundli report</Link></div></div>
       <section className="member-billing-summary">
         <article><span><Sparkles size={19} /></span><div><small>Readings answered</small><strong>{answered} of {readings.length}</strong></div></article>
       </section>
@@ -67,7 +67,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
               </div>
             </article>
           ))}
-          {!readings.length && <div className="consultation-empty"><Sparkles size={26} /><h3>No AI readings yet</h3><p>Ask your first question to receive an instant, personal answer.</p><Link href="/ask" className="button button--small">Ask now</Link></div>}
+          {!readings.length && <div className="consultation-empty"><Sparkles size={26} /><h3>No Live readings yet</h3><p>Ask your first question to receive an instant, personal answer.</p><Link href="/ask" className="button button--small">Ask now</Link></div>}
         </div>
       </section>
       {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
