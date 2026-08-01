@@ -137,44 +137,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      {liveExperts.length > 0 && (
-        <section className="live-strip shell" aria-label="Astrologers online now">
-          <div className="live-strip__head reveal">
-            <div>
-              <p className="live-pulse"><i /> {onlineCount} astrologer{onlineCount === 1 ? "" : "s"} online now</p>
-              <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>Talk to a guide<br /><em style={{ color: "var(--copper)" }}>right now.</em></h2>
-            </div>
-            <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat or call instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
-          </div>
-          <div className="live-grid">
-            {liveExperts.map((expert) => (
-              <article className="live-card reveal" key={expert.id}>
-                <div className="live-card__top">
-                  <div className="live-card__avatar">
-                    <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>
-                    <i className={`live-card__dot ${expert.online ? "" : "live-card__dot--off"}`} />
-                  </div>
-                  <div className="live-card__name">
-                    <strong>{expert.name}</strong>
-                    <span>{expert.online ? "Online now" : "Offline"}</span>
-                  </div>
-                </div>
-                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating ?? "New"}</strong><small>{expert.reviewCount} review{expert.reviewCount === 1 ? "" : "s"} · {expert.experienceYears} yrs</small></div>
-                <div className="live-card__tags"><span>{expert.specialties}</span></div>
-                <div className="live-card__foot">
-                  <div className="live-card__price"><strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong><small>Chat or call</small></div>
-                  <div className="live-card__actions">
-                    <Link href={`/astrologers/${expert.slug}`} aria-label={`Chat with ${expert.name}`}><MessageCircle size={15} /></Link>
-                    <Link href={`/astrologers/${expert.slug}`} className="primary" aria-label={`Call ${expert.name}`}><PhoneCall size={15} /></Link>
-                  </div>
-                </div>
-              </article>
-            ))}
-          </div>
-          <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
-        </section>
-      )}
-
       {seniorMain.length > 0 && (
         <section className="senior-strip shell" aria-label="Our most senior astrologers">
           <div className="section-heading reveal">
@@ -220,6 +182,44 @@ export default async function HomePage() {
               ))}
             </div>
           )}
+        </section>
+      )}
+
+      {liveExperts.length > 0 && (
+        <section className="live-strip shell" aria-label="Astrologers online now">
+          <div className="live-strip__head reveal">
+            <div>
+              <p className="live-pulse"><i /> {onlineCount} astrologer{onlineCount === 1 ? "" : "s"} online now</p>
+              <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>Talk to a guide<br /><em style={{ color: "var(--copper)" }}>right now.</em></h2>
+            </div>
+            <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat or call instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
+          </div>
+          <div className="live-grid">
+            {liveExperts.map((expert) => (
+              <article className="live-card reveal" key={expert.id}>
+                <div className="live-card__top">
+                  <div className="live-card__avatar">
+                    <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>
+                    <i className={`live-card__dot ${expert.online ? "" : "live-card__dot--off"}`} />
+                  </div>
+                  <div className="live-card__name">
+                    <strong>{expert.name}</strong>
+                    <span>{expert.online ? "Online now" : "Offline"}</span>
+                  </div>
+                </div>
+                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating ?? "New"}</strong><small>{expert.reviewCount} review{expert.reviewCount === 1 ? "" : "s"} · {expert.experienceYears} yrs</small></div>
+                <div className="live-card__tags"><span>{expert.specialties}</span></div>
+                <div className="live-card__foot">
+                  <div className="live-card__price"><strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong><small>Chat or call</small></div>
+                  <div className="live-card__actions">
+                    <Link href={`/astrologers/${expert.slug}`} aria-label={`Chat with ${expert.name}`}><MessageCircle size={15} /></Link>
+                    <Link href={`/astrologers/${expert.slug}`} className="primary" aria-label={`Call ${expert.name}`}><PhoneCall size={15} /></Link>
+                  </div>
+                </div>
+              </article>
+            ))}
+          </div>
+          <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
         </section>
       )}
 
