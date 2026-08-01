@@ -121,18 +121,18 @@ button { border: 0; }
 .hero-cosmic .button--ghost:hover { background: rgba(246,234,215,.08); border-color: rgba(246,234,215,.4); box-shadow: none; }
 
 /* 3D zodiac wheel — the homepage's signature moment */
-.zodiac-scene { width: calc(100% + 40px); height: 590px; position: relative; display: flex; align-items: center; justify-content: center; }
+.zodiac-scene { width: calc(100% + 40px); height: 520px; position: relative; display: flex; align-items: center; justify-content: center; }
 .zodiac-scene__canvas { width: 100% !important; height: 100% !important; }
-.zodiac-scene__glyph { display: grid; place-items: center; width: 32px; height: 32px; border-radius: 50%; background: rgba(23,16,9,.6); border: 1px solid rgba(246,234,215,.3); color: var(--starlight); font-size: 15px; backdrop-filter: blur(3px); cursor: pointer; transition: background .2s ease, transform .2s ease, border-color .2s ease; }
-.zodiac-scene__glyph:hover { background: rgba(201,130,47,.4); border-color: rgba(246,234,215,.55); transform: scale(1.12); }
-.zodiac-scene__glyph:focus-visible { outline: 2px solid var(--copper-pale); outline-offset: 2px; }
-.zodiac-scene__static { position: relative; width: 300px; height: 300px; }
-.zodiac-scene__static-sun { position: absolute; top: 50%; left: 50%; width: 60px; height: 60px; margin: -30px 0 0 -30px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f3c98a, #c9822f 65%, #8a5623); box-shadow: 0 0 40px 10px rgba(217,140,84,.45); }
-.zodiac-scene__static-mark { position: absolute; top: 50%; left: 50%; width: 54px; height: 54px; margin: -27px 0 0 -27px; display: flex; flex-direction: column; align-items: center; justify-content: center; gap: 2px; border: 1px solid rgba(246,234,215,.28); border-radius: 50%; background: rgba(23,16,9,.55); color: var(--starlight); font-size: 16px; cursor: pointer; transition: background .2s ease; }
-.zodiac-scene__static-mark:hover { background: rgba(201,130,47,.35); }
-.zodiac-scene__static-mark em { font-style: normal; font-size: 8px; letter-spacing: .05em; text-transform: uppercase; opacity: .75; }
+.zodiac-scene__label { display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 999px; background: rgba(23,16,9,.62); border: 1px solid rgba(246,234,215,.3); color: var(--starlight); font: 600 10.5px var(--sans); letter-spacing: .04em; white-space: nowrap; backdrop-filter: blur(3px); cursor: pointer; transition: background .2s ease, transform .2s ease, border-color .2s ease; }
+.zodiac-scene__label:hover { background: rgba(201,130,47,.45); border-color: rgba(246,234,215,.55); transform: scale(1.08); }
+.zodiac-scene__label:focus-visible { outline: 2px solid var(--copper-pale); outline-offset: 2px; }
+.zodiac-scene__static { position: relative; width: 260px; height: 260px; }
+.zodiac-scene__static-ring { position: absolute; inset: 22px; border: 1px solid rgba(217,163,90,.3); border-radius: 50%; }
+.zodiac-scene__static-sun { position: absolute; top: 50%; left: 50%; width: 56px; height: 56px; margin: -28px 0 0 -28px; border-radius: 50%; background: radial-gradient(circle at 35% 30%, #f3c98a, #c9822f 65%, #8a5623); box-shadow: 0 0 40px 10px rgba(217,140,84,.45); }
+.zodiac-scene__static-mark { position: absolute; transform: translate(-50%, -50%); display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 999px; border: 1px solid rgba(246,234,215,.28); background: rgba(23,16,9,.6); color: var(--starlight); font: 600 10.5px var(--sans); letter-spacing: .04em; white-space: nowrap; cursor: pointer; transition: background .2s ease; }
+.zodiac-scene__static-mark:hover { background: rgba(201,130,47,.4); }
 @media (max-width: 900px) {
-  .zodiac-scene { width: 100%; height: 420px; }
+  .zodiac-scene { width: 100%; height: 360px; }
 }
 
 /* pointer-tilt card wrapper (used for category tiles, senior spotlight cards) */
