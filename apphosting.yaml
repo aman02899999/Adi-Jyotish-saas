@@ -10,10 +10,13 @@
 #      then grant the backend access when prompted (or via
 #        firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
 #      ).
-#   4. Optional integrations not listed below (Razorpay live keys, Turnstile,
-#      Sentry, a custom NEXT_PUBLIC_SITE_URL, etc.) can be added the same way
-#      once you have real values — every one of them is optional and the app
-#      gracefully disables the feature when unset, matching .env.example.
+#   4. Optional integrations (Razorpay, Resend, Gemini, Ably, payout
+#      encryption, Turnstile, Sentry, a custom NEXT_PUBLIC_SITE_URL, etc.)
+#      are deliberately NOT declared below — the app gracefully disables
+#      each feature when its env vars are unset, matching .env.example.
+#      Add any of them back here, one at a time, once its secret exists
+#      AND is confirmed granted (see point 5) — a single misconfigured
+#      secret blocks the *entire* build, not just that feature.
 #   5. Every `secret:` entry below needs Secret Manager Secret Accessor
 #      granted to firebase-app-hosting-compute@<project>.iam.gserviceaccount.com
 #      for the *build* to even start (App Hosting resolves all secrets at
@@ -27,52 +30,6 @@ runConfig:
   memoryMiB: 512
 
 env:
-  # ── Razorpay payments ─────────────────────────────────────────────
-  - variable: RAZORPAY_MODE
-    value: "test"
-    availability:
-      - RUNTIME
-  - variable: RAZORPAY_TEST_KEY_SECRET
-    secret: RAZORPAY_TEST_KEY_SECRET
-    availability:
-      - RUNTIME
-  - variable: RAZORPAY_LIVE_KEY_SECRET
-    secret: RAZORPAY_LIVE_KEY_SECRET
-    availability:
-      - RUNTIME
-  - variable: RAZORPAY_WEBHOOK_SECRET
-    secret: RAZORPAY_WEBHOOK_SECRET
-    availability:
-      - RUNTIME
-
-  # ── Practitioner payout bank/UPI encryption ──────────────────────
-  - variable: PAYOUT_ENCRYPTION_KEY
-    secret: PAYOUT_ENCRYPTION_KEY
-    availability:
-      - RUNTIME
-
-  # ── Transactional email (Resend) ─────────────────────────────────
-  - variable: RESEND_API_KEY
-    secret: RESEND_API_KEY
-    availability:
-      - RUNTIME
-  - variable: RESEND_FROM_EMAIL
-    value: "Jyotish Studio <onboarding@resend.dev>"
-    availability:
-      - RUNTIME
-
-  # ── AI readings (Google Gemini) ───────────────────────────────────
-  - variable: GEMINI_API_KEY
-    secret: GEMINI_API_KEY
-    availability:
-      - RUNTIME
-
-  # ── Realtime chat (Ably) ──────────────────────────────────────────
-  - variable: ABLY_API_KEY
-    secret: ABLY_API_KEY
-    availability:
-      - RUNTIME
-
   # ── Firebase Google sign-in ───────────────────────────────────────
   # Client config is public by design (Firebase secures access via Security
   # Rules/authorized domains, not secrecy) — safe to commit.
