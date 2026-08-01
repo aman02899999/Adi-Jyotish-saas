@@ -28,7 +28,7 @@ runConfig:
   concurrency: 80
   cpu: 1
   memoryMiB: 512
-# (retrigger: Secret Manager IAM fixed on the deploying account)
+# (retrigger: FIREBASE_SERVICE_ACCOUNT_KEY secret created + access granted)
 
 env:
   # ── Firebase Google sign-in ───────────────────────────────────────
