@@ -1,6 +1,7 @@
 import { redirect } from "next/navigation";
 import { db } from "@/lib/firestore";
 import { AdminSettings } from "@/components/admin-settings";
+import { AdminDemoAccounts } from "@/components/admin-demo-accounts";
 import { AdminShell } from "@/components/admin-shell";
 import { ALL_ADMIN_PERMISSIONS, getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { getAllRolesAdmin, getAssignableRoleSlugs } from "@/lib/admin-roles";
@@ -55,6 +56,7 @@ export default async function AdminSettingsPage() {
           allPermissions={ALL_ADMIN_PERMISSIONS}
           canManageRoles={hasAdminPermission(admin, "roles")}
         />
+        <AdminDemoAccounts />
       </div>
     </AdminShell>
   );
