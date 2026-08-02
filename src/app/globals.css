@@ -119,8 +119,10 @@ button { border: 0; }
 .hero-cosmic .button--ghost:hover { background: rgba(246,234,215,.08); border-color: rgba(246,234,215,.4); box-shadow: none; }
 
 /* homepage hero video — the signature moment */
-.hero-video-frame { position: relative; width: calc(100% + 40px); aspect-ratio: 986 / 720; border-radius: 26px; overflow: hidden; background: #14100b; box-shadow: 0 30px 70px rgba(10,7,4,.45); border: 1px solid rgba(246,234,215,.14); }
+.hero-video-frame { position: relative; width: calc(100% + 40px); aspect-ratio: 986 / 720; overflow: hidden; background: #14100b; box-shadow: 0 30px 70px rgba(10,7,4,.45); border: 1px solid rgba(246,234,215,.14); }
 .hero-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #14100b; }
+.hero-video-sound { position: absolute; right: 16px; bottom: 16px; width: 44px; height: 44px; display: flex; align-items: center; justify-content: center; border-radius: 50%; background: rgba(20,16,11,.62); backdrop-filter: blur(6px); border: 1px solid rgba(246,234,215,.28); color: var(--starlight, #f6ead7); cursor: pointer; transition: background .2s ease, border-color .2s ease, transform .2s ease; }
+.hero-video-sound:hover { background: rgba(20,16,11,.82); border-color: rgba(246,234,215,.5); transform: scale(1.06); }
 @media (max-width: 900px) {
   .hero-video-frame { width: 100%; }
 }
