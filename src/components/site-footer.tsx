@@ -12,7 +12,7 @@ export function SiteFooter() {
         <Link href="/pricing">Pricing</Link>
         <Link href="/dashboard">Dashboard</Link>
       </div>
-      <small>© {new Date().getFullYear()} Jyotish Studio</small>
+      <small>© {new Date().getFullYear()} Adi Jyotish Gurus</small>
       <div className="footer__legal">
         <Link href="/terms">Terms of Service</Link>
         <Link href="/privacy">Privacy Policy</Link>

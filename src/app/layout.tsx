@@ -6,20 +6,20 @@ import "./globals.css";
 
 export const metadata: Metadata = {
   metadataBase: getSiteUrl(),
-  applicationName: "Jyotish",
-  title: { default: "Jyotish — Ancient clarity for modern life", template: "%s · Jyotish" },
+  applicationName: "Adi Jyotish Gurus",
+  title: { default: "Adi Jyotish Gurus — Ancient clarity for modern life", template: "%s · Adi Jyotish Gurus" },
   description: "Personal Vedic astrology readings, cosmic insights, and auspicious timing for modern life.",
   openGraph: {
     type: "website",
-    title: "Jyotish — Ancient clarity for modern life",
+    title: "Adi Jyotish Gurus — Ancient clarity for modern life",
     description: "Personal Vedic astrology readings and thoughtful cosmic guidance.",
     url: "/",
-    siteName: "Jyotish",
-    images: [{ url: "/images/vedic-hero.jpg", width: 1200, height: 675, alt: "Jyotish Vedic astrology experience" }],
+    siteName: "Adi Jyotish Gurus",
+    images: [{ url: "/images/vedic-hero.jpg", width: 1200, height: 675, alt: "Adi Jyotish Gurus Vedic astrology experience" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Jyotish — Ancient clarity for modern life",
+    title: "Adi Jyotish Gurus — Ancient clarity for modern life",
     description: "Personal Vedic astrology readings and thoughtful cosmic guidance.",
     images: ["/images/vedic-hero.jpg"],
   },

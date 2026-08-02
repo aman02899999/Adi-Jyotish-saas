@@ -3,6 +3,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { publishChatEvent } from "@/lib/ably";
+import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
 
 const MAX_HOLD_MINUTES = 30;
@@ -89,18 +90,6 @@ function elapsedMinutesSince(date: Date) {
 // An earlier version of this file reimplemented holds locally (writing hold docs directly under
 // wallets/{memberId}/holds without ever touching .balance) — that silently never charged members
 // for instant chat at all. Route everything through wallet.ts instead of duplicating it.
-
-// TODO(billing-subscriptions-migration): member session discounts (src/lib/subscriptions.ts) are
-// still Postgres-backed and keyed by numeric member ids, incompatible with the Firebase UID
-// strings used everywhere post-migration. Discounting is skipped here until that migration lands.
-async function getMemberDiscountPercent(_memberId: string): Promise<number> {
-  return 0;
-}
-
-function applyDiscount(amount: number, discountPercent: number) {
-  if (!discountPercent) return amount;
-  return Math.max(0, Math.round((amount * (100 - discountPercent)) / 100));
-}
 
 // --- Sessions ----------------------------------------------------------------------------------
 

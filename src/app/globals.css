@@ -33,13 +33,10 @@ button { border: 0; }
 .shell { width: min(1240px, calc(100% - 64px)); margin-inline: auto; }
 
 /* shared brand */
-.brand-mark { display: inline-flex; align-items: center; gap: 12px; width: max-content; }
-.zodiac-mark { width: 43px; height: 43px; border: 1px solid rgba(104, 70, 48, .35); border-radius: 50%; display: grid; place-items: center; position: relative; color: var(--copper); background: rgba(255,255,255,.25); }
-.zodiac-mark::before, .zodiac-mark::after { content: ""; position: absolute; inset: 5px; border: 1px dashed rgba(104,70,48,.28); border-radius: inherit; }
-.zodiac-mark::after { inset: 10px; border-style: solid; }
-.zodiac-mark span { font-size:13px; z-index: 1; }
+.brand-mark { display: inline-flex; align-items: center; gap: 12px; flex-shrink: 0; }
+.brand-mark__logo { height: 42px; width: auto; border-radius: 10px; box-shadow: 0 4px 14px rgba(20,25,45,.28); }
 .brand-copy { display: flex; flex-direction: column; line-height: 1; }
-.brand-copy strong { font:500 21px/1 var(--serif); letter-spacing: -.03em; }
+.brand-copy strong { font:500 18px/1 var(--serif); letter-spacing: -.02em; white-space: nowrap; }
 .brand-copy small { margin-top: 5px; color: var(--muted); font-size:12px; letter-spacing: .17em; text-transform: uppercase; }
 .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--copper); border-radius: 999px; padding: 0 23px; background: var(--copper); color: #fffaf4; font-size:15px; font-weight: 700; transition: transform .25s ease, box-shadow .25s ease, background .25s ease; }
 .button:hover { transform: translateY(-2px); background: var(--copper-dark); box-shadow: 0 10px 22px rgba(130,66,43,.2); }
@@ -1559,7 +1556,6 @@ button { border: 0; }
 .admin-auth-art > img { object-fit:cover; filter:sepia(.25) brightness(.53) contrast(1.05); mix-blend-mode:screen; }
 .admin-auth-art__veil { position:absolute; inset:0; background:linear-gradient(145deg,rgba(43,33,28,.4),rgba(59,43,35,.8)),radial-gradient(circle at 50% 45%,transparent,rgba(32,25,21,.55)); }
 .admin-auth-art__brand { position:absolute; z-index:2; left:45px; top:38px; color:#f6eee5; }
-.admin-auth-art__brand .zodiac-mark { border-color:rgba(239,213,187,.4); background:rgba(255,255,255,.04); }
 .admin-auth-art__brand .brand-copy small { color:#bdab9c; }
 .admin-auth-quote { position:absolute; z-index:2; left:48px; bottom:52px; color:#f3e8dd; }
 .admin-auth-quote p { margin:0 0 15px; font:400 clamp(28px,3vw,43px)/1.05 var(--serif); letter-spacing:-.035em; }
@@ -1664,7 +1660,7 @@ button { border: 0; }
   .app-frame { min-height:100dvh; display:block; border:0; border-radius:0; }
   .app-sidebar { display:none; }
   .mobile-app-nav { height:63px; display:flex; align-items:center; justify-content:space-between; position:relative; z-index:30; padding:0 20px; border-bottom:1px solid var(--line); background:rgba(246,242,235,.9); }
-  .mobile-app-nav .brand-mark .zodiac-mark { width:35px;height:35px; }
+  .mobile-app-nav .brand-mark .brand-mark__logo { height:35px; }
   .mobile-app-nav details summary { list-style:none; }
   .mobile-app-nav details summary::-webkit-details-marker { display:none; }
   .mobile-drawer { width:min(280px,85vw); height:calc(100dvh - 63px); position:absolute; right:-20px; top:42px; display:flex; flex-direction:column; padding:20px 16px; background:#eee9e0; box-shadow:-15px 20px 35px rgba(60,45,35,.15); }
@@ -1688,8 +1684,8 @@ button { border: 0; }
   .conversation-messages { min-height:310px; max-height:420px; }
   .shell { width:calc(100% - 28px); }
   .site-header { height:70px; }
-  .zodiac-mark { width:38px; height:38px; }
-  .brand-copy strong { font-size:19px; }
+  .brand-mark__logo { height:36px; }
+  .brand-copy strong { font-size:15px; }
   .hero { padding-block:52px; }
   .hero h1 { font-size:clamp(52px,18vw,73px); }
   .hero-lead { font-size:15px; }
