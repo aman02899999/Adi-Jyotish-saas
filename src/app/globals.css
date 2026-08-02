@@ -608,12 +608,13 @@ button { border: 0; }
 .profile-chip svg { color:var(--muted); }
 .mobile-app-nav { display:none; }
 .app-content { min-width:0; height:calc(100dvh - 52px); overflow:hidden; }
-.app-topbar { height:66px; display:flex; align-items:center; justify-content:space-between; padding:0 27px; border-bottom:1px solid var(--line); background:rgba(247,243,237,.4); }
-.app-topbar nav { height:100%; display:flex; gap:28px; align-items:center; }
-.app-topbar nav a { height:100%; display:flex; align-items:center; position:relative; color:var(--muted); font-size:13px; }
+.app-topbar { height:66px; display:flex; align-items:center; justify-content:space-between; gap:16px; padding:0 27px; border-bottom:1px solid var(--line); background:rgba(247,243,237,.4); }
+.app-topbar nav { height:100%; min-width:0; display:flex; gap:28px; align-items:center; overflow-x:auto; -webkit-overflow-scrolling:touch; scrollbar-width:none; }
+.app-topbar nav::-webkit-scrollbar { display:none; }
+.app-topbar nav a { height:100%; flex-shrink:0; display:flex; align-items:center; position:relative; color:var(--muted); font-size:13px; white-space:nowrap; }
 .app-topbar nav a.active { color:var(--ink); font-weight:700; }
 .app-topbar nav a.active::after { content:""; position:absolute; left:0; right:0; bottom:0; height:2px; background:var(--copper); }
-.topbar-tools { display:flex; align-items:center; gap:9px; }
+.topbar-tools { flex-shrink:0; display:flex; align-items:center; gap:9px; }
 .topbar-tools label { width:150px; height:35px; display:flex; align-items:center; gap:8px; padding:0 12px; border:1px solid rgba(92,70,55,.1); border-radius:999px; background:rgba(255,255,255,.47); }
 .topbar-tools input { width:100%; border:0; outline:0; background:transparent; font-size:13px; }
 .topbar-tools button { width:35px; height:35px; display:grid; place-items:center; position:relative; border:1px solid rgba(92,70,55,.1); border-radius:50%; background:rgba(255,255,255,.4); }
@@ -1723,7 +1724,7 @@ button { border: 0; }
   .app-topbar { height:57px; padding:0 15px; }
   .app-topbar nav { gap:16px; }
   .app-topbar nav a { font-size:12px; }
-  .topbar-tools label,.topbar-tools .top-avatar { display:none; }
+  .topbar-tools label { display:none; }
   .dashboard-scroll { height:calc(100% - 57px); padding:18px 14px 30px; }
   .dashboard-welcome h1 { font-size:22px; }
   .today-pill { display:none; }
