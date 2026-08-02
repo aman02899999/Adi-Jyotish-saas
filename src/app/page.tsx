@@ -30,7 +30,7 @@ import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnl
 import { getPublishedServices } from "@/lib/services";
 import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
-import { HeroZodiacScene } from "@/components/hero-zodiac-scene";
+import { HeroVideo } from "@/components/hero-video";
 import { TiltCard } from "@/components/tilt-card";
 import { StatCounter } from "@/components/stat-counter";
 
@@ -104,7 +104,7 @@ export default async function HomePage() {
           </div>
 
           <div className="reveal reveal--delay">
-            <HeroZodiacScene signs={ZODIAC_SIGNS.map((entry) => ({ key: entry.key, name: entry.name, symbol: entry.symbol }))} />
+            <HeroVideo />
           </div>
         </div>
       </section>
@@ -283,6 +283,9 @@ export default async function HomePage() {
       </section>
 
       <section className="horoscope-strip shell" aria-label="Your daily horoscope">
+        <div className="horoscope-banner reveal">
+          <Image src="/images/horoscope-hero.jpg" alt="A journal page reading Your Transits Today beside a phone showing today's transit times" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+        </div>
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> Your daily horoscope</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Pick your sign,<br /><em>see today&rsquo;s sky.</em></h2></div>
           <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>

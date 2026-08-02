@@ -51,9 +51,10 @@ button { border: 0; }
 /* marketing header */
 .marketing-page { overflow: hidden; background: var(--ivory); }
 .site-header { height: 82px; position: relative; z-index: 20; background: rgba(248,244,237,.9); border-bottom: 1px solid rgba(100,75,55,.1); backdrop-filter: blur(18px); }
-.site-header__inner { height: 100%; display: flex; align-items: center; }
-.desktop-nav { display: flex; align-items: center; gap: 35px; margin-left: auto; margin-right: 42px; }
-.desktop-nav a, .text-link { position: relative; color: #5f554d; font-size:14px; font-weight: 600; }
+.site-header__inner { height: 100%; display: flex; align-items: center; gap: 20px; }
+.desktop-nav { display: grid; grid-auto-flow: column; grid-auto-columns: 1fr; align-items: center; column-gap: 14px; margin-left: auto; margin-right: 24px; }
+.desktop-nav a, .text-link { position: relative; color: #5f554d; font-size:11px; font-weight: 600; }
+.desktop-nav a { text-align: center; white-space: nowrap; }
 .desktop-nav a::after { content: ""; position: absolute; left: 0; right: 100%; bottom: -8px; height: 1px; background: var(--copper); transition: right .25s; }
 .desktop-nav a:hover::after { right: 0; }
 .desktop-nav a.active { color: var(--copper-dark); }
@@ -117,7 +118,14 @@ button { border: 0; }
 .hero-cosmic .button--ghost { color: var(--starlight); border-color: rgba(246,234,215,.24); }
 .hero-cosmic .button--ghost:hover { background: rgba(246,234,215,.08); border-color: rgba(246,234,215,.4); box-shadow: none; }
 
-/* 3D zodiac wheel — the homepage's signature moment */
+/* homepage hero video — the signature moment */
+.hero-video-frame { position: relative; width: calc(100% + 40px); aspect-ratio: 986 / 720; border-radius: 26px; overflow: hidden; background: #14100b; box-shadow: 0 30px 70px rgba(10,7,4,.45); border: 1px solid rgba(246,234,215,.14); }
+.hero-video { display: block; width: 100%; height: 100%; object-fit: contain; background: #14100b; }
+@media (max-width: 900px) {
+  .hero-video-frame { width: 100%; }
+}
+
+/* 3D zodiac wheel — the homepage's signature moment (currently unused on the homepage; kept for potential reuse) */
 .zodiac-scene { width: calc(100% + 40px); height: 520px; position: relative; display: flex; align-items: center; justify-content: center; }
 .zodiac-scene__canvas { width: 100% !important; height: 100% !important; }
 .zodiac-scene__label { display: inline-flex; align-items: center; padding: 5px 11px; border-radius: 999px; background: rgba(23,16,9,.62); border: 1px solid rgba(246,234,215,.3); color: var(--starlight); font: 600 10.5px var(--sans); letter-spacing: .04em; white-space: nowrap; backdrop-filter: blur(3px); cursor: pointer; transition: background .2s ease, transform .2s ease, border-color .2s ease; }
@@ -433,6 +441,9 @@ button { border: 0; }
 .horoscope-panel__cta .button { margin-left:auto; }
 
 .horoscope-strip { padding-block:20px 30px; }
+.horoscope-banner { position:relative; width:100%; aspect-ratio:1408/620; margin-bottom:34px; border-radius:26px; overflow:hidden; box-shadow:0 25px 60px rgba(78,58,43,.16); }
+.horoscope-banner::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,rgba(23,16,9,.4),transparent 45%); }
+@media (max-width:640px) { .horoscope-banner { aspect-ratio:4/3; border-radius:18px; margin-bottom:24px; } }
 .horoscope-teaser { display:grid; grid-template-columns:220px 1fr; gap:24px; align-items:start; }
 .horoscope-teaser__signs { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .horoscope-teaser__signs button { display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 6px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.35); cursor:pointer; transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
