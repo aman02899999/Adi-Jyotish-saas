@@ -1,7 +1,7 @@
 "use client";
 
-import { useState } from "react";
-import { isGoogleSignInAvailable, signInWithGoogle } from "@/lib/firebase-client";
+import { useEffect, useRef, useState } from "react";
+import { completeGoogleRedirectSignIn, isGoogleSignInAvailable, signInWithGoogle } from "@/lib/firebase-client";
 
 export function GoogleSignInButton({ endpoint, onSuccess, onError }: {
   endpoint: string;
@@ -9,6 +9,29 @@ export function GoogleSignInButton({ endpoint, onSuccess, onError }: {
   onError: (message: string) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
+  const finishing = useRef(false);
+
+  async function finish(idToken: string) {
+    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+    const data = await response.json();
+    if (!response.ok) throw new Error(data.error || "Google sign-in failed.");
+    onSuccess(data);
+  }
+
+  // Picks the login back up after the signInWithGoogle() popup-blocked fallback redirects the
+  // whole page to Google and back — a normal page load has nothing pending here and this resolves
+  // to null immediately.
+  useEffect(() => {
+    if (!isGoogleSignInAvailable() || finishing.current) return;
+    finishing.current = true;
+    completeGoogleRedirectSignIn()
+      .then((idToken) => {
+        if (idToken) return finish(idToken);
+      })
+      .catch((caught) => onError(caught instanceof Error ? caught.message : "Google sign-in could not be completed."));
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
   if (!isGoogleSignInAvailable()) return null;
 
   async function handleClick() {
@@ -16,10 +39,8 @@ export function GoogleSignInButton({ endpoint, onSuccess, onError }: {
     onError("");
     try {
       const idToken = await signInWithGoogle();
-      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "Google sign-in failed.");
-      onSuccess(data);
+      if (!idToken) return; // redirect fallback in progress — the page is navigating away
+      await finish(idToken);
     } catch (caught) {
       const message = caught instanceof Error ? caught.message : "Something went wrong.";
       if (!message.includes("popup-closed")) onError(message);
