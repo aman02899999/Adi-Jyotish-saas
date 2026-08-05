@@ -93,7 +93,25 @@ function elapsedMinutesSince(date: Date) {
 
 // --- Sessions ----------------------------------------------------------------------------------
 
+/** A session's wallet hold funds at most MAX_HOLD_MINUTES — past that it's exhausted regardless
+ * of whether anyone sent another message. sendMessage() only notices and settles this lazily on
+ * the *next* message, so a session nobody sends another message to (tab closed, practitioner side
+ * goes silent) would otherwise sit "active" forever: the hold never captures or releases, and the
+ * member can't start a new chat since getMemberActiveSession sees a phantom in-progress one. This
+ * sweeps and settles anything past that window, called opportunistically from the two places a
+ * stale session would actually be noticed (no scheduled job in this deployment). */
+export async function expireStaleChatSessions() {
+  const cutoff = new Date(Date.now() - MAX_HOLD_MINUTES * 60000);
+  const snap = await sessionsCollection.where("status", "==", "active").where("startedAt", "<", cutoff).limit(25).get();
+  for (const doc of snap.docs) {
+    await endChatSession(doc.id, "system").catch((error) => {
+      console.error(`Failed to expire stale chat session ${doc.id}`, error);
+    });
+  }
+}
+
 export async function getMemberActiveSession(memberId: string): Promise<ChatSession | null> {
+  await expireStaleChatSessions().catch((error) => console.error("Stale chat session sweep failed", error));
   const snap = await sessionsCollection.where("memberId", "==", memberId).where("status", "==", "active").limit(1).get();
   return snap.empty ? null : toSession(snap.docs[0]);
 }
@@ -205,6 +223,7 @@ export async function endChatSession(sessionId: string, endedBy: "member" | "pra
 }
 
 export async function listActiveSessionsForAdmin() {
+  await expireStaleChatSessions().catch((error) => console.error("Stale chat session sweep failed", error));
   const snap = await sessionsCollection.where("status", "==", "active").orderBy("startedAt", "desc").get();
   const sessions = snap.docs.map(toSession);
   if (!sessions.length) return [];

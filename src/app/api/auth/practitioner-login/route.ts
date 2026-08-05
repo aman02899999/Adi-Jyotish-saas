@@ -1,4 +1,5 @@
 import { createPractitionerSession, getCurrentPractitioner } from "@/lib/practitioner-auth";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -6,6 +7,9 @@ export const dynamic = "force-dynamic";
  * (email/password or Google) and hands us the resulting ID token to verify and mint a session
  * cookie. The practitioner record (and its firebaseUid link) must already exist. */
 export async function POST(request: Request) {
+  const throttle = await checkRateLimit("practitioner-login", requestIp(request), 15, 3600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const body = (await request.json()) as { idToken?: string };
   if (!body.idToken) return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
 

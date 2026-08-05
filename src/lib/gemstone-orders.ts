@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { AggregateField, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
+import { db, withIndexFallback } from "@/lib/firestore";
 import { validateCoupon } from "@/lib/gemstone-coupons";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
@@ -147,6 +147,24 @@ export async function priceCart(lines: CartLineInput[]): Promise<{ items: Priced
   return { items, subtotal };
 }
 
+const PENDING_ORDER_TTL_MS = 30 * 60 * 1000;
+
+/** Self-healing cleanup for checkout abandonment: a pending order reserves stock (and coupon
+ * usage) the moment it's created, before payment — if the customer never completes payment
+ * (closed the tab, a failed Razorpay attempt with no retry), that reservation would otherwise
+ * never be released. There's no scheduled job in this deployment, so this runs opportunistically
+ * from a couple of natural trigger points (new checkout attempts, the admin orders list) instead
+ * of on a timer. Reuses updateOrderStatus so stock/coupon release stays in one place. */
+export async function expireStalePendingOrders() {
+  const cutoff = Timestamp.fromMillis(Date.now() - PENDING_ORDER_TTL_MS);
+  const snap = await ordersCol.where("status", "==", "pending").where("createdAt", "<", cutoff).limit(25).get();
+  for (const doc of snap.docs) {
+    await updateOrderStatus(doc.id, "cancelled").catch((error) => {
+      console.error(`Failed to expire stale pending order ${doc.id}`, error);
+    });
+  }
+}
+
 export async function createPendingOrder({ memberId, guestName, guestEmail, guestPhone, shipping, lines, couponCode }: {
   memberId: string | null;
   guestName?: string;
@@ -156,12 +174,25 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
   lines: CartLineInput[];
   couponCode?: string;
 }): Promise<GemstoneOrder> {
+  await expireStalePendingOrders().catch((error) => console.error("Stale pending order sweep failed", error));
   const { items, subtotal } = await priceCart(lines);
 
   let discount = 0;
   let appliedCouponCode: string | null = null;
   if (couponCode?.trim()) {
     const { coupon, discountAmount } = await validateCoupon(couponCode, subtotal);
+    if (coupon.perCustomerLimit != null) {
+      let usedQuery = ordersCol.where("couponCode", "==", coupon.code).where("paymentStatus", "==", "paid");
+      if (memberId) usedQuery = usedQuery.where("memberId", "==", memberId);
+      else if (guestEmail?.trim()) usedQuery = usedQuery.where("guestEmail", "==", guestEmail.trim());
+      // Fails open (treats as "not yet used") if the composite index is still building on a fresh
+      // deploy, same fallback philosophy used elsewhere in this codebase — better to let one order
+      // through under-checked than 500 every checkout attempt.
+      const usedCount = await withIndexFallback(async () => (await usedQuery.count().get()).data().count, 0);
+      if (usedCount >= coupon.perCustomerLimit) {
+        throw new CartValidationError("You've already used this coupon the maximum number of times.");
+      }
+    }
     discount = discountAmount;
     appliedCouponCode = coupon.code;
   }
@@ -176,9 +207,13 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
   // Firestore transactions retry automatically on write conflicts (optimistic concurrency), which gives
   // the same atomic stock-check-and-decrement guarantee the old `pg_advisory_xact_lock` provided.
   const orderRef = ordersCol.doc();
+  const couponRef = appliedCouponCode ? couponsCol.doc(appliedCouponCode) : null;
   await db.runTransaction(async (tx) => {
     const variantRefs = items.map((item) => variantRef(item.productId, item.variantId));
-    const variantSnaps = await Promise.all(variantRefs.map((ref) => tx.get(ref)));
+    const [variantSnaps, couponSnap] = await Promise.all([
+      Promise.all(variantRefs.map((ref) => tx.get(ref))),
+      couponRef ? tx.get(couponRef) : Promise.resolve(null),
+    ]);
 
     for (let index = 0; index < items.length; index += 1) {
       const snap = variantSnaps[index];
@@ -187,6 +222,19 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
       if (!snap.exists || !data || data.stockQuantity < item.quantity) {
         throw new CartValidationError(`${item.productName} just sold out. Please update your cart.`);
       }
+    }
+
+    // Reserving usage here (not at payment time) closes the race where many concurrent pending
+    // orders all pass validateCoupon's pre-transaction usageCount read and then all pay —
+    // reservation is atomic with the read-check here, same guarantee as the stock check above.
+    // Released back on cancellation/expiry (see updateOrderStatus and the stale-order sweep).
+    if (couponRef && couponSnap) {
+      if (!couponSnap.exists) throw new CartValidationError("This coupon code is not valid.");
+      const couponData = couponSnap.data() as { usageLimit: number | null; usageCount: number };
+      if (couponData.usageLimit != null && couponData.usageCount >= couponData.usageLimit) {
+        throw new CartValidationError("This coupon has reached its usage limit.");
+      }
+      tx.update(couponRef, { usageCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
     }
 
     tx.set(orderRef, {
@@ -256,10 +304,9 @@ export async function markOrderPaid({ orderId, razorpayPaymentId }: { orderId: s
     if (existing.paymentStatus === "paid") return { order: existing, justPaid: false };
     if (existing.paymentStatus !== "pending") return { order: existing, justPaid: false };
 
+    // Coupon usageCount is reserved when the order is created (see createPendingOrder), not here —
+    // incrementing it again on payment would double-count every order that used a coupon.
     tx.update(ref, { paymentStatus: "paid", status: "processing", razorpayPaymentId, updatedAt: FieldValue.serverTimestamp() });
-    if (existing.couponCode) {
-      tx.update(couponsCol.doc(existing.couponCode), { usageCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
-    }
     return { order: { ...existing, paymentStatus: "paid", status: "processing", razorpayPaymentId }, justPaid: true };
   });
 
@@ -316,6 +363,7 @@ export async function getOrdersForMember(memberId: string) {
 }
 
 export async function getAllOrdersAdmin(status?: string) {
+  await expireStalePendingOrders().catch((error) => console.error("Stale pending order sweep failed", error));
   if (status && status !== "all") {
     // Requires a composite index: gemstoneOrders (status ASC, createdAt DESC) — see firestore.indexes.json.
     const snap = await ordersCol.where("status", "==", status).orderBy("createdAt", "desc").get();
@@ -345,6 +393,13 @@ export async function updateOrderStatus(orderId: string, status: string) {
         const item = doc.data() as { productId: string; variantId: string };
         return tx.get(variantRef(item.productId, item.variantId));
       }));
+    }
+
+    if (willRestoreStock && existing.couponCode) {
+      // Mirrors the stock restore below — a cancelled order shouldn't count against a coupon's
+      // usage limit or the customer's per-customer limit, since the reservation happened at
+      // order-creation time (see createPendingOrder), not at payment.
+      tx.update(couponsCol.doc(existing.couponCode), { usageCount: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() });
     }
 
     if (willRestoreStock) {

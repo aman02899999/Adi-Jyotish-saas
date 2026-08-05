@@ -41,6 +41,24 @@
       ]
     },
     {
+      "collectionGroup": "gemstoneOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "couponCode", "order": "ASCENDING" },
+        { "fieldPath": "paymentStatus", "order": "ASCENDING" },
+        { "fieldPath": "memberId", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "gemstoneOrders",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "couponCode", "order": "ASCENDING" },
+        { "fieldPath": "paymentStatus", "order": "ASCENDING" },
+        { "fieldPath": "guestEmail", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "gemstoneReviews",
       "queryScope": "COLLECTION",
       "fields": [

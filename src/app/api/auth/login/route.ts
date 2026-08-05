@@ -1,11 +1,15 @@
 import { getAuth } from "firebase-admin/auth";
 import { createAdminSession, getCurrentAdmin, recordAudit } from "@/lib/admin-auth";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 /** Completes admin sign-in: the client already authenticated with Firebase Auth (email/password
  * or Google) and hands us the resulting ID token to verify and mint a session cookie. */
 export async function POST(request: Request) {
+  const throttle = await checkRateLimit("admin-login", requestIp(request), 15, 3600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const body = await request.json() as { idToken?: string };
   if (!body.idToken) return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
 

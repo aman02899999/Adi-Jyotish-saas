@@ -63,13 +63,19 @@ export async function createRole(input: { name: string; slug: string; permission
   return { id: slug, slug, name, isSystem: false, permissions, adminCount: 0 };
 }
 
-export async function updateRole(slug: string, input: { name?: string; permissions?: string[] }): Promise<AdminRoleRow> {
+export async function updateRole(slug: string, input: { name?: string; permissions?: string[] }, actingAdminRole?: string): Promise<AdminRoleRow> {
   const ref = db.collection("adminRoles").doc(slug);
   const snap = await ref.get();
   if (!snap.exists) throw new RoleError("Role not found.");
   const current = snap.data() as AdminRoleDoc;
   if (slug === "owner" && input.permissions) {
     throw new RoleError("The Owner role always has full access and can't be restricted.");
+  }
+  // An admin editing the permissions of their own current role could otherwise grant themselves
+  // more access (e.g. add "team", then use it to promote their account to owner) — have someone
+  // else with the "roles" permission make that change instead.
+  if (slug === actingAdminRole && input.permissions) {
+    throw new RoleError("You can't change the permissions of your own role. Ask another team member to make this change.");
   }
 
   const patch: Partial<AdminRoleDoc> & { updatedAt: FirebaseFirestore.FieldValue } = { updatedAt: FieldValue.serverTimestamp() };

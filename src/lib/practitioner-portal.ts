@@ -82,7 +82,10 @@ export async function getPractitionerStats(practitionerId: string) {
   const now = Date.now();
   for (const doc of bookingsSnap.docs) {
     const row = bookingFromDoc(doc);
-    if (row.paymentStatus === "paid") totalEarned += row.servicePrice;
+    // A member self-cancel only flips `status`, not `paymentStatus` (refunds are handled
+    // separately) — without this check a cancelled-but-still-"paid" booking would count toward
+    // earnings the practitioner could then request as a payout.
+    if (row.paymentStatus === "paid" && row.status !== "cancelled") totalEarned += row.servicePrice;
     if (row.status === "completed") completedCount += 1;
     if ((row.status === "pending" || row.status === "confirmed") && row.scheduledAt.getTime() >= now) upcomingCount += 1;
   }
@@ -206,6 +209,11 @@ export async function getPractitionerPayouts(practitionerId: string): Promise<Pr
 export async function requestPayout(practitionerId: string, amount: number, notes?: string): Promise<PractitionerPayout> {
   if (!Number.isInteger(amount) || amount < 100) throw new PayoutError("Enter an amount of at least ₹100.");
 
+  const practitionerSnap = await db.collection("practitioners").doc(practitionerId).get();
+  if (practitionerSnap.data()?.isDemoAccount) {
+    throw new PayoutError("Demo accounts can't request payouts.");
+  }
+
   // totalEarned only grows via paid bookings, not this action, so it's safe to read outside the
   // transaction — but paidOut/pendingOut come from the payouts collection this function itself
   // writes to, so that read-check-write needs to be atomic or two concurrent requests (double
@@ -215,7 +223,7 @@ export async function requestPayout(practitionerId: string, amount: number, note
   let totalEarned = 0;
   for (const doc of bookingsSnap.docs) {
     const row = bookingFromDoc(doc);
-    if (row.paymentStatus === "paid") totalEarned += row.servicePrice;
+    if (row.paymentStatus === "paid" && row.status !== "cancelled") totalEarned += row.servicePrice;
   }
 
   const ref = payoutsCollection().doc();
@@ -291,11 +299,26 @@ export async function getAllPayoutsAdmin(status?: string) {
   });
 }
 
+// Once "paid", a payout is terminal — no further status changes, so a record of real money sent
+// can't be silently flipped or overwritten later. "rejected" can still be reconsidered to
+// "approved", but not jumped straight to "paid" (must go through approval again first).
+const ALLOWED_PAYOUT_TRANSITIONS: Record<string, ReadonlySet<string>> = {
+  requested: new Set(["approved", "rejected"]),
+  approved: new Set(["paid", "rejected"]),
+  rejected: new Set(["approved"]),
+  paid: new Set(),
+};
+
 export async function updatePayoutStatus(id: string, status: "approved" | "paid" | "rejected", adminId: string, adminNotes?: string, transactionRef?: string): Promise<PractitionerPayout> {
   if (status === "paid" && !transactionRef?.trim()) throw new PayoutError("Enter a bank transaction reference before marking this payout paid.");
   const ref = payoutsCollection().doc(id);
   const existing = await ref.get();
   if (!existing.exists) throw new PayoutError("Payout request not found.");
+
+  const currentStatus = (existing.data() as { status: string }).status;
+  if (currentStatus !== status && !ALLOWED_PAYOUT_TRANSITIONS[currentStatus]?.has(status)) {
+    throw new PayoutError(`A ${currentStatus} payout can't be changed to ${status}.`);
+  }
 
   await ref.update({
     status,

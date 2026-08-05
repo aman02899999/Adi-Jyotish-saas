@@ -20,7 +20,7 @@ export const MEMBER_FAQ: FaqEntry[] = [
   { id: "m-gem-1", category: "Gemstones", question: "How do I track my gemstone order?", answer: "Open Gemstone Orders in your dashboard for live status, or use the order confirmation link sent to your email." },
   { id: "m-gem-2", category: "Gemstones", question: "Can I return a gemstone?", answer: "Check the return policy on the product page — most items have a return window from delivery, provided the certification and packaging are intact." },
   { id: "m-account-1", category: "Account", question: "How do I update my birth details?", answer: "Go to Birth Profile in your dashboard sidebar. Keeping this accurate matters — it's used by every personalized tool on the platform." },
-  { id: "m-account-2", category: "Account", question: "How do I enable two-factor authentication?", answer: "Go to your account security settings to set up 2FA with an authenticator app for extra protection on your account." },
+  { id: "m-account-2", category: "Account", question: "How do I keep my account secure?", answer: "Use a strong, unique password, or sign in with Google for account security backed by your Google account. You can reset your password any time from the sign-in page if you ever suspect it's been compromised." },
 ];
 
 export const PRACTITIONER_FAQ: FaqEntry[] = [

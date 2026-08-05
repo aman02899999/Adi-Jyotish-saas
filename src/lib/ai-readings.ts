@@ -104,6 +104,13 @@ export async function isEligibleForFreeReading(memberId: string) {
   return snap.empty;
 }
 
+export class FreeReadingAlreadyUsedError extends Error {}
+const freeReadingClaims = db.collection("aiReadingFreeClaims");
+
+function isAlreadyExists(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
+}
+
 export async function createFreeReading({ memberId, clientName, birthDate, birthTime, birthPlace, question }: {
   memberId: string;
   clientName: string;
@@ -112,6 +119,16 @@ export async function createFreeReading({ memberId, clientName, birthDate, birth
   birthPlace: string;
   question: string;
 }) {
+  // isEligibleForFreeReading (the caller's check) reads outside any transaction, so two concurrent
+  // requests (double submit, duplicate tab) could both see "not yet used" and both land here.
+  // create() atomically fails if this doc already exists, so only the first actually gets through.
+  try {
+    await freeReadingClaims.doc(memberId).create({ createdAt: FieldValue.serverTimestamp() });
+  } catch (error) {
+    if (isAlreadyExists(error)) throw new FreeReadingAlreadyUsedError("Your free reading has already been used.");
+    throw error;
+  }
+
   const ref = await collection.add({
     memberId,
     readingType: "question",

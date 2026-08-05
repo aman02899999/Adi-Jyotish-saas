@@ -19,9 +19,6 @@ export async function POST(request:Request){
     return Response.json({error:"Only completed practitioner consultations can be reviewed."},{status:403});
   }
 
-  const existing = await db.collection("practitionerReviews").where("bookingId","==",bookingId).limit(1).get();
-  if(!existing.empty) return Response.json({error:"This consultation has already been reviewed."},{status:409});
-
   const doc = {
     practitionerId:booking.practitionerId,
     memberId:member.id,
@@ -34,6 +31,14 @@ export async function POST(request:Request){
     body:text,
     status:"published",
   };
-  const ref = await db.collection("practitionerReviews").add({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  // Doc id = bookingId (one review per booking), so create() is an atomic fail-if-exists check —
+  // a plain query-then-add here would let two concurrent submits for the same booking both pass
+  // the "not yet reviewed" check and create duplicate reviews.
+  const ref = db.collection("practitionerReviews").doc(bookingId);
+  try {
+    await ref.create({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  } catch {
+    return Response.json({error:"This consultation has already been reviewed."},{status:409});
+  }
   return Response.json({ id: ref.id, ...doc, createdAt: new Date(), updatedAt: new Date() },{status:201});
 }

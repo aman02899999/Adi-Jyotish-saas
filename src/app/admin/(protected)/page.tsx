@@ -13,7 +13,7 @@ import {
 } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
 import { getAnalytics } from "@/lib/analytics";
-import { getCurrentAdmin } from "@/lib/admin-auth";
+import { requireAdminPage } from "@/lib/admin-page";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +23,7 @@ function Change({ value, suffix = "%" }: { value: number; suffix?: string }) {
 }
 
 export default async function AdminOverviewPage() {
-  const [analytics, admin] = await Promise.all([getAnalytics("30d"), getCurrentAdmin()]);
+  const [analytics, admin] = await Promise.all([getAnalytics("30d"), requireAdminPage("overview")]);
   const { metrics } = analytics;
   const maxRevenue = Math.max(1, ...analytics.timeline.map((point) => point.revenue));
   const maxService = Math.max(1, ...analytics.topServices.map((service) => service.bookings));

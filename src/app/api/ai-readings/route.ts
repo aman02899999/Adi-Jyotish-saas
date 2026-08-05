@@ -1,4 +1,4 @@
-import { AI_READING_CURRENCY, AI_READING_PRICE, attachRazorpayOrder, createFreeReading, createPendingReading, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
+import { AI_READING_CURRENCY, AI_READING_PRICE, attachRazorpayOrder, createFreeReading, createPendingReading, FreeReadingAlreadyUsedError, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
@@ -34,12 +34,18 @@ export async function POST(request: Request) {
   if (question.length > 600) return Response.json({ error: "Please keep your question under 600 characters." }, { status: 400 });
 
   if (await isEligibleForFreeReading(member.id)) {
-    const freeReading = await createFreeReading({ memberId: member.id, clientName, birthDate, birthTime, birthPlace, question });
     try {
-      const answered = await generateReadingAnswer(freeReading);
-      return Response.json({ free: true, readingId: freeReading.id, status: answered.status, answer: answered.answer }, { status: 201 });
-    } catch {
-      return Response.json({ free: true, readingId: freeReading.id, status: "paid", answer: null }, { status: 201 });
+      const freeReading = await createFreeReading({ memberId: member.id, clientName, birthDate, birthTime, birthPlace, question });
+      try {
+        const answered = await generateReadingAnswer(freeReading);
+        return Response.json({ free: true, readingId: freeReading.id, status: answered.status, answer: answered.answer }, { status: 201 });
+      } catch {
+        return Response.json({ free: true, readingId: freeReading.id, status: "paid", answer: null }, { status: 201 });
+      }
+    } catch (error) {
+      // Lost the race to a concurrent request (double submit, duplicate tab) — fall through to
+      // the normal paid flow below instead of erroring out.
+      if (!(error instanceof FreeReadingAlreadyUsedError)) throw error;
     }
   }
 

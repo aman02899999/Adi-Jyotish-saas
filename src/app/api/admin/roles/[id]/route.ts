@@ -15,7 +15,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const body = (await request.json()) as { name?: string; permissions?: string[] };
   try {
-    const updated = await updateRole(slug, { name: body.name, permissions: body.permissions });
+    const updated = await updateRole(slug, { name: body.name, permissions: body.permissions }, admin.role);
     await recordAudit(admin, "admin_role.updated", "admin_role", slug, { name: updated.name, permissions: updated.permissions });
     return Response.json(updated);
   } catch (error) {

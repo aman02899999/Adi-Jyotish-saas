@@ -177,7 +177,3 @@ export async function validateCoupon(code: string, subtotal: number): Promise<{ 
 
   return { coupon, discountAmount };
 }
-
-export async function incrementCouponUsage(couponId: string) {
-  await couponsCol.doc(couponId).update({ usageCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
-}

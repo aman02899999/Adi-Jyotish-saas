@@ -28,6 +28,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const active = body.active ?? existing.active;
 
   if (id === admin.id && !active) return Response.json({ error: "You cannot deactivate your own account." }, { status: 409 });
+  if (id === admin.id && role !== existing.role) return Response.json({ error: "You cannot change your own role." }, { status: 409 });
+  // Matches the invite endpoint's rule (team/route.ts POST never accepts role:"owner") — without
+  // this, a "team"-permission holder could invite a throwaway account as a low role, then use this
+  // endpoint to promote it (or an existing colleague) straight to owner.
+  if (role === "owner" && existing.role !== "owner" && admin.role !== "owner") {
+    return Response.json({ error: "Only an existing owner can grant the owner role." }, { status: 403 });
+  }
   if (existing.role === "owner" && (role !== "owner" || !active) && await ownerCount() <= 1) {
     return Response.json({ error: "The workspace must retain at least one active owner." }, { status: 409 });
   }
