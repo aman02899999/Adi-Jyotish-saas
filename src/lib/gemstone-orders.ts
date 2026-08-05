@@ -384,9 +384,11 @@ export async function updateOrderStatus(orderId: string, status: string) {
 
     let itemDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
     let variantSnaps: FirebaseFirestore.DocumentSnapshot[] = [];
-    const willRestoreStock = status === "cancelled" && existing.status !== "cancelled";
+    // A refund means the goods aren't shipping either, same as a cancellation — restore stock (and
+    // the coupon reservation below) for both, not just "cancelled".
+    const willRestoreStock = (status === "cancelled" || status === "refunded") && existing.status !== "cancelled" && existing.status !== "refunded";
     if (willRestoreStock) {
-      if (!CANCELLABLE_STATUSES.has(existing.status)) throw new CartValidationError("This order can no longer be cancelled.");
+      if (status === "cancelled" && !CANCELLABLE_STATUSES.has(existing.status)) throw new CartValidationError("This order can no longer be cancelled.");
       const itemsSnap = await tx.get(itemsCol(orderId));
       itemDocs = itemsSnap.docs;
       variantSnaps = await Promise.all(itemDocs.map((doc) => {
