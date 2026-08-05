@@ -1,11 +1,14 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic="force-dynamic";
 
 export async function POST(request:Request,{params}:{params:Promise<{id:string}>}){
   const member=await getCurrentMember();if(!member)return Response.json({error:"Member sign-in required."},{status:401});
+  const throttle=await checkRateLimit("member-message-reply",`member:${member.id}`,20,600);
+  if(!throttle.allowed)return rateLimitResponse(throttle.retryAfter);
   const{id}=await params;
   const threadRef=db.collection("messageThreads").doc(id);
   const threadSnap=await threadRef.get();

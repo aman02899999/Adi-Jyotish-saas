@@ -5,6 +5,7 @@ import { ChevronRight } from "lucide-react";
 import { GemstoneProductCard } from "@/components/gemstone-product-card";
 import { GemstoneProductDetail } from "@/components/gemstone-product-detail";
 import { GemstoneRecentlyViewed } from "@/components/gemstone-recently-viewed";
+import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getPublishedReviews } from "@/lib/gemstone-reviews";
@@ -71,8 +72,8 @@ export default async function GemstoneProductPage({ params }: { params: Promise<
   return (
     <main className="marketing-page gem-store">
       <SiteHeader />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
+      <JsonLd data={jsonLd} />
+      <JsonLd data={breadcrumbJsonLd} />
 
       <nav className="gem-breadcrumbs shell" aria-label="Breadcrumb">
         <Link href="/gemstones">Gemstones</Link><ChevronRight size={13} />

@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { getAdminInbox } from "@/lib/messaging";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -16,6 +17,8 @@ export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "messages")) return Response.json({ error: "Message permission required." }, { status: 403 });
+  const throttle = await checkRateLimit("admin-message-thread", `admin:${admin.id}`, 60, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
   const body = await request.json() as { memberId?: string; subject?: string; message?: string; category?: string };
   const memberId = body.memberId?.trim();
   const subject = body.subject?.trim().slice(0, 160) ?? "";

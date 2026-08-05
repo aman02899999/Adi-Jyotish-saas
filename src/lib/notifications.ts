@@ -16,6 +16,20 @@ type NotificationDoc = {
   createdAt: FirebaseFirestore.Timestamp;
 };
 
+// Every current caller passes a hardcoded server-side path, but nothing enforced that — this is
+// the same guard already applied to the promo banner's CTA link, applied here defensively so a
+// future caller can't accidentally (or via unsanitized user input) turn this into a javascript:/
+// data: URI rendered as a clickable <Link href> in notification-bell.tsx.
+function sanitizeLink(link: string | undefined): string | null {
+  if (!link) return null;
+  if (link.startsWith("/") && !link.startsWith("//")) return link;
+  try {
+    return new URL(link).protocol === "https:" ? link : null;
+  } catch {
+    return null;
+  }
+}
+
 function toNotification(doc: FirebaseFirestore.QueryDocumentSnapshot) {
   const data = doc.data() as NotificationDoc;
   return {
@@ -38,7 +52,7 @@ export async function createNotification(input: { recipientType: RecipientType; 
     type: input.type.slice(0, 60),
     title: input.title.slice(0, 160),
     body: input.body?.slice(0, 2000) ?? null,
-    link: input.link?.slice(0, 300) ?? null,
+    link: sanitizeLink(input.link?.slice(0, 300)),
     readAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
@@ -56,7 +70,7 @@ export async function notifyAdmins(adminIds: string[], input: { type: string; ti
       type: input.type.slice(0, 60),
       title: input.title.slice(0, 160),
       body: input.body?.slice(0, 2000) ?? null,
-      link: input.link?.slice(0, 300) ?? null,
+      link: sanitizeLink(input.link?.slice(0, 300)),
       readAt: null,
       createdAt: FieldValue.serverTimestamp(),
     });

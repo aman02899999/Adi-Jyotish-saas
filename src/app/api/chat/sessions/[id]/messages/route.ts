@@ -2,6 +2,7 @@ import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { ChatSessionEndedError, ChatSessionNotFoundError, getSessionOr404, sendMessage } from "@/lib/chat";
 import { getCurrentMember } from "@/lib/member-auth";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -15,6 +16,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const [member, admin] = await Promise.all([getCurrentMember(), getCurrentAdmin()]);
   const isAdmin = Boolean(admin && hasAdminPermission(admin, "messages"));
   if (!member && !isAdmin) return Response.json({ error: "Sign-in required." }, { status: 401 });
+
+  // Generous enough for real typing-speed back-and-forth, tight enough to block a scripted flood.
+  const throttle = await checkRateLimit("chat-message", member ? `member:${member.id}` : `admin:${admin!.id}`, 60, 300);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   try {
     const session = await getSessionOr404(id);

@@ -11,6 +11,7 @@ type ReferralStats = {
   totalEarned: number;
   referrerReward: number;
   refereeReward: number;
+  minRecharge: number;
 };
 
 export function MemberReferrals() {
@@ -44,7 +45,7 @@ export function MemberReferrals() {
       <section className="glass-card referral-hero">
         <Gift size={22} />
         <h2>Invite friends, earn wallet credit</h2>
-        <p>Share your personal link. When a friend joins and makes their first recharge, you get ₹{stats.referrerReward} and they get ₹{stats.refereeReward} — both straight into your wallets.</p>
+        <p>Share your personal link. When a friend joins and recharges their wallet with at least ₹{stats.minRecharge}, you get ₹{stats.referrerReward} and they get ₹{stats.refereeReward} — both straight into your wallets.</p>
         <div className="referral-link-row">
           <code>{link}</code>
           <button type="button" onClick={copyLink}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}</button>

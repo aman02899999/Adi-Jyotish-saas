@@ -7,6 +7,16 @@ import { creditWalletBonus } from "@/lib/wallet";
 // Placeholder reward amounts (INR) — easy to retune, not yet exposed in the admin UI.
 export const REFERRAL_REFERRER_REWARD = 150;
 export const REFERRAL_REFEREE_REWARD = 100;
+// Requiring a real, meaningfully-sized recharge before paying out is what actually closes the
+// "farm it with throwaway accounts" hole — the general wallet top-up minimum is just ₹50, well
+// under REFERRAL_REFEREE_REWARD, so without this floor one person could profit by creating
+// unlimited accounts, each referred by their own main account, each topped up with just enough
+// to trigger the reward. At 500 the mechanic only ever returns *some* of a genuinely large
+// top-up, not a profit on a token one.
+export const MIN_RECHARGE_FOR_REWARD = 500;
+// Bounds worst-case exposure from any other abuse pattern this doesn't anticipate — legitimate
+// referrers realistically never get near this through organic word-of-mouth.
+const MAX_REWARDED_REFERRALS_PER_REFERRER = 50;
 
 const CODE_ALPHABET = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I/L — avoids look-alike mistakes
 
@@ -68,11 +78,14 @@ export async function recordReferral({ refereeId, code }: { refereeId: string; c
   });
 }
 
-/** Fires on every successful wallet recharge; only actually pays out the one time it finds a
- * "pending" referral for this member, which — because that doc is created once at signup and
- * flipped to "rewarded" here — can only be this member's first recharge ever. Safe to call
- * repeatedly (idempotent wallet ledger entries + the status flip both guard against double-pay). */
-export async function processReferralReward(memberId: string) {
+/** Fires on every successful wallet recharge; only actually pays out once it finds a "pending"
+ * referral for this member AND the triggering recharge clears MIN_RECHARGE_FOR_REWARD — a small
+ * first recharge leaves the referral "pending" rather than consuming it, so a later, larger
+ * recharge can still trigger it. Safe to call repeatedly (idempotent wallet ledger entries + the
+ * status flip both guard against double-pay). */
+export async function processReferralReward(memberId: string, rechargeAmount: number) {
+  if (rechargeAmount < MIN_RECHARGE_FOR_REWARD) return;
+
   const referralRef = db.collection("referrals").doc(memberId);
   const snap = await referralRef.get();
   if (!snap.exists) return;
@@ -80,20 +93,30 @@ export async function processReferralReward(memberId: string) {
   if (referral.status !== "pending") return;
 
   await creditWalletBonus({
-    memberId: referral.referrerId,
-    amount: REFERRAL_REFERRER_REWARD,
-    type: "referral_bonus",
-    referenceType: "referral",
-    referenceId: `referral_referrer_${memberId}`,
-  });
-  await creditWalletBonus({
     memberId,
     amount: REFERRAL_REFEREE_REWARD,
     type: "referral_bonus",
     referenceType: "referral",
     referenceId: `referral_referee_${memberId}`,
   });
-  await referralRef.update({ status: "rewarded", rewardedAt: FieldValue.serverTimestamp() });
+
+  const rewardedCountSnap = await db.collection("referrals")
+    .where("referrerId", "==", referral.referrerId)
+    .where("status", "==", "rewarded")
+    .count().get();
+  const referrerCapped = rewardedCountSnap.data().count >= MAX_REWARDED_REFERRALS_PER_REFERRER;
+
+  if (!referrerCapped) {
+    await creditWalletBonus({
+      memberId: referral.referrerId,
+      amount: REFERRAL_REFERRER_REWARD,
+      type: "referral_bonus",
+      referenceType: "referral",
+      referenceId: `referral_referrer_${memberId}`,
+    });
+  }
+
+  await referralRef.update({ status: referrerCapped ? "capped" : "rewarded", rewardedAt: FieldValue.serverTimestamp() });
 }
 
 export type ReferralStats = {

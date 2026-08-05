@@ -31,6 +31,6 @@ export async function POST(request: Request) {
 
   const amount = Math.round(Number(order.amount) / 100);
   const wallet = await rechargeWallet({ memberId: member.id, amount, razorpayPaymentId: paymentId });
-  await processReferralReward(member.id).catch((error) => console.error("Referral reward processing failed", error));
+  await processReferralReward(member.id, amount).catch((error) => console.error("Referral reward processing failed", error));
   return Response.json({ ok: true, balance: wallet.balance, currency: wallet.currency });
 }

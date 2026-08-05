@@ -2,6 +2,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getMemberInbox } from "@/lib/messaging";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
@@ -9,6 +10,8 @@ export async function GET(){const member=await getCurrentMember();if(!member)ret
 
 export async function POST(request:Request){
   const member=await getCurrentMember();if(!member)return Response.json({error:"Member sign-in required."},{status:401});
+  const throttle=await checkRateLimit("member-message-thread",`member:${member.id}`,5,600);
+  if(!throttle.allowed)return rateLimitResponse(throttle.retryAfter);
   const body=await request.json() as {subject?:string;message?:string;category?:string};const subject=body.subject?.trim().slice(0,160)??"";const text=body.message?.trim().slice(0,3000)??"";const category=["support","booking","billing","general"].includes(body.category??"")?body.category!:"support";
   if(!subject||!text)return Response.json({error:"Subject and message are required."},{status:400});
   const now=FieldValue.serverTimestamp();

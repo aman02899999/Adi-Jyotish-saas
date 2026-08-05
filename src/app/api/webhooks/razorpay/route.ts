@@ -1,12 +1,15 @@
+import { createHash } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { invoiceFromSnap, paymentFromSnap } from "@/lib/billing";
 import { getPlanById, type MembershipPlan } from "@/lib/plans";
+import { splitGstInclusive } from "@/lib/gst";
 import { sendBookingNotification } from "@/lib/messaging";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
 import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import { processReferralReward } from "@/lib/referrals";
+import { getStudioSettings } from "@/lib/studio-settings";
 import { rechargeWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
@@ -71,7 +74,10 @@ export async function POST(request: Request) {
 
   // Doc id == the Razorpay event id itself, so "does this doc exist" is the idempotency check —
   // replaces the old unique-constraint-violation-catch pattern on razorpayEvents.razorpayEventId.
-  const eventId = request.headers.get("x-razorpay-event-id") || `${body.event}:${rawBody.length}:${Date.now()}`;
+  // Razorpay always sends this header in practice, but the fallback (if it's ever missing) is a
+  // hash of the verified body — deterministic, so a genuine retry of the same delivery still
+  // dedupes correctly — rather than a timestamp, which would defeat dedup entirely by construction.
+  const eventId = request.headers.get("x-razorpay-event-id") || createHash("sha256").update(rawBody).digest("hex");
   const eventRef = db.collection("razorpayEvents").doc(eventId);
   try {
     await eventRef.create({ type: body.event, processedAt: FieldValue.serverTimestamp() });
@@ -106,8 +112,9 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
     // wallet top-up for the same amount.
     const memberId = payment.notes?.memberId;
     if (memberId && payment.notes?.purpose === "wallet_recharge" && payment.amount != null) {
-      await rechargeWallet({ memberId, amount: Math.round(payment.amount / 100), razorpayPaymentId: payment.id });
-      await processReferralReward(memberId).catch((error) => console.error("Referral reward processing failed", error));
+      const rechargeAmount = Math.round(payment.amount / 100);
+      await rechargeWallet({ memberId, amount: rechargeAmount, razorpayPaymentId: payment.id });
+      await processReferralReward(memberId, rechargeAmount).catch((error) => console.error("Referral reward processing failed", error));
     }
     return;
   }
@@ -212,6 +219,10 @@ async function handleSubscriptionCharged(subscription?: RazorpayWebhookSubscript
 
   if (payment) {
     const billingInterval = found.data.billingInterval as "monthly" | "yearly";
+    const amount = payment.amount != null ? Math.round(payment.amount / 100) : (billingInterval === "yearly" ? found.plan.priceYearly ?? found.plan.priceMonthly : found.plan.priceMonthly);
+    // Listed prices are GST-inclusive, matching how booking and gemstone invoices already split it.
+    const settings = await getStudioSettings();
+    const { subtotal, taxAmount } = splitGstInclusive(amount, settings.gstRate);
     // Doc id == razorpayPaymentId: "does this doc exist" replaces onConflictDoNothing on
     // subscriptionInvoices.razorpayPaymentId.
     const invoiceRef = db.collection("subscriptionInvoices").doc(payment.id);
@@ -219,7 +230,10 @@ async function handleSubscriptionCharged(subscription?: RazorpayWebhookSubscript
       await invoiceRef.create({
         subscriptionId: found.memberId,
         memberId: found.memberId,
-        amount: payment.amount != null ? Math.round(payment.amount / 100) : (billingInterval === "yearly" ? found.plan.priceYearly ?? found.plan.priceMonthly : found.plan.priceMonthly),
+        amount,
+        subtotal,
+        taxAmount,
+        taxRate: settings.gstRate,
         currency: payment.currency ?? found.plan.currency,
         status: "paid",
         razorpayPaymentId: payment.id,

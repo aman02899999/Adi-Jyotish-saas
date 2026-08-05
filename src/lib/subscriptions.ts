@@ -6,7 +6,17 @@ import type { MembershipPlan } from "@/lib/plans";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId, verifyRazorpaySubscriptionSignature } from "@/lib/razorpay";
 
-const activeStatuses = new Set(["created", "authenticated", "active", "pending", "halted"]);
+// Only "active" represents a subscription that has actually been paid for and is currently in
+// force. "created"/"authenticated" happen before the first charge is ever captured (a member who
+// abandons checkout right after this point would otherwise keep the doc in one of these statuses
+// forever and get the plan discount for free), and "halted" means Razorpay's renewal charge has
+// been failing — also not something that should keep granting a discount.
+const activeStatuses = new Set(["active"]);
+// A checkout in flight — after the member's account is claimed for this attempt (closing the race
+// below) but before Razorpay has actually created the subscription, or while the payment modal is
+// still open. Reclaimable after a short TTL so a crashed/abandoned attempt doesn't lock the member
+// out of ever trying again.
+const PENDING_CHECKOUT_TTL_MS = 5 * 60 * 1000;
 
 export type MemberSubscription = {
   id: string; // == memberId
@@ -31,6 +41,9 @@ export type SubscriptionInvoice = {
   subscriptionId: string; // == memberId
   memberId: string;
   amount: number;
+  subtotal: number;
+  taxAmount: number;
+  taxRate: number;
   currency: string;
   status: string;
   razorpayPaymentId: string | null;
@@ -83,6 +96,11 @@ function subscriptionInvoiceFromSnap(snap: FirebaseFirestore.DocumentSnapshot | 
     subscriptionId: data.subscriptionId as string,
     memberId: data.memberId as string,
     amount: data.amount as number,
+    // Older invoices predate the GST split — fall back to treating the whole amount as subtotal
+    // (0 tax) rather than showing NaN/undefined for historical records.
+    subtotal: (data.subtotal as number | undefined) ?? (data.amount as number),
+    taxAmount: (data.taxAmount as number | undefined) ?? 0,
+    taxRate: (data.taxRate as number | undefined) ?? 0,
     currency: data.currency as string,
     status: (data.status as string) ?? "paid",
     razorpayPaymentId: (data.razorpayPaymentId as string | null) ?? null,
@@ -134,32 +152,55 @@ export async function startSubscriptionCheckout(member: MemberIdentity, plan: Me
   const razorpayPlanId = interval === "yearly" ? plan.razorpayPlanIdYearly : plan.razorpayPlanIdMonthly;
   if (!razorpayPlanId) throw new Error("This plan is not available for the selected billing interval.");
 
-  const existing = await getMemberSubscription(member.id);
-  if (existing && activeStatuses.has(existing.status)) {
-    throw new Error("You already have a membership in progress. Manage it from Billing.");
-  }
-
-  const subscription = await razorpay.subscriptions.create({
-    plan_id: razorpayPlanId,
-    total_count: interval === "yearly" ? 5 : 60,
-    customer_notify: true,
-    notes: { memberId: member.id, planKey: plan.key },
-  });
-
   const ref = subscriptionsCollection().doc(member.id);
   const now = FieldValue.serverTimestamp();
+
+  // Claiming a "pending_checkout" placeholder atomically (inside a transaction, before ever
+  // calling Razorpay) is what actually closes the race — a plain read-then-write here would let
+  // two concurrent requests (double-click, retried request) both pass the "no existing
+  // subscription" check and each create a real, billing Razorpay subscription; only the last
+  // Firestore write would survive, leaving the other one orphaned and still charging the member's
+  // card with no record of it anywhere in the app. Reclaimable after a short TTL so a
+  // crashed/abandoned attempt (page closed mid-checkout) doesn't lock the member out forever.
+  const existingData = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? (snap.data() as Record<string, unknown>) : null;
+    const status = data?.status as string | undefined;
+    const updatedAt = data?.updatedAt as FirebaseFirestore.Timestamp | undefined;
+    const claimIsStale = status === "pending_checkout" && (!updatedAt || Date.now() - updatedAt.toMillis() > PENDING_CHECKOUT_TTL_MS);
+    if (status && (activeStatuses.has(status) || (status === "pending_checkout" && !claimIsStale))) {
+      throw new Error("You already have a membership in progress. Manage it from Billing.");
+    }
+    tx.set(ref, { status: "pending_checkout", updatedAt: now, ...(snap.exists ? {} : { createdAt: now }) }, { merge: true });
+    return data;
+  });
+
+  let subscription;
+  try {
+    subscription = await razorpay.subscriptions.create({
+      plan_id: razorpayPlanId,
+      total_count: interval === "yearly" ? 5 : 60,
+      customer_notify: true,
+      notes: { memberId: member.id, planKey: plan.key },
+    });
+  } catch (error) {
+    // Release the claim back to whatever it was before, so a failed Razorpay call doesn't strand
+    // the member in "pending_checkout" for the full TTL.
+    await ref.set({ status: (existingData?.status as string) ?? "cancelled", updatedAt: FieldValue.serverTimestamp() }, { merge: true }).catch(() => {});
+    throw error;
+  }
+
   await ref.set({
     planId: plan.id,
     billingInterval: interval,
     status: subscription.status,
     razorpaySubscriptionId: subscription.id,
-    razorpayCustomerId: existing?.razorpayCustomerId ?? null,
-    currentPeriodStart: existing?.currentPeriodStart ?? null,
-    currentPeriodEnd: existing?.currentPeriodEnd ?? null,
+    razorpayCustomerId: (existingData?.razorpayCustomerId as string | null) ?? null,
+    currentPeriodStart: existingData?.currentPeriodStart ?? null,
+    currentPeriodEnd: existingData?.currentPeriodEnd ?? null,
     cancelAtPeriodEnd: false,
     cancelledAt: null,
-    ...(existing ? {} : { createdAt: now }),
-    updatedAt: now,
+    updatedAt: FieldValue.serverTimestamp(),
   }, { merge: true });
 
   return { subscriptionId: subscription.id, key: getRazorpayKeyId()! };
@@ -187,6 +228,13 @@ export async function verifySubscriptionCheckout(member: MemberIdentity, subscri
 
   await syncMemberPlanLabel(member.id, record.plan.key);
 
+  const amount = record.billingInterval === "yearly" ? record.plan.priceYearly ?? record.plan.priceMonthly : record.plan.priceMonthly;
+  const { getStudioSettings } = await import("@/lib/studio-settings");
+  const { splitGstInclusive } = await import("@/lib/gst");
+  const settings = await getStudioSettings();
+  // Listed prices are GST-inclusive, matching how booking and gemstone invoices already split it.
+  const { subtotal, taxAmount } = splitGstInclusive(amount, settings.gstRate);
+
   // Doc id == razorpayPaymentId: idempotency via "does this doc exist" (create() fails silently
   // if it does), replacing the old onConflictDoNothing({ target: subscriptionInvoices.razorpayPaymentId }).
   const invoiceRef = subscriptionInvoicesCollection().doc(paymentId);
@@ -194,7 +242,10 @@ export async function verifySubscriptionCheckout(member: MemberIdentity, subscri
     await invoiceRef.create({
       subscriptionId: record.id,
       memberId: member.id,
-      amount: record.billingInterval === "yearly" ? record.plan.priceYearly ?? record.plan.priceMonthly : record.plan.priceMonthly,
+      amount,
+      subtotal,
+      taxAmount,
+      taxRate: settings.gstRate,
       currency: record.plan.currency,
       status: "paid",
       razorpayPaymentId: paymentId,

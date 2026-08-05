@@ -80,8 +80,7 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
     }
   }
 
-  const ref = reviewsCol.doc();
-  await ref.set({
+  const reviewData = {
     productId,
     memberId,
     orderId: verifiedOrderId,
@@ -94,7 +93,25 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
     helpfulVotes: 0,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
-  });
+  };
+
+  let ref: FirebaseFirestore.DocumentReference;
+  if (verifiedOrderId) {
+    // Doc id = orderId_productId for verified-purchase reviews, so create() enforces one review
+    // per order/product pair — otherwise the same paid order could be resubmitted indefinitely,
+    // each copy still earning the "verified purchase" badge. Anonymous/unverified reviews have no
+    // such natural key to dedupe against; they rely on the existing rate limit + moderation queue
+    // (status stays "pending" until an admin publishes it) instead.
+    ref = reviewsCol.doc(`${verifiedOrderId}_${productId}`);
+    try {
+      await ref.create(reviewData);
+    } catch {
+      throw new ReviewError("You've already reviewed this product for this order.");
+    }
+  } else {
+    ref = reviewsCol.doc();
+    await ref.set(reviewData);
+  }
   const created = fromDoc(await ref.get());
 
   const adminIds = await getAdminIdsWithPermission("gemstones");
