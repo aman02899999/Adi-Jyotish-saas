@@ -35,8 +35,10 @@ type MemberDoc = {
 };
 
 /** Verifies a client-obtained Firebase ID token, creates a long-lived session cookie, and
- * ensures a Firestore profile document exists for this member (created on first sign-in). */
-export async function createMemberSession(idToken: string, initialName?: string) {
+ * ensures a Firestore profile document exists for this member (created on first sign-in).
+ * `referralCode`, if given, is only meaningful the moment the profile is first created — it's
+ * how a signup started from someone else's invite link gets linked back to them. */
+export async function createMemberSession(idToken: string, initialName?: string, referralCode?: string) {
   const decoded = await getAuth().verifyIdToken(idToken, true);
   const uid = decoded.uid;
 
@@ -57,6 +59,10 @@ export async function createMemberSession(idToken: string, initialName?: string)
       updatedAt: FieldValue.serverTimestamp(),
       lastLoginAt: FieldValue.serverTimestamp(),
     } satisfies MemberDoc & Record<string, unknown>);
+    if (referralCode) {
+      const { recordReferral } = await import("@/lib/referrals");
+      await recordReferral({ refereeId: uid, code: referralCode });
+    }
   } else {
     await ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
   }

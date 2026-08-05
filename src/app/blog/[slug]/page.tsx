@@ -6,6 +6,7 @@ import { ArrowLeft, ArrowRight } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { JsonLd } from "@/components/json-ld";
+import { ShareButtons } from "@/components/share-buttons";
 import { getAllPosts, getPostBySlug } from "@/lib/blog";
 import { getSiteUrl } from "@/lib/site-url";
 
@@ -45,7 +46,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         image: new URL(post.cover, getSiteUrl()).toString(),
         datePublished: post.publishedAt,
         author: { "@type": "Person", name: post.author },
-        publisher: { "@type": "Organization", name: "Jyotish" },
+        publisher: { "@type": "Organization", name: "Adi Jyotish Gurus" },
         mainEntityOfPage: new URL(`/blog/${post.slug}`, getSiteUrl()).toString(),
       }} />
       <SiteHeader />
@@ -54,6 +55,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         <p className="eyebrow"><span /> {post.category}</p>
         <h1>{post.title}</h1>
         <div className="blog-meta blog-meta--post"><span>{post.author}</span><b>·</b><span>{formatDate(post.publishedAt)}</span><b>·</b><span>{post.readMinutes} min read</span></div>
+        <ShareButtons url={new URL(`/blog/${post.slug}`, getSiteUrl()).toString()} title={post.title} text={post.excerpt} />
 
         <div className="blog-post__art">
           <Image src={post.cover} alt={post.title} fill priority sizes="(max-width: 900px) 100vw, 900px" />

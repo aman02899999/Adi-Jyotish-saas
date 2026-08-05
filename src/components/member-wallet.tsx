@@ -3,6 +3,7 @@
 import { useState } from "react";
 import { Check, PlusCircle, Wallet as WalletIcon, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { trackEvent } from "@/lib/track-event";
 
 export type WalletEntryRow = { id: string; type: string; amount: number; balanceAfter: number; referenceType: string | null; createdAt: Date | string };
 
@@ -33,14 +34,14 @@ export function MemberWallet({ balance, currency, entries, onlinePaymentsAvailab
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Gurus",
         description: `Wallet recharge · ${currency} ${amount}`,
         prefill: { name: member.name, email: member.email },
         theme: { color: "#a95838" },
         onSuccess: async (payment) => {
           const verify = await fetch("/api/member/wallet/verify", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ razorpay_order_id: payment.razorpay_order_id, razorpay_payment_id: payment.razorpay_payment_id, razorpay_signature: payment.razorpay_signature }) });
           const verifyData = await verify.json();
-          if (verify.ok) { setLiveBalance(verifyData.balance); setNotice("Wallet recharged. Your new balance is shown below."); setTimeout(() => window.location.reload(), 1200); }
+          if (verify.ok) { trackEvent("add_payment_info", { value: amount, currency: "INR" }); setLiveBalance(verifyData.balance); setNotice("Wallet recharged. Your new balance is shown below."); setTimeout(() => window.location.reload(), 1200); }
           else setNotice(verifyData.error || "Payment could not be confirmed. Contact support if you were charged.");
           setLoading(false);
         },

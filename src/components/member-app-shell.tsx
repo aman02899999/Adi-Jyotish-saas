@@ -44,10 +44,12 @@ const navItems = [
   { label: "Panchang", icon: CalendarDays, href: "/dashboard#insights" },
   { label: "Connections", icon: HeartHandshake, href: "/dashboard#services-list" },
   { label: "Career & Dharma", icon: BriefcaseBusiness, href: "/book" },
-  { label: "Your Rewards", icon: Gift, href: "/dashboard#services-list" },
+  { label: "Invite & Earn", icon: Gift, href: "/dashboard/referrals" },
 ];
 
-function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" }) {
+type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals";
+
+function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveSection }) {
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return (
     <>
@@ -55,7 +57,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashbo
       <nav className="app-nav" aria-label="Member navigation">
         <p>My cosmos</p>
         {navItems.map(({ label, icon: Icon, href }) => {
-          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist");
+          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn");
           return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
         })}
         <p className="app-nav__lower">Account</p>
@@ -70,7 +72,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: "Dashbo
   );
 }
 
-export async function MemberAppShell({ member, active, children }: { member: MemberIdentity; active: "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist"; children: ReactNode }) {
+export async function MemberAppShell({ member, active, children }: { member: MemberIdentity; active: ActiveSection; children: ReactNode }) {
   const unreadCount = await getMemberUnreadCount(member.id);
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
   return (
@@ -83,7 +85,7 @@ export async function MemberAppShell({ member, active, children }: { member: Mem
         </div>
         <section className="app-content">
           <header className="app-topbar">
-            <nav><Link className={active === "Dashboard" ? "active" : ""} href="/dashboard">Dashboard</Link><Link className={active === "Consultations" ? "active" : ""} href="/dashboard/consultations">My consultations</Link><Link className={active === "AiReadings" ? "active" : ""} href="/dashboard/ai-readings">Live Answers</Link><Link className={active === "GemOrders" ? "active" : ""} href="/dashboard/gemstone-orders">Gem orders</Link><Link className={active === "Messages" ? "active" : ""} href="/dashboard/messages">Inbox</Link><Link className={active === "Wallet" ? "active" : ""} href="/dashboard/wallet">Wallet</Link><Link className={active === "Billing" ? "active" : ""} href="/dashboard/billing">Billing</Link></nav>
+            <nav><Link className={active === "Dashboard" ? "active" : ""} href="/dashboard">Dashboard</Link><Link className={active === "Consultations" ? "active" : ""} href="/dashboard/consultations">My consultations</Link><Link className={active === "AiReadings" ? "active" : ""} href="/dashboard/ai-readings">Live Answers</Link><Link className={active === "GemOrders" ? "active" : ""} href="/dashboard/gemstone-orders">Gem orders</Link><Link className={active === "Messages" ? "active" : ""} href="/dashboard/messages">Inbox</Link><Link className={active === "Wallet" ? "active" : ""} href="/dashboard/wallet">Wallet</Link><Link className={active === "Billing" ? "active" : ""} href="/dashboard/billing">Billing</Link><Link className={active === "Referrals" ? "active" : ""} href="/dashboard/referrals">Invite & earn</Link></nav>
             <div className="topbar-tools">
               <label><Search size={16} /><input aria-label="Search dashboard" placeholder="Search" /></label>
               <Link className="notification-button" href="/dashboard/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <span />}</Link>

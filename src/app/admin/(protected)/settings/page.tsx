@@ -2,10 +2,12 @@ import { redirect } from "next/navigation";
 import { db } from "@/lib/firestore";
 import { AdminSettings } from "@/components/admin-settings";
 import { AdminDemoAccounts } from "@/components/admin-demo-accounts";
+import { AdminPromoBanner } from "@/components/admin-promo-banner";
 import { AdminShell } from "@/components/admin-shell";
 import { ALL_ADMIN_PERMISSIONS, getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { getAllRolesAdmin, getAssignableRoleSlugs } from "@/lib/admin-roles";
 import { listPendingAdminInvites } from "@/lib/admin-invites";
+import { getPromoBanner } from "@/lib/promo-banner";
 import { getStudioSettings } from "@/lib/studio-settings";
 
 export const dynamic = "force-dynamic";
@@ -19,12 +21,13 @@ export default async function AdminSettingsPage() {
   const admin = await getCurrentAdmin();
   if (!hasAdminPermission(admin, "settings")) redirect("/admin/unauthorized");
 
-  const [settings, usersSnap, invites, roleOptions, initialRoles] = await Promise.all([
+  const [settings, usersSnap, invites, roleOptions, initialRoles, promoBanner] = await Promise.all([
     getStudioSettings(),
     db.collection("adminUsers").orderBy("name", "asc").get(),
     listPendingAdminInvites(),
     getAssignableRoleSlugs(),
     getAllRolesAdmin(),
+    getPromoBanner(),
   ]);
   const users = usersSnap.docs.map((doc) => {
     const data = doc.data() as Record<string, unknown>;
@@ -56,6 +59,7 @@ export default async function AdminSettingsPage() {
           allPermissions={ALL_ADMIN_PERMISSIONS}
           canManageRoles={hasAdminPermission(admin, "roles")}
         />
+        <AdminPromoBanner initial={{ enabled: promoBanner.enabled, message: promoBanner.message, ctaLabel: promoBanner.ctaLabel, ctaHref: promoBanner.ctaHref }} />
         <AdminDemoAccounts />
       </div>
     </AdminShell>

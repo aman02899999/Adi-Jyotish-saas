@@ -1,11 +1,27 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
 import { GoogleAnalytics } from "@/components/google-analytics";
+import { JsonLd } from "@/components/json-ld";
+import { MetaPixel } from "@/components/meta-pixel";
+import { PromoBanner } from "@/components/promo-banner";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
+const siteUrl = getSiteUrl();
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Adi Jyotish Gurus",
+  url: siteUrl.toString(),
+  potentialAction: {
+    "@type": "SearchAction",
+    target: { "@type": "EntryPoint", urlTemplate: `${new URL("/astrologers", siteUrl).toString()}?q={search_term_string}` },
+    "query-input": "required name=search_term_string",
+  },
+};
+
 export const metadata: Metadata = {
-  metadataBase: getSiteUrl(),
+  metadataBase: siteUrl,
   applicationName: "Adi Jyotish Gurus",
   title: { default: "Adi Jyotish Gurus — Ancient clarity for modern life", template: "%s · Adi Jyotish Gurus" },
   description: "Personal Vedic astrology readings, cosmic insights, and auspicious timing for modern life.",
@@ -35,8 +51,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <JsonLd data={websiteJsonLd} />
+        <PromoBanner />
+        {children}
+      </body>
       <GoogleAnalytics />
+      <MetaPixel />
     </html>
   );
 }

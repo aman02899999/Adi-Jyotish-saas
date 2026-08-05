@@ -1,9 +1,11 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { ShareButtons } from "@/components/share-buttons";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { ZODIAC_SIGNS, getDailyHoroscope, isZodiacSign, todayCivilDate, type ZodiacSignKey } from "@/lib/horoscopes";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -61,6 +63,7 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
           <span>Want guidance on your own chart?</span>
           <Link href="/ask" className="button button--small">Ask a personal question <ArrowRight size={14} /></Link>
         </div>
+        <ShareButtons url={new URL(`/horoscope?sign=${sign}`, getSiteUrl()).toString()} title={`${definition.name} Horoscope Today`} text={`Today's ${definition.name} horoscope on Adi Jyotish Gurus:`} />
         <p className="legal-note">This horoscope offers guidance and reflection, not a guarantee of any outcome.</p>
       </section>
     <SiteFooter />

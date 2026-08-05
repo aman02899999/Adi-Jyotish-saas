@@ -10,11 +10,11 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("member-google-login", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = await request.json() as { idToken?: string };
+  const body = await request.json() as { idToken?: string; ref?: string };
   if (!body.idToken) return Response.json({ error: "Google sign-in could not be verified. Please try again." }, { status: 401 });
 
   try {
-    await createMemberSession(body.idToken);
+    await createMemberSession(body.idToken, undefined, body.ref?.trim().slice(0, 20));
   } catch {
     return Response.json({ error: "Google sign-in could not be verified. Please try again." }, { status: 401 });
   }

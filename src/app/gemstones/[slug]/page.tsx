@@ -58,10 +58,21 @@ export default async function GemstoneProductPage({ params }: { params: Promise<
     aggregateRating: product.ratingCount > 0 ? { "@type": "AggregateRating", ratingValue: product.ratingAverage, reviewCount: product.ratingCount } : undefined,
   };
 
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Gemstones", item: new URL("/gemstones", site).toString() },
+      { "@type": "ListItem", position: 2, name: product.categoryName, item: new URL(`/gemstones/shop?category=${product.categorySlug}`, site).toString() },
+      { "@type": "ListItem", position: 3, name: product.name, item: new URL(`/gemstones/${product.slug}`, site).toString() },
+    ],
+  };
+
   return (
     <main className="marketing-page gem-store">
       <SiteHeader />
       <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(breadcrumbJsonLd) }} />
 
       <nav className="gem-breadcrumbs shell" aria-label="Breadcrumb">
         <Link href="/gemstones">Gemstones</Link><ChevronRight size={13} />

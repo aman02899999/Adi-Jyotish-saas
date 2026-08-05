@@ -10,13 +10,13 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("member-register", requestIp(request), 8, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = await request.json() as { idToken?: string; name?: string };
+  const body = await request.json() as { idToken?: string; name?: string; ref?: string };
   const name = body.name?.trim().slice(0, 120) ?? "";
   if (name.length < 2) return Response.json({ error: "Enter your name." }, { status: 400 });
   if (!body.idToken) return Response.json({ error: "Your account could not be created." }, { status: 400 });
 
   try {
-    await createMemberSession(body.idToken, name);
+    await createMemberSession(body.idToken, name, body.ref?.trim().slice(0, 20));
   } catch {
     return Response.json({ error: "Your account could not be created." }, { status: 401 });
   }

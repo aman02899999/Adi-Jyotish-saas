@@ -3,8 +3,9 @@
 import { useEffect, useRef, useState } from "react";
 import { completeGoogleRedirectSignIn, isGoogleSignInAvailable, signInWithGoogle } from "@/lib/firebase-client";
 
-export function GoogleSignInButton({ endpoint, onSuccess, onError }: {
+export function GoogleSignInButton({ endpoint, extraBody, onSuccess, onError }: {
   endpoint: string;
+  extraBody?: Record<string, unknown>;
   onSuccess: (data: Record<string, unknown>) => void;
   onError: (message: string) => void;
 }) {
@@ -12,7 +13,7 @@ export function GoogleSignInButton({ endpoint, onSuccess, onError }: {
   const finishing = useRef(false);
 
   async function finish(idToken: string) {
-    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken }) });
+    const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken, ...extraBody }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Google sign-in failed.");
     onSuccess(data);

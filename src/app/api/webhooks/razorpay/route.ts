@@ -6,6 +6,7 @@ import { sendBookingNotification } from "@/lib/messaging";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
 import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/lib/razorpay";
+import { processReferralReward } from "@/lib/referrals";
 import { rechargeWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
@@ -106,6 +107,7 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
     const memberId = payment.notes?.memberId;
     if (memberId && payment.notes?.purpose === "wallet_recharge" && payment.amount != null) {
       await rechargeWallet({ memberId, amount: Math.round(payment.amount / 100), razorpayPaymentId: payment.id });
+      await processReferralReward(memberId).catch((error) => console.error("Referral reward processing failed", error));
     }
     return;
   }

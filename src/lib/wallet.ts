@@ -157,6 +157,35 @@ export async function rechargeWallet({ memberId, amount, razorpayPaymentId }: { 
   });
 }
 
+/** Credits a wallet for a non-recharge reason (referral bonuses, promo credit, etc). Idempotent
+ * per `referenceId`, same pattern as rechargeWallet's razorpayPaymentId — the caller picks a
+ * deterministic id so re-invoking this for the same reward is a safe no-op. */
+export async function creditWalletBonus({ memberId, amount, type, referenceType, referenceId }: { memberId: string; amount: number; type: string; referenceType: string; referenceId: string }): Promise<Wallet> {
+  await getOrCreateWallet(memberId);
+  const walletRef = walletsCollection().doc(memberId);
+  const entryRef = walletRef.collection("entries").doc(referenceId);
+
+  return db.runTransaction(async (tx) => {
+    const [walletSnap, entrySnap] = await Promise.all([tx.get(walletRef), tx.get(entryRef)]);
+    if (!walletSnap.exists) throw new Error("Wallet not found.");
+    const wallet = walletFromSnap(walletSnap);
+    if (entrySnap.exists) return wallet; // already credited — idempotent no-op
+
+    const balanceAfter = wallet.balance + amount;
+    tx.set(entryRef, {
+      type,
+      amount,
+      balanceAfter,
+      referenceType,
+      referenceId,
+      razorpayPaymentId: null,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    tx.update(walletRef, { balance: balanceAfter, updatedAt: FieldValue.serverTimestamp() });
+    return { ...wallet, balance: balanceAfter };
+  });
+}
+
 /** Reserves funds against a wallet. Throws InsufficientBalanceError if the wallet cannot cover the amount. */
 export async function createHold({ memberId, amount, referenceType }: { memberId: string; amount: number; referenceType: string }): Promise<WalletHold> {
   await getOrCreateWallet(memberId);

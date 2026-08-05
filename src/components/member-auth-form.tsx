@@ -4,6 +4,7 @@ import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
+import { trackEvent } from "@/lib/track-event";
 
 export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login" | "register" }) {
   const [mode, setMode] = useState(initialMode);
@@ -14,6 +15,9 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
+  // Read once at mount, client-side only — a signup started from someone's invite link (?ref=CODE)
+  // needs to survive through to the register/google-login call, but never affects what's rendered.
+  const [refCode] = useState(() => (typeof window === "undefined" ? undefined : new URLSearchParams(window.location.search).get("ref") ?? undefined));
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -27,10 +31,11 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
       const response = await fetch(`/api/member/${mode === "register" ? "register" : "login"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, idToken }),
+        body: JSON.stringify({ name, idToken, ref: mode === "register" ? refCode : undefined }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Your account could not be verified.");
+      if (mode === "register") trackEvent("sign_up", { method: "password" });
       window.location.assign(mode === "register" || !data.onboardingComplete ? "/onboarding" : "/dashboard");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong.");
@@ -56,8 +61,12 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
       </form>
       <GoogleSignInButton
         endpoint="/api/member/google-login"
+        extraBody={refCode ? { ref: refCode } : undefined}
         onError={setError}
-        onSuccess={(data) => window.location.assign(!data.onboardingComplete ? "/onboarding" : "/dashboard")}
+        onSuccess={(data) => {
+          if (!data.onboardingComplete) trackEvent("sign_up", { method: "google" });
+          window.location.assign(!data.onboardingComplete ? "/onboarding" : "/dashboard");
+        }}
       />
     </>
   );

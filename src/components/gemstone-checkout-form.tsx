@@ -6,6 +6,7 @@ import { useState } from "react";
 import { Check, Lock, ShieldCheck, X } from "lucide-react";
 import { useGemstoneCart } from "@/components/gemstone-cart-context";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { trackEvent } from "@/lib/track-event";
 
 type MemberInfo = { name: string; email: string; phone: string | null };
 
@@ -64,7 +65,7 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
         amount: data.amount,
         currency: data.currency,
         order_id: data.razorpayOrderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Gurus",
         description: `Gemstone order · ${data.orderNumber}`,
         prefill: { name: form.name, email: member?.email ?? form.email, contact: form.phone },
         theme: { color: "#a95838" },
@@ -77,6 +78,7 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
           const verifyData = await verify.json();
           setLoading(false);
           if (verify.ok) {
+            trackEvent("purchase", { value: subtotal + shippingFee, currency: "INR", item_category: "gemstone" });
             clearCart();
             router.push(`/gemstones/order/${data.orderNumber}${member ? "" : `?email=${encodeURIComponent(form.email)}`}`);
           } else {
