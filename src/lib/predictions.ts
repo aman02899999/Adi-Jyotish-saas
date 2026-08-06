@@ -12,6 +12,7 @@ import { db, withIndexFallback } from "@/lib/firestore";
 export class PredictionError extends Error {}
 
 export const MIN_RESOLVED_FOR_PUBLIC_STAT = 5;
+const MAX_PREDICTIONS_PER_BOOKING = 5;
 
 export type PredictionStatus = "pending" | "came_true" | "did_not_happen" | "unclear";
 
@@ -62,6 +63,15 @@ export async function createPrediction({ memberId, memberName, practitionerId, p
   if (cleanText.length < 10) throw new PredictionError("Please describe the prediction in a bit more detail.");
   if (cleanText.length > 600) throw new PredictionError("Please keep the prediction under 600 characters.");
   if (!/^\d{4}-\d{2}-\d{2}$/.test(expectedByDate)) throw new PredictionError("Please choose a valid expected-by date.");
+  if (expectedByDate <= new Date().toISOString().slice(0, 10)) throw new PredictionError("Please choose an expected-by date in the future.");
+
+  // Bounds how many predictions one booking can ever contribute — without this, a single completed
+  // booking could be used to log an unlimited number of predictions and fabricate a practitioner's
+  // public accuracy stat.
+  const existing = await db.collection("predictions").where("bookingId", "==", bookingId).count().get();
+  if (existing.data().count >= MAX_PREDICTIONS_PER_BOOKING) {
+    throw new PredictionError(`You can log up to ${MAX_PREDICTIONS_PER_BOOKING} predictions per consultation.`);
+  }
 
   const ref = await db.collection("predictions").add({
     memberId,
@@ -95,6 +105,9 @@ export async function resolvePrediction({ memberId, predictionId, status }: { me
   const current = fromDoc(snap);
   if (current.memberId !== memberId) throw new PredictionError("Prediction not found.");
   if (current.status !== "pending") throw new PredictionError("This prediction has already been resolved.");
+  if (current.expectedByDate > new Date().toISOString().slice(0, 10)) {
+    throw new PredictionError("This prediction can only be marked resolved once its expected-by date has passed.");
+  }
 
   await ref.update({ status, resolvedAt: FieldValue.serverTimestamp() });
   const updated = await ref.get();

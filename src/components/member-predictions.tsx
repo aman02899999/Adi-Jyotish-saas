@@ -21,6 +21,12 @@ function todayIso() {
   return new Date().toISOString().slice(0, 10);
 }
 
+function addDaysIso(base: string, days: number) {
+  const date = new Date(`${base}T00:00:00Z`);
+  date.setUTCDate(date.getUTCDate() + days);
+  return date.toISOString().slice(0, 10);
+}
+
 export function MemberPredictions({ initialPredictions, eligibleBookings }: { initialPredictions: Prediction[]; eligibleBookings: EligibleBooking[] }) {
   const [predictions, setPredictions] = useState(initialPredictions);
   const [showForm, setShowForm] = useState(false);
@@ -95,7 +101,7 @@ export function MemberPredictions({ initialPredictions, eligibleBookings }: { in
           <div className="booking-fields">
             <label className="wide"><span>Which consultation was this from?</span><div><select value={bookingId} onChange={(event) => setBookingId(event.target.value)}>{eligibleBookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.serviceTitle} with {booking.practitionerName} · {new Date(booking.scheduledAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</option>)}</select></div></label>
             <label className="wide"><span>What did they predict?</span><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="e.g. A career change or promotion is likely within the next 6 months" maxLength={600} /></label>
-            <label><span>Expected by</span><div><input type="date" value={expectedByDate} onChange={(event) => setExpectedByDate(event.target.value)} /></div></label>
+            <label><span>Expected by</span><div><input type="date" min={addDaysIso(todayIso(), 1)} value={expectedByDate} onChange={(event) => setExpectedByDate(event.target.value)} /></div></label>
           </div>
           <div className="ask-answer__actions">
             <button type="button" className="button" disabled={loading} onClick={submit}>{loading ? <><LoaderCircle size={16} className="spin" /> Saving…</> : <>Save prediction</>}</button>
