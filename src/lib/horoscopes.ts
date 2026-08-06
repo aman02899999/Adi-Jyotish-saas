@@ -73,7 +73,7 @@ async function monthKey() {
 
 /** Theme of the Moon transiting each house counted from a person's own (Moon) sign —
  * the standard "Chandra transit" framework classical Jyotish daily horoscopes are built on. */
-const HOUSE_THEMES: Record<number, string> = {
+export const HOUSE_THEMES: Record<number, string> = {
   1: "The Moon lights up your own sign today, sharpening your instincts and putting your feelings close to the surface. It's a self-focused day, good for starting something that actually reflects who you are.",
   2: "The Moon turns your attention to money, family, and the things that make you feel grounded. Practical decisions — a purchase, a budget, a conversation with family — land well today.",
   3: "The Moon energizes courage, communication, and short trips. A conversation or message you've been putting off is easier to start today than it will feel tomorrow.",
