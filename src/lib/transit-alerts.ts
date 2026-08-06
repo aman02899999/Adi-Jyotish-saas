@@ -118,8 +118,14 @@ export async function getCosmicWeather(member: { name: string; birthDate: string
 
   const jupiterIsNew = stored.jupiter !== undefined && stored.jupiter !== jupiterHouse;
   const saturnIsNew = stored.saturn !== undefined && stored.saturn !== saturnHouse;
+  const unchanged = stored.moon === moonHouse && stored.jupiter === jupiterHouse && stored.saturn === saturnHouse && stored.rahu === rahuHouse && stored.ketu === ketuHouse;
 
-  await ref.set({ houses: { moon: moonHouse, jupiter: jupiterHouse, saturn: saturnHouse, rahu: rahuHouse, ketu: ketuHouse }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  // Skips the write when nothing has moved since the last visit — this runs on every dashboard
+  // load, and most days a member checks the dashboard more than once, so without this every
+  // repeat visit would re-write an identical document.
+  if (!unchanged) {
+    await ref.set({ houses: { moon: moonHouse, jupiter: jupiterHouse, saturn: saturnHouse, rahu: rahuHouse, ketu: ketuHouse }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  }
 
   if (jupiterIsNew || saturnIsNew) {
     const changed = [jupiterIsNew ? "Jupiter" : null, saturnIsNew ? "Saturn" : null].filter(Boolean).join(" and ");
