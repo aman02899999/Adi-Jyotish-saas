@@ -2,6 +2,7 @@ import "server-only";
 
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getPractitionerDirectory } from "@/lib/scheduling";
+import { getPractitionerAccuracyMap } from "@/lib/predictions";
 
 export type PractitionerReview = {
   id: string;
@@ -42,17 +43,19 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   rating: number | null;
   reviewCount: number;
   dimensions: { clarity: number; empathy: number; usefulness: number } | null;
+  predictionAccuracy: { accuracyPercent: number; resolvedCount: number } | null;
 };
 
 export async function getMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
   // Reviews fall back to empty (practitioners still list, just without ratings) if the
   // (status, createdAt) composite index isn't built yet.
-  const [directory, reviewsSnap] = await Promise.all([
+  const [directory, reviewsSnap, accuracyMap] = await Promise.all([
     getPractitionerDirectory(true),
     withIndexFallback(
       () => db.collection("practitionerReviews").where("status", "==", "published").orderBy("createdAt", "desc").get(),
       { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
     ),
+    getPractitionerAccuracyMap(),
   ]);
   const reviews = reviewsSnap.docs.map(reviewFromDoc);
   return directory.map((person) => {
@@ -63,6 +66,7 @@ export async function getMarketplacePractitioners(): Promise<MarketplacePractiti
       rating: average("rating"),
       reviewCount: personReviews.length,
       dimensions: personReviews.length ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
+      predictionAccuracy: accuracyMap.get(person.id) ?? null,
     } satisfies MarketplacePractitioner;
   });
 }
