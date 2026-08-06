@@ -414,6 +414,19 @@ button { border: 0; }
 .koota--zero { border-color:#d98f6f; background:rgba(217,143,111,.08); }
 .koota--zero strong { color:#b5502c; }
 @media (max-width: 640px) { .koota-grid { grid-template-columns:repeat(2, 1fr); } }
+.timeline-intro { margin:0 0 14px; color:var(--muted); font-size:13px; line-height:1.6; }
+.compat-timeline { display:grid; grid-template-columns:repeat(3, 1fr); gap:10px; margin-bottom:4px; }
+.timeline-month { padding:12px 14px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.4); }
+.timeline-month__head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:6px; }
+.timeline-month__head strong { font:400 14px var(--serif); }
+.timeline-month__head span { padding:2px 7px; border-radius:999px; color:var(--muted); background:rgba(139,102,76,.1); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+.timeline-month p { margin:0; color:var(--muted); font-size:12.5px; line-height:1.55; }
+.timeline-month--favorable { border-color:rgba(90,143,90,.35); background:rgba(120,168,110,.09); }
+.timeline-month--favorable .timeline-month__head span { color:#3d7a3d; background:rgba(90,143,90,.16); }
+.timeline-month--supportive .timeline-month__head span { color:var(--copper-dark); background:rgba(190,136,100,.15); }
+.timeline-month--caution { border-color:rgba(217,143,111,.4); background:rgba(217,143,111,.08); }
+.timeline-month--caution .timeline-month__head span { color:#b5502c; background:rgba(217,143,111,.16); }
+@media (max-width: 640px) { .compat-timeline { grid-template-columns:1fr; } }
 .numerology-numbers { display:flex; gap:14px; margin:0 0 18px; }
 .numerology-numbers div { display:flex; flex-direction:column; align-items:center; gap:4px; padding:16px 22px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.4); }
 .numerology-numbers strong { font:400 30px var(--serif); color:var(--copper); }

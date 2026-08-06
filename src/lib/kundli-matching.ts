@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { computeAshtakoot, type AshtakootResult } from "@/lib/ashtakoot";
 import { computeGrahaPositions, NAKSHATRAS, RASHIS } from "@/lib/astro-engine";
+import { computeCompatibilityTimeline, type TimelineMonth } from "@/lib/compatibility-timeline";
 import { PlaceNotFoundError, resolveBirthMoment } from "@/lib/geo";
 
 export class KundliMatchError extends Error {}
@@ -101,6 +102,7 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
   });
 
   const narrative = buildNarrative({ nameA, nameB, result });
+  const timeline = computeCompatibilityTimeline({ nameA, moonARashiIndex: moonA.rashiIndex, nameB, moonBRashiIndex: moonB.rashiIndex });
 
   const ref = await db.collection("kundliMatches").add({
     memberId,
@@ -115,9 +117,10 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     compatibilityScore: result.totalScore,
     breakdown: result.breakdown,
     narrative,
+    timeline,
     createdAt: FieldValue.serverTimestamp(),
   });
-  const saved = { id: ref.id, memberId, personAName: nameA, personABirthDate: birthDateA, personABirthTime: birthTimeA, personABirthPlace: birthPlaceA, personBName: nameB, personBBirthDate: birthDateB, personBBirthTime: birthTimeB, personBBirthPlace: birthPlaceB, compatibilityScore: result.totalScore, breakdown: result.breakdown, narrative };
+  const saved = { id: ref.id, memberId, personAName: nameA, personABirthDate: birthDateA, personABirthTime: birthTimeA, personABirthPlace: birthPlaceA, personBName: nameB, personBBirthDate: birthDateB, personBBirthTime: birthTimeB, personBBirthPlace: birthPlaceB, compatibilityScore: result.totalScore, breakdown: result.breakdown, narrative, timeline };
 
   return {
     match: saved,
@@ -126,5 +129,6 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     moonANakshatra: NAKSHATRAS[moonA.nakshatraIndex],
     moonBRashi: RASHIS[moonB.rashiIndex].name,
     moonBNakshatra: NAKSHATRAS[moonB.nakshatraIndex],
+    timeline: timeline as TimelineMonth[],
   };
 }

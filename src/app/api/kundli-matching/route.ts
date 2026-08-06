@@ -41,7 +41,7 @@ export async function POST(request: Request) {
   if (!birthPlaceA || !birthPlaceB) return Response.json({ error: "Please share both birth places." }, { status: 400 });
 
   try {
-    const { match, result, moonARashi, moonANakshatra, moonBRashi, moonBNakshatra } = await createKundliMatch({
+    const { match, result, moonARashi, moonANakshatra, moonBRashi, moonBNakshatra, timeline } = await createKundliMatch({
       memberId: member?.id ?? null, nameA, birthDateA, birthTimeA, birthPlaceA, nameB, birthDateB, birthTimeB, birthPlaceB,
     });
     return Response.json({
@@ -52,6 +52,7 @@ export async function POST(request: Request) {
       bhakootDosha: result.bhakootDosha,
       moonARashi, moonANakshatra, moonBRashi, moonBNakshatra,
       narrative: match.narrative,
+      timeline,
     }, { status: 201 });
   } catch (error) {
     if (error instanceof KundliMatchError) return Response.json({ error: error.message }, { status: 400 });

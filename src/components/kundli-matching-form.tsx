@@ -5,10 +5,14 @@ import { CalendarDays, Check, Clock3, HeartHandshake, LoaderCircle, MapPin, User
 import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
 
 type Breakdown = { varna: number; vashya: number; tara: number; yoni: number; grahaMaitri: number; gana: number; bhakoot: number; nadi: number };
+type TimelineMonth = { monthLabel: string; score: number; tier: "favorable" | "supportive" | "neutral" | "caution"; headline: string };
 type Result = {
   score: number; maxScore: number; breakdown: Breakdown; nadiDosha: boolean; bhakootDosha: boolean;
   moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string; narrative: string;
+  timeline: TimelineMonth[];
 };
+
+const TIER_LABEL: Record<TimelineMonth["tier"], string> = { favorable: "Favorable", supportive: "Supportive", neutral: "Neutral", caution: "Use caution" };
 
 const KOOTA_META: Array<{ key: keyof Breakdown; label: string; max: number }> = [
   { key: "varna", label: "Varna", max: 1 },
@@ -78,6 +82,16 @@ export function KundliMatchingForm() {
         </div>
         <h2>From Shree Santram Shashtri</h2>
         <div className="ask-answer__body">{result.narrative.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+        <h2>12-month compatibility timeline</h2>
+        <p className="timeline-intro">Real Jupiter, Venus, and Saturn transits checked against both your natal Moons — not a static score, but when the sky actually favors this pairing.</p>
+        <div className="compat-timeline">
+          {result.timeline.map((month) => (
+            <div key={month.monthLabel} className={`timeline-month timeline-month--${month.tier}`}>
+              <div className="timeline-month__head"><strong>{month.monthLabel}</strong><span>{TIER_LABEL[month.tier]}</span></div>
+              <p>{month.headline}</p>
+            </div>
+          ))}
+        </div>
         <div className="ask-answer__actions">
           <button type="button" className="button button--ghost" onClick={() => { setResult(null); }}>Match another pair</button>
         </div>
