@@ -427,6 +427,23 @@ button { border: 0; }
 .timeline-month--caution { border-color:rgba(217,143,111,.4); background:rgba(217,143,111,.08); }
 .timeline-month--caution .timeline-month__head span { color:#b5502c; background:rgba(217,143,111,.16); }
 @media (max-width: 640px) { .compat-timeline { grid-template-columns:1fr; } }
+.muhurat-day-list { display:grid; grid-template-columns:repeat(2, 1fr); gap:10px; margin-bottom:4px; }
+.muhurat-day { padding:13px 15px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.4); }
+.muhurat-day__head { display:flex; align-items:center; justify-content:space-between; gap:8px; margin-bottom:5px; }
+.muhurat-day__head strong { font:400 14px var(--serif); }
+.muhurat-day__head span { padding:2px 7px; border-radius:999px; color:var(--muted); background:rgba(139,102,76,.1); font-size:11px; text-transform:uppercase; letter-spacing:.04em; }
+.muhurat-day__meta { margin:0 0 7px; color:var(--muted); font-size:12.5px; }
+.muhurat-day__reasons { margin:0 0 9px; padding-left:16px; color:var(--muted); font-size:12px; line-height:1.55; }
+.muhurat-day__windows { display:flex; flex-wrap:wrap; gap:6px; }
+.muhurat-day__window { padding:3px 8px; border-radius:999px; font-size:11px; }
+.muhurat-day__window--good { color:#3d7a3d; background:rgba(90,143,90,.16); }
+.muhurat-day__window--bad { color:#b5502c; background:rgba(217,143,111,.16); }
+.muhurat-day--excellent { border-color:rgba(90,143,90,.35); background:rgba(120,168,110,.09); }
+.muhurat-day--excellent .muhurat-day__head span { color:#3d7a3d; background:rgba(90,143,90,.16); }
+.muhurat-day--good .muhurat-day__head span { color:var(--copper-dark); background:rgba(190,136,100,.15); }
+.muhurat-day--avoid { border-color:rgba(217,143,111,.4); background:rgba(217,143,111,.08); }
+.muhurat-day--avoid .muhurat-day__head span { color:#b5502c; background:rgba(217,143,111,.16); }
+@media (max-width: 640px) { .muhurat-day-list { grid-template-columns:1fr; } }
 .numerology-numbers { display:flex; gap:14px; margin:0 0 18px; }
 .numerology-numbers div { display:flex; flex-direction:column; align-items:center; gap:4px; padding:16px 22px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.4); }
 .numerology-numbers strong { font:400 30px var(--serif); color:var(--copper); }
@@ -903,6 +920,7 @@ button { border: 0; }
 .booking-fields label > span i { color:var(--muted); font-size:12px; font-style:normal; font-weight:400; }
 .booking-fields label > div { min-height:41px; display:flex; align-items:center; gap:9px; padding:0 11px; border:1px solid var(--line); border-radius:8px; color:var(--muted); background:rgba(255,255,255,.44); }
 .booking-fields input { min-width:0; width:100%; border:0; outline:0; background:transparent; font-size:13px; }
+.booking-fields select { min-width:0; width:100%; border:0; outline:0; background:transparent; color:var(--ink); font-size:13px; }
 .booking-fields textarea { width:100%; padding:11px; resize:vertical; border:1px solid var(--line); border-radius:8px; outline:0; background:rgba(255,255,255,.44); font-size:13px; line-height:1.5; }
 .booking-fields label > small { color:var(--muted); font-size:12px; }
 .booking-fields .wide { grid-column:1/-1; }

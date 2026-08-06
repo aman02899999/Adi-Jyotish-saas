@@ -24,6 +24,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: new URL("/gemstones/recommend", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.75 },
     { url: new URL("/kundli-matching", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.75 },
     { url: new URL("/panchang", site).toString(), lastModified: updated, changeFrequency: "daily", priority: 0.75 },
+    { url: new URL("/muhurat", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.75 },
     { url: new URL("/numerology", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.7 },
     { url: new URL("/blog", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.7 },
     { url: new URL("/pricing", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.6 },

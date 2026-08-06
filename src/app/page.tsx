@@ -3,6 +3,7 @@ import Link from "next/link";
 import {
   ArrowRight,
   BriefcaseBusiness,
+  CalendarClock,
   CalendarDays,
   CheckCircle2,
   Gem,
@@ -60,6 +61,7 @@ const freeTools = [
   { icon: Gem, label: "Gemstone Match", note: "Free Live recommendation", href: "/gemstones/recommend" },
   { icon: HeartHandshake, label: "Kundli Matching", note: "Free compatibility reading", href: "/kundli-matching" },
   { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat", href: "/panchang" },
+  { icon: CalendarClock, label: "Muhurat Concierge", note: "Best days for your decision", href: "/muhurat" },
   { icon: Hash, label: "Numerology", note: "Life Path & Destiny numbers", href: "/numerology" },
   { icon: ScrollText, label: "Full Kundli Report", note: "Your complete birth chart", href: "/kundli" },
 ];
