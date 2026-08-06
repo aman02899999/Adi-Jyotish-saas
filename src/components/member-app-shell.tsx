@@ -20,6 +20,7 @@ import {
   Sparkles,
   SunMedium,
   UserRound,
+  Users,
   WalletCards,
 } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
@@ -33,6 +34,7 @@ import { getMemberUnreadCount } from "@/lib/messaging";
 const navItems = [
   { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
   { label: "Birth Chart", icon: Grid2X2, href: "/dashboard" },
+  { label: "Family Charts", icon: Users, href: "/dashboard/family" },
   { label: "My Consultations", icon: BookOpenText, href: "/dashboard/consultations" },
   { label: "Live Answers", icon: Sparkles, href: "/dashboard/ai-readings" },
   { label: "Gemstone Orders", icon: Gem, href: "/dashboard/gemstone-orders" },
@@ -47,7 +49,7 @@ const navItems = [
   { label: "Invite & Earn", icon: Gift, href: "/dashboard/referrals" },
 ];
 
-type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals";
+type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family";
 
 function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveSection }) {
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -57,7 +59,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
       <nav className="app-nav" aria-label="Member navigation">
         <p>My cosmos</p>
         {navItems.map(({ label, icon: Icon, href }) => {
-          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn");
+          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts");
           return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
         })}
         <p className="app-nav__lower">Account</p>
