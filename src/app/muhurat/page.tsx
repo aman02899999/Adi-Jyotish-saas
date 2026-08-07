@@ -1,5 +1,5 @@
 import type { Metadata } from "next";
-import { CalendarClock, CheckCircle2, Sparkles } from "lucide-react";
+import { CalendarClock, CheckCircle2, ScrollText, Sparkles } from "lucide-react";
 import { MuhuratConciergeForm } from "@/components/muhurat-concierge-form";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -27,6 +27,17 @@ export default function MuhuratConciergePage() {
             <li><Sparkles size={15} /> Specific to your decision, not generic</li>
             <li><CheckCircle2 size={15} /> Free, no account required</li>
           </ul>
+        </div>
+        <div className="ask-hero__persona reveal reveal--delay">
+          <div className="ask-persona-card">
+            <div className="ask-persona-avatar"><ScrollText size={26} /></div>
+            <strong>Muhurat Concierge</strong>
+            <span>Real Panchang engine · Free tool</span>
+            <ul>
+              <li><CheckCircle2 size={13} /> Riktā tithi, nakshatra &amp; weekday rules applied</li>
+              <li><CheckCircle2 size={13} /> Ranked, not just listed</li>
+            </ul>
+          </div>
         </div>
       </section>
 

@@ -6,7 +6,7 @@ export function SiteFooter() {
     <footer className="footer shell">
       <BrandMark />
       <p>Ancient wisdom for modern life.<br />Made thoughtfully in the present.</p>
-      <div>
+      <div className="footer__links">
         <Link href="/astrologers">Practitioners</Link>
         <Link href="/blog">Journal</Link>
         <Link href="/pricing">Pricing</Link>
