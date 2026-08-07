@@ -1,7 +1,8 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { ArrowRight, Eye, EyeOff, KeyRound, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
 
 export function AdminAuthForm({ setup }: { setup: boolean }) {
   const [name, setName] = useState("");
@@ -11,8 +12,6 @@ export function AdminAuthForm({ setup }: { setup: boolean }) {
   const [visible, setVisible] = useState(false);
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
-  const [challengeToken, setChallengeToken] = useState("");
-  const [totpCode, setTotpCode] = useState("");
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault();
@@ -23,57 +22,22 @@ export function AdminAuthForm({ setup }: { setup: boolean }) {
     }
     setSubmitting(true);
     try {
+      const idToken = setup
+        ? await createUserWithEmailAndPassword(email, password)
+        : await signInWithEmailAndPassword(email, password);
       const response = await fetch(setup ? "/api/auth/setup" : "/api/auth/login", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, email, password }),
+        body: JSON.stringify({ idToken, name }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Access could not be verified.");
-      if (data.requiresTotp) {
-        setChallengeToken(data.challengeToken);
-      } else {
-        window.location.assign("/admin");
-      }
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
-    } finally {
-      setSubmitting(false);
-    }
-  }
-
-  async function submitTotp(event: FormEvent<HTMLFormElement>) {
-    event.preventDefault();
-    setError("");
-    setSubmitting(true);
-    try {
-      const response = await fetch("/api/auth/login/verify-2fa", {
-        method: "POST",
-        headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ challengeToken, code: totpCode }),
-      });
-      const data = await response.json();
-      if (!response.ok) throw new Error(data.error || "That code is incorrect.");
       window.location.assign("/admin");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong.");
     } finally {
       setSubmitting(false);
     }
-  }
-
-  if (challengeToken) {
-    return (
-      <form className="admin-auth-form" onSubmit={submitTotp}>
-        <label>
-          <span>Two-factor code</span>
-          <div><KeyRound size={16} /><input autoFocus inputMode="numeric" autoComplete="one-time-code" required value={totpCode} onChange={(event) => setTotpCode(event.target.value.trim())} placeholder="6-digit code or backup code" /></div>
-          <small>Open your authenticator app, or use one of your backup codes.</small>
-        </label>
-        {error && <p className="admin-auth-error" role="alert">{error}</p>}
-        <button className="button admin-auth-submit" disabled={submitting}>{submitting ? "Verifying…" : "Verify and continue"}<ArrowRight size={16} /></button>
-      </form>
-    );
   }
 
   return (

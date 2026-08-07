@@ -1,12 +1,12 @@
 import { attachRazorpayOrder, CartValidationError, createPendingOrder } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
-import { getRazorpay } from "@/lib/razorpay";
+import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 type CheckoutPayload = {
-  lines?: Array<{ variantId: number; quantity: number }>;
+  lines?: Array<{ productId: string; variantId: string; quantity: number }>;
   couponCode?: string;
   guestName?: string;
   guestEmail?: string;
@@ -23,7 +23,7 @@ export async function POST(request: Request) {
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as CheckoutPayload;
-  const lines = (body.lines ?? []).filter((line) => line.variantId && line.quantity > 0);
+  const lines = (body.lines ?? []).filter((line) => line.productId && line.variantId && line.quantity > 0);
   if (!lines.length) return Response.json({ error: "Your cart is empty." }, { status: 400 });
   if (!body.shipping?.name || !body.shipping?.phone || !body.shipping?.line1 || !body.shipping?.city || !body.shipping?.state || !body.shipping?.pincode) {
     return Response.json({ error: "Please complete your shipping address." }, { status: 400 });
@@ -55,7 +55,7 @@ export async function POST(request: Request) {
       razorpayOrderId: razorpayOrder.id,
       amount: razorpayOrder.amount,
       currency: razorpayOrder.currency,
-      key: process.env.RAZORPAY_KEY_ID,
+      key: getRazorpayKeyId(),
       total: order.total,
     });
   } catch (error) {

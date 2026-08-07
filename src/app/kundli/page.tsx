@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { CheckCircle2, Clock3, ScrollText, ShieldCheck } from "lucide-react";
 import { KundliReportForm } from "@/components/kundli-report-form";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { AI_KUNDLI_PRICE, AI_READING_CURRENCY } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { isRazorpayConfigured } from "@/lib/razorpay";
@@ -52,7 +53,9 @@ export default async function KundliPage() {
           currency={AI_READING_CURRENCY}
           onlinePaymentsAvailable={isRazorpayConfigured()}
         />
+        <p className="legal-note">This report offers guidance and reflection based on your birth chart, not a guarantee of any outcome — it is not a substitute for medical, legal, or financial advice.</p>
       </section>
+    <SiteFooter />
     </main>
   );
 }

@@ -1,12 +1,37 @@
 import "server-only";
 
-import { inArray } from "drizzle-orm";
-import { db } from "@/db";
-import { gemstoneProducts, gemstoneRecommendations } from "@/db/schema";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getProductCatalog, type ProductListItem } from "@/lib/gemstones";
 import { signForBirthDate, ZODIAC_SIGNS, type ZodiacSignKey } from "@/lib/horoscopes";
 
 export class RecommendationError extends Error {}
+
+const recommendationsCol = db.collection("gemstoneRecommendations");
+const productsCol = db.collection("gemstoneProducts");
+
+export type GemstoneRecommendation = {
+  id: string;
+  memberId: string | null;
+  name: string;
+  birthDate: string;
+  concern: string | null;
+  zodiacSign: string;
+  categorySlugs: string;
+  narrative: string;
+  createdAt: Date;
+};
+
+function toDate(value: unknown): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date();
+}
+
+function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneRecommendation {
+  const data = doc.data() as Omit<GemstoneRecommendation, "id" | "createdAt"> & { createdAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt) };
+}
 
 const RULING_PLANET: Record<ZodiacSignKey, string> = {
   aries: "Mars", taurus: "Venus", gemini: "Mercury", cancer: "Moon", leo: "Sun", virgo: "Mercury",
@@ -54,7 +79,7 @@ function buildNarrative({ name, signKey, concern, gemstones }: {
 }
 
 export async function createGemstoneRecommendation({ memberId, name, birthDate, concern }: {
-  memberId: number | null;
+  memberId: string | null;
   name: string;
   birthDate: string;
   concern: string;
@@ -65,16 +90,21 @@ export async function createGemstoneRecommendation({ memberId, name, birthDate, 
   const definition = ZODIAC_SIGNS.find((entry) => entry.key === sign)!;
   const matches = await getMatchingProducts(definition.name);
 
-  const planetByProductId = matches.length
-    ? new Map((await db.select({ id: gemstoneProducts.id, recommendedPlanets: gemstoneProducts.recommendedPlanets }).from(gemstoneProducts).where(inArray(gemstoneProducts.id, matches.map((item) => item.id)))).map((row) => [row.id, row.recommendedPlanets]))
-    : new Map<number, string>();
+  const planetByProductId = new Map<string, string>();
+  if (matches.length) {
+    const snaps = await db.getAll(...matches.map((item) => productsCol.doc(item.id)));
+    for (const snap of snaps) {
+      if (snap.exists) planetByProductId.set(snap.id, (snap.data()?.recommendedPlanets as string | undefined) ?? "");
+    }
+  }
 
   const narrative = buildNarrative({
     name, signKey: sign, concern,
     gemstones: matches.map((item) => ({ name: item.name, planet: planetByProductId.get(item.id) || RULING_PLANET[sign], description: item.shortDescription, slug: item.slug })),
   });
 
-  const [saved] = await db.insert(gemstoneRecommendations).values({
+  const ref = recommendationsCol.doc();
+  await ref.set({
     memberId,
     name,
     birthDate,
@@ -82,7 +112,9 @@ export async function createGemstoneRecommendation({ memberId, name, birthDate, 
     zodiacSign: sign,
     categorySlugs: matches.map((item) => item.categorySlug).join(","),
     narrative,
-  }).returning();
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  const saved = fromDoc(await ref.get());
 
   return { recommendation: saved, sign: definition, products: matches };
 }

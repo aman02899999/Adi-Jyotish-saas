@@ -4,7 +4,7 @@ import Link from "next/link";
 import { useEffect, useRef, useState } from "react";
 import { Bell, Check } from "lucide-react";
 
-type NotificationItem = { id: number; type: string; title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string };
+type NotificationItem = { id: string; type: string; title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string };
 
 function timeAgo(iso: string) {
   const diffMs = Date.now() - new Date(iso).getTime();

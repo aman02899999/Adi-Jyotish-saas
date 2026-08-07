@@ -2,6 +2,7 @@
 
 import { useState } from "react";
 import { CalendarDays, Check, Hash, LoaderCircle, UserRound, X } from "lucide-react";
+import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
 
 type Result = { lifePathNumber: number; destinyNumber: number; narrative: string };
 
@@ -11,16 +12,18 @@ export function NumerologyForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   async function submit() {
     setError("");
     if (!name.trim() || !birthDate) { setError("Please share your name and birth date."); return; }
+    if (isTurnstileEnabled() && !turnstileToken) { setError("Please complete the verification check above."); return; }
     setLoading(true);
     try {
       const response = await fetch("/api/numerology", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, birthDate }),
+        body: JSON.stringify({ name, birthDate, turnstileToken }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Your numerology reading could not be prepared.");
@@ -56,6 +59,7 @@ export function NumerologyForm() {
         <label><span>Your name</span><div><UserRound size={16} /><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
       </div>
+      <TurnstileWidget onVerify={setTurnstileToken} />
       <button type="button" className="button ask-form-card__submit" disabled={loading} onClick={submit}>
         {loading ? <><LoaderCircle size={16} className="spin" /> Calculating…</> : <><Hash size={16} /> Get my numbers</>}
       </button>

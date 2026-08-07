@@ -1,6 +1,5 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { memberUsers } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
@@ -19,14 +18,14 @@ export async function PUT(request: Request) {
     return Response.json({ error: "Complete your exact birth date, time, and place." }, { status: 400 });
   }
 
-  const [updated] = await db.update(memberUsers).set({
+  await db.collection("members").doc(member.id).update({
     phone: phone || null,
     birthDate,
     birthTime,
     birthPlace,
     onboardingComplete: true,
-    updatedAt: new Date(),
-  }).where(eq(memberUsers.id, member.id)).returning({ id: memberUsers.id });
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
-  return Response.json({ ok: true, member: updated });
+  return Response.json({ ok: true, member: { id: member.id } });
 }

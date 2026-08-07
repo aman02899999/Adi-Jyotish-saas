@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -7,6 +8,10 @@ import { MemberAuthForm } from "@/components/member-auth-form";
 import { getCurrentMember } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Sign in",
+  robots: { index: false, follow: false },
+};
 
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
   const [member, query] = await Promise.all([getCurrentMember(), searchParams]);

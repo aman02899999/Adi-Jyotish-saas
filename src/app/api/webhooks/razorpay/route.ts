@@ -1,8 +1,15 @@
-import { and, eq } from "drizzle-orm";
-import { db } from "@/db";
-import { bookings, invoices, memberSubscriptions, memberUsers, membershipPlans, payments, razorpayEvents, subscriptionInvoices } from "@/db/schema";
+import { createHash } from "node:crypto";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
+import { invoiceFromSnap, paymentFromSnap } from "@/lib/billing";
+import { getPlanById, type MembershipPlan } from "@/lib/plans";
+import { splitGstInclusive } from "@/lib/gst";
 import { sendBookingNotification } from "@/lib/messaging";
+import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
+import { getSiteUrl } from "@/lib/site-url";
 import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/lib/razorpay";
+import { processReferralReward } from "@/lib/referrals";
+import { getStudioSettings } from "@/lib/studio-settings";
 import { rechargeWallet } from "@/lib/wallet";
 
 export const dynamic = "force-dynamic";
@@ -43,6 +50,10 @@ type RazorpayWebhookBody = {
 
 const terminalSubscriptionStatuses = new Set(["cancelled", "completed", "expired"]);
 
+function isAlreadyExists(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
+}
+
 export async function POST(request: Request) {
   if (!isRazorpayWebhookConfigured()) {
     return Response.json({ error: "Webhook not configured." }, { status: 503 });
@@ -61,10 +72,18 @@ export async function POST(request: Request) {
     return Response.json({ error: "Malformed webhook payload." }, { status: 400 });
   }
 
-  const eventId = request.headers.get("x-razorpay-event-id") || `${body.event}:${rawBody.length}:${Date.now()}`;
-  const inserted = await db.insert(razorpayEvents).values({ razorpayEventId: eventId, type: body.event }).onConflictDoNothing({ target: razorpayEvents.razorpayEventId }).returning({ id: razorpayEvents.id });
-  if (!inserted.length) {
-    return Response.json({ ok: true, deduped: true });
+  // Doc id == the Razorpay event id itself, so "does this doc exist" is the idempotency check —
+  // replaces the old unique-constraint-violation-catch pattern on razorpayEvents.razorpayEventId.
+  // Razorpay always sends this header in practice, but the fallback (if it's ever missing) is a
+  // hash of the verified body — deterministic, so a genuine retry of the same delivery still
+  // dedupes correctly — rather than a timestamp, which would defeat dedup entirely by construction.
+  const eventId = request.headers.get("x-razorpay-event-id") || createHash("sha256").update(rawBody).digest("hex");
+  const eventRef = db.collection("razorpayEvents").doc(eventId);
+  try {
+    await eventRef.create({ type: body.event, processedAt: FieldValue.serverTimestamp() });
+  } catch (error) {
+    if (isAlreadyExists(error)) return Response.json({ ok: true, deduped: true });
+    throw error;
   }
 
   try {
@@ -84,60 +103,100 @@ export async function POST(request: Request) {
 
 async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
   if (!payment?.order_id) return;
-  const [row] = await db.select().from(payments).where(eq(payments.providerSessionId, payment.order_id)).limit(1);
-  if (!row) {
-    const memberId = Number(payment.notes?.memberId);
-    if (Number.isInteger(memberId) && memberId > 0 && payment.amount != null) {
-      await rechargeWallet({ memberId, amount: Math.round(payment.amount / 100), razorpayPaymentId: payment.id });
+  const paymentsSnap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
+  if (paymentsSnap.empty) {
+    // Wallet recharges are the only flow whose Razorpay order has no matching `payments` doc AND
+    // is meant to be actioned here — every other order type (gemstone checkout, subscriptions)
+    // also stamps notes.memberId for tracking, so `purpose` is the required discriminator, not
+    // just memberId's presence. Without it, a gemstone order payment would silently double as a
+    // wallet top-up for the same amount.
+    const memberId = payment.notes?.memberId;
+    if (memberId && payment.notes?.purpose === "wallet_recharge" && payment.amount != null) {
+      const rechargeAmount = Math.round(payment.amount / 100);
+      await rechargeWallet({ memberId, amount: rechargeAmount, razorpayPaymentId: payment.id });
+      await processReferralReward(memberId, rechargeAmount).catch((error) => console.error("Referral reward processing failed", error));
     }
     return;
   }
+  const row = paymentFromSnap(paymentsSnap.docs[0]);
   if (row.status === "succeeded") return;
 
-  const [invoice] = await db.select().from(invoices).where(eq(invoices.id, row.invoiceId)).limit(1);
-  if (!invoice || invoice.status === "paid") return;
+  const invoiceRef = db.collection("invoices").doc(row.invoiceId);
+  const invoiceSnap = await invoiceRef.get();
+  if (!invoiceSnap.exists) return;
+  const invoice = invoiceFromSnap(invoiceSnap);
+  if (invoice.status === "paid") return;
 
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx.update(payments).set({ status: "succeeded", paymentIntentId: payment.id, paidAt: now, updatedAt: now }).where(eq(payments.id, row.id));
-    await tx.update(invoices).set({ status: "paid", paidAt: now, updatedAt: now }).where(eq(invoices.id, invoice.id));
-    await tx.update(bookings).set({ paymentStatus: "paid", updatedAt: now }).where(eq(bookings.id, row.bookingId));
+  const bookingRef = db.collection("bookings").doc(row.bookingId);
+  const paymentRef = paymentsSnap.docs[0].ref;
+  await db.runTransaction(async (tx) => {
+    const now = FieldValue.serverTimestamp();
+    tx.update(paymentRef, { status: "succeeded", paymentIntentId: payment.id, paidAt: now, updatedAt: now });
+    tx.update(invoiceRef, { status: "paid", paidAt: now, updatedAt: now });
+    tx.update(bookingRef, { paymentStatus: "paid", updatedAt: now });
   });
 
-  await sendBookingNotification({ memberEmail: invoice.customerEmail, bookingId: row.bookingId, subject: `${invoice.description} · ${invoice.number}`, body: `Payment received for invoice ${invoice.number}. Amount: ${invoice.currency} ${invoice.amount}. Thank you—your receipt is now available in Billing.` });
+  await sendBookingNotification({
+    memberEmail: invoice.customerEmail,
+    bookingId: row.bookingId,
+    subject: `${invoice.description} · ${invoice.number}`,
+    body: `Payment received for invoice ${invoice.number}. Amount: ${invoice.currency} ${invoice.amount}. Thank you—your receipt is now available in Billing.`,
+  });
+  await sendEmail({
+    to: invoice.customerEmail,
+    subject: `Payment received · ${invoice.number}`,
+    html: genericNotificationEmailHtml({
+      title: "Payment received",
+      name: invoice.customerName,
+      body: `We've received your payment of ${invoice.currency} ${invoice.amount} for invoice ${invoice.number}. Your receipt is ready to download.`,
+      ctaLabel: "View receipt",
+      ctaUrl: new URL(`/dashboard/billing/${invoice.id}`, getSiteUrl()).toString(),
+    }),
+  }).catch(() => {});
 }
 
 async function handlePaymentFailed(payment?: RazorpayWebhookPayment) {
   if (!payment?.order_id) return;
-  const [row] = await db.select().from(payments).where(eq(payments.providerSessionId, payment.order_id)).limit(1);
-  if (!row || row.status !== "pending") return;
-  await db.update(payments).set({ status: "failed", updatedAt: new Date() }).where(eq(payments.id, row.id));
+  const snap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
+  if (snap.empty) return;
+  const row = paymentFromSnap(snap.docs[0]);
+  if (row.status !== "pending") return;
+  await snap.docs[0].ref.update({ status: "failed", updatedAt: FieldValue.serverTimestamp() });
 }
 
 async function handleRefundProcessed(refund?: RazorpayWebhookRefund) {
   if (!refund) return;
-  const [row] = await db.select().from(payments).where(and(eq(payments.paymentIntentId, refund.payment_id), eq(payments.status, "refund_processing"))).limit(1);
-  if (!row) return;
+  const snap = await db.collection("payments")
+    .where("paymentIntentId", "==", refund.payment_id)
+    .where("status", "==", "refund_processing")
+    .limit(1)
+    .get();
+  if (snap.empty) return;
+  const row = paymentFromSnap(snap.docs[0]);
 
-  const now = new Date();
-  await db.transaction(async (tx) => {
-    await tx.update(payments).set({ status: "refunded", refundId: refund.id, updatedAt: now }).where(eq(payments.id, row.id));
-    await tx.update(invoices).set({ status: "refunded", updatedAt: now }).where(eq(invoices.id, row.invoiceId));
-    await tx.update(bookings).set({ paymentStatus: "refunded", updatedAt: now }).where(eq(bookings.id, row.bookingId));
+  const paymentRef = snap.docs[0].ref;
+  const invoiceRef = db.collection("invoices").doc(row.invoiceId);
+  const bookingRef = db.collection("bookings").doc(row.bookingId);
+  await db.runTransaction(async (tx) => {
+    const now = FieldValue.serverTimestamp();
+    tx.update(paymentRef, { status: "refunded", refundId: refund.id, updatedAt: now });
+    tx.update(invoiceRef, { status: "refunded", updatedAt: now });
+    tx.update(bookingRef, { paymentStatus: "refunded", updatedAt: now });
   });
 }
 
-async function findSubscriptionWithPlan(razorpaySubscriptionId: string) {
-  const [row] = await db.select({ subscription: memberSubscriptions, plan: membershipPlans })
-    .from(memberSubscriptions)
-    .innerJoin(membershipPlans, eq(memberSubscriptions.planId, membershipPlans.id))
-    .where(eq(memberSubscriptions.razorpaySubscriptionId, razorpaySubscriptionId))
-    .limit(1);
-  return row ?? null;
+async function findSubscriptionWithPlan(razorpaySubscriptionId: string): Promise<{ memberId: string; ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown>; plan: MembershipPlan } | null> {
+  const snap = await db.collection("memberSubscriptions").where("razorpaySubscriptionId", "==", razorpaySubscriptionId).limit(1).get();
+  if (snap.empty) return null;
+  const doc = snap.docs[0];
+  const data = doc.data() as Record<string, unknown>;
+  const plan = await getPlanById(data.planId as string);
+  if (!plan) return null;
+  return { memberId: doc.id, ref: doc.ref, data, plan };
 }
 
-async function syncMemberPlanLabel(memberId: number, label: string) {
-  await db.update(memberUsers).set({ plan: label, updatedAt: new Date() }).where(eq(memberUsers.id, memberId));
+async function syncMemberPlanLabel(memberId: string, label: string) {
+  await db.collection("members").doc(memberId).update({ plan: label, updatedAt: FieldValue.serverTimestamp() });
 }
 
 async function handleSubscriptionCharged(subscription?: RazorpayWebhookSubscription, payment?: RazorpayWebhookPayment) {
@@ -149,26 +208,42 @@ async function handleSubscriptionCharged(subscription?: RazorpayWebhookSubscript
   const periodStart = subscription.current_start ? new Date(subscription.current_start * 1000) : now;
   const periodEnd = subscription.current_end ? new Date(subscription.current_end * 1000) : null;
 
-  await db.update(memberSubscriptions).set({
+  await found.ref.update({
     status: "active",
     currentPeriodStart: periodStart,
     currentPeriodEnd: periodEnd,
-    updatedAt: now,
-  }).where(eq(memberSubscriptions.id, found.subscription.id));
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
-  await syncMemberPlanLabel(found.subscription.memberId, found.plan.key);
+  await syncMemberPlanLabel(found.memberId, found.plan.key);
 
   if (payment) {
-    await db.insert(subscriptionInvoices).values({
-      subscriptionId: found.subscription.id,
-      memberId: found.subscription.memberId,
-      amount: payment.amount != null ? Math.round(payment.amount / 100) : (found.subscription.billingInterval === "yearly" ? found.plan.priceYearly ?? found.plan.priceMonthly : found.plan.priceMonthly),
-      currency: payment.currency ?? found.plan.currency,
-      status: "paid",
-      razorpayPaymentId: payment.id,
-      periodStart,
-      periodEnd,
-    }).onConflictDoNothing({ target: subscriptionInvoices.razorpayPaymentId });
+    const billingInterval = found.data.billingInterval as "monthly" | "yearly";
+    const amount = payment.amount != null ? Math.round(payment.amount / 100) : (billingInterval === "yearly" ? found.plan.priceYearly ?? found.plan.priceMonthly : found.plan.priceMonthly);
+    // Listed prices are GST-inclusive, matching how booking and gemstone invoices already split it.
+    const settings = await getStudioSettings();
+    const { subtotal, taxAmount } = splitGstInclusive(amount, settings.gstRate);
+    // Doc id == razorpayPaymentId: "does this doc exist" replaces onConflictDoNothing on
+    // subscriptionInvoices.razorpayPaymentId.
+    const invoiceRef = db.collection("subscriptionInvoices").doc(payment.id);
+    try {
+      await invoiceRef.create({
+        subscriptionId: found.memberId,
+        memberId: found.memberId,
+        amount,
+        subtotal,
+        taxAmount,
+        taxRate: settings.gstRate,
+        currency: payment.currency ?? found.plan.currency,
+        status: "paid",
+        razorpayPaymentId: payment.id,
+        periodStart,
+        periodEnd,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    } catch (error) {
+      if (!isAlreadyExists(error)) throw error;
+    }
   }
 }
 
@@ -178,17 +253,21 @@ async function handleSubscriptionStatus(subscription?: RazorpayWebhookSubscripti
   if (!found) return;
 
   const now = new Date();
-  await db.update(memberSubscriptions).set({
+  const existingStart = found.data.currentPeriodStart as FirebaseFirestore.Timestamp | undefined;
+  const existingEnd = found.data.currentPeriodEnd as FirebaseFirestore.Timestamp | undefined;
+  const existingCancelledAt = found.data.cancelledAt as FirebaseFirestore.Timestamp | undefined;
+
+  await found.ref.update({
     status: subscription.status,
-    currentPeriodStart: subscription.current_start ? new Date(subscription.current_start * 1000) : found.subscription.currentPeriodStart,
-    currentPeriodEnd: subscription.current_end ? new Date(subscription.current_end * 1000) : found.subscription.currentPeriodEnd,
-    cancelledAt: terminalSubscriptionStatuses.has(subscription.status) ? now : found.subscription.cancelledAt,
-    updatedAt: now,
-  }).where(eq(memberSubscriptions.id, found.subscription.id));
+    currentPeriodStart: subscription.current_start ? new Date(subscription.current_start * 1000) : (existingStart ?? null),
+    currentPeriodEnd: subscription.current_end ? new Date(subscription.current_end * 1000) : (existingEnd ?? null),
+    cancelledAt: terminalSubscriptionStatuses.has(subscription.status) ? now : (existingCancelledAt ?? null),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
 
   if (terminalSubscriptionStatuses.has(subscription.status)) {
-    await syncMemberPlanLabel(found.subscription.memberId, "free");
+    await syncMemberPlanLabel(found.memberId, "free");
   } else if (subscription.status === "active") {
-    await syncMemberPlanLabel(found.subscription.memberId, found.plan.key);
+    await syncMemberPlanLabel(found.memberId, found.plan.key);
   }
 }

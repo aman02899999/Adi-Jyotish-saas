@@ -1,32 +1,134 @@
 import "server-only";
 
-import { and, asc, desc, eq, ilike, inArray, ne, or, sql } from "drizzle-orm";
-import { db } from "@/db";
-import {
-  gemstoneCategories,
-  gemstoneProductImages,
-  gemstoneProducts,
-  gemstoneProductVariants,
-  gemstoneReviews,
-  type GemstoneCategory,
-  type GemstoneProduct,
-  type GemstoneProductImage,
-  type GemstoneProductVariant,
-} from "@/db/schema";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { toSlug } from "@/lib/services";
 import { seedGemstoneCatalog } from "@/lib/gemstones-seed";
 
 export class GemstoneError extends Error {}
 
+/* ---------------------------------- collection refs ---------------------------------- */
+
+const categoriesCol = db.collection("gemstoneCategories");
+const productsCol = db.collection("gemstoneProducts");
+const reviewsCol = db.collection("gemstoneReviews");
+
+function imagesCol(productId: string) {
+  return productsCol.doc(productId).collection("images");
+}
+function variantsCol(productId: string) {
+  return productsCol.doc(productId).collection("variants");
+}
+
+function toDate(value: unknown): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date();
+}
+
+function chunk<T>(items: T[], size: number): T[][] {
+  const out: T[][] = [];
+  for (let i = 0; i < items.length; i += size) out.push(items.slice(i, i + size));
+  return out;
+}
+
+/* ---------------------------------- types ---------------------------------- */
+
+export type GemstoneCategory = {
+  id: string;
+  name: string;
+  slug: string;
+  description: string;
+  imageUrl: string | null;
+  sortOrder: number;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type GemstoneProduct = {
+  id: string;
+  categoryId: string;
+  name: string;
+  slug: string;
+  shortDescription: string;
+  description: string;
+  benefits: string;
+  whoShouldWear: string;
+  recommendedZodiac: string;
+  recommendedPlanets: string;
+  origin: string;
+  color: string;
+  treatment: string;
+  certification: string;
+  currency: string;
+  sku: string;
+  featured: boolean;
+  trending: boolean;
+  bestseller: boolean;
+  active: boolean;
+  metaTitle: string;
+  metaDescription: string;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type GemstoneProductImage = {
+  id: string;
+  productId: string;
+  url: string;
+  alt: string;
+  sortOrder: number;
+  isPrimary: boolean;
+  createdAt: Date;
+};
+
+export type GemstoneProductVariant = {
+  id: string;
+  productId: string;
+  label: string;
+  weightCarat: string;
+  weightRatti: string;
+  certificationLevel: string;
+  price: number;
+  compareAtPrice: number | null;
+  stockQuantity: number;
+  sku: string;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function fromCategoryDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneCategory {
+  const data = doc.data() as Omit<GemstoneCategory, "id" | "createdAt" | "updatedAt"> & { createdAt?: Timestamp; updatedAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt), updatedAt: toDate(data.updatedAt) };
+}
+
+function fromProductDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneProduct {
+  const data = doc.data() as Omit<GemstoneProduct, "id" | "createdAt" | "updatedAt"> & { createdAt?: Timestamp; updatedAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt), updatedAt: toDate(data.updatedAt) };
+}
+
+function fromImageDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneProductImage {
+  const data = doc.data() as Omit<GemstoneProductImage, "id" | "createdAt"> & { createdAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt) };
+}
+
+function fromVariantDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneProductVariant {
+  const data = doc.data() as Omit<GemstoneProductVariant, "id" | "createdAt" | "updatedAt"> & { createdAt?: Timestamp; updatedAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt), updatedAt: toDate(data.updatedAt) };
+}
+
 /* ---------------------------------- categories ---------------------------------- */
 
 export async function getAllCategoriesAdmin(): Promise<Array<GemstoneCategory & { productCount: number }>> {
   await seedGemstoneCatalog();
-  const categories = await db.select().from(gemstoneCategories).orderBy(asc(gemstoneCategories.sortOrder), asc(gemstoneCategories.id));
-  const counts = await db.select({ categoryId: gemstoneProducts.categoryId, count: sql<number>`count(*)::int` })
-    .from(gemstoneProducts).groupBy(gemstoneProducts.categoryId);
-  const countMap = new Map(counts.map((row) => [row.categoryId, row.count]));
-  return categories.map((category) => ({ ...category, productCount: countMap.get(category.id) ?? 0 }));
+  const snap = await categoriesCol.orderBy("sortOrder", "asc").orderBy("createdAt", "asc").get();
+  const categories = snap.docs.map(fromCategoryDoc);
+  if (!categories.length) return [];
+
+  const counts = await Promise.all(categories.map((category) => productsCol.where("categoryId", "==", category.id).count().get()));
+  return categories.map((category, index) => ({ ...category, productCount: counts[index].data().count }));
 }
 
 export async function getActiveCategories(): Promise<Array<GemstoneCategory & { productCount: number }>> {
@@ -35,8 +137,9 @@ export async function getActiveCategories(): Promise<Array<GemstoneCategory & { 
 }
 
 export async function getCategoryBySlug(slug: string) {
-  const [category] = await db.select().from(gemstoneCategories).where(eq(gemstoneCategories.slug, slug)).limit(1);
-  return category ?? null;
+  const snap = await categoriesCol.where("slug", "==", slug).limit(1).get();
+  if (snap.empty) return null;
+  return fromCategoryDoc(snap.docs[0]);
 }
 
 export type CategoryPayload = { name?: string; slug?: string; description?: string; imageUrl?: string | null; sortOrder?: number; active?: boolean };
@@ -45,44 +148,54 @@ export async function createCategory(payload: CategoryPayload) {
   const name = payload.name?.trim();
   if (!name) throw new GemstoneError("Category name is required.");
   const slug = payload.slug?.trim() ? toSlug(payload.slug) : toSlug(name);
-  const [created] = await db.insert(gemstoneCategories).values({
+
+  const existing = await categoriesCol.where("slug", "==", slug).limit(1).get();
+  if (!existing.empty) throw new GemstoneError("A category with this slug already exists.");
+
+  const ref = categoriesCol.doc();
+  await ref.set({
     name,
     slug,
     description: payload.description?.trim() ?? "",
     imageUrl: payload.imageUrl || null,
     sortOrder: Math.max(0, Number(payload.sortOrder) || 0),
     active: payload.active ?? true,
-  }).returning();
-  return created;
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const created = await ref.get();
+  return fromCategoryDoc(created);
 }
 
-export async function updateCategory(id: number, payload: CategoryPayload) {
-  const [updated] = await db.update(gemstoneCategories).set({
-    name: payload.name?.trim() || undefined,
-    slug: payload.slug?.trim() ? toSlug(payload.slug) : undefined,
-    description: payload.description,
-    imageUrl: payload.imageUrl === undefined ? undefined : payload.imageUrl || null,
-    sortOrder: payload.sortOrder != null ? Math.max(0, Number(payload.sortOrder) || 0) : undefined,
-    active: payload.active,
-    updatedAt: new Date(),
-  }).where(eq(gemstoneCategories.id, id)).returning();
-  if (!updated) throw new GemstoneError("Category not found.");
-  return updated;
+export async function updateCategory(id: string, payload: CategoryPayload) {
+  const ref = categoriesCol.doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new GemstoneError("Category not found.");
+
+  const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+  if (payload.name?.trim()) update.name = payload.name.trim();
+  if (payload.slug?.trim()) update.slug = toSlug(payload.slug);
+  if (payload.description !== undefined) update.description = payload.description;
+  if (payload.imageUrl !== undefined) update.imageUrl = payload.imageUrl || null;
+  if (payload.sortOrder != null) update.sortOrder = Math.max(0, Number(payload.sortOrder) || 0);
+  if (payload.active !== undefined) update.active = payload.active;
+
+  await ref.update(update);
+  const updated = await ref.get();
+  return fromCategoryDoc(updated);
 }
 
-export async function deleteCategory(id: number) {
-  try {
-    await db.delete(gemstoneCategories).where(eq(gemstoneCategories.id, id));
-  } catch {
-    throw new GemstoneError("This category still has products in it. Move or delete those products first.");
-  }
+export async function deleteCategory(id: string) {
+  const inUse = await productsCol.where("categoryId", "==", id).limit(1).get();
+  if (!inUse.empty) throw new GemstoneError("This category still has products in it. Move or delete those products first.");
+  await categoriesCol.doc(id).delete();
 }
 
 /* ---------------------------------- product images/variants (shared shapes) ---------------------------------- */
 
-export type ImageInput = { id?: number; url: string; alt?: string; sortOrder?: number; isPrimary?: boolean };
+export type ImageInput = { id?: string; url: string; alt?: string; sortOrder?: number; isPrimary?: boolean };
 export type VariantInput = {
-  id?: number;
+  id?: string;
   label: string;
   weightCarat?: string;
   weightRatti?: string;
@@ -94,29 +207,38 @@ export type VariantInput = {
   active?: boolean;
 };
 
-async function replaceProductImages(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], productId: number, images: ImageInput[]) {
-  const keepIds = images.filter((image) => image.id).map((image) => image.id!);
-  if (keepIds.length) await tx.delete(gemstoneProductImages).where(and(eq(gemstoneProductImages.productId, productId), sql`${gemstoneProductImages.id} not in (${sql.join(keepIds, sql`,`)})`));
-  else await tx.delete(gemstoneProductImages).where(eq(gemstoneProductImages.productId, productId));
+async function replaceProductImages(productId: string, images: ImageInput[]) {
+  const col = imagesCol(productId);
+  const existingSnap = await col.get();
+  const keepIds = new Set(images.filter((image) => image.id).map((image) => image.id!));
 
-  for (let index = 0; index < images.length; index += 1) {
-    const image = images[index];
+  const batch = db.batch();
+  existingSnap.docs.forEach((doc) => {
+    if (!keepIds.has(doc.id)) batch.delete(doc.ref);
+  });
+  images.forEach((image, index) => {
     if (image.id) {
-      await tx.update(gemstoneProductImages).set({ url: image.url, alt: image.alt ?? "", sortOrder: index, isPrimary: Boolean(image.isPrimary) }).where(eq(gemstoneProductImages.id, image.id));
+      batch.update(col.doc(image.id), { url: image.url, alt: image.alt ?? "", sortOrder: index, isPrimary: Boolean(image.isPrimary) });
     } else {
-      await tx.insert(gemstoneProductImages).values({ productId, url: image.url, alt: image.alt ?? "", sortOrder: index, isPrimary: Boolean(image.isPrimary) });
+      batch.set(col.doc(), { productId, url: image.url, alt: image.alt ?? "", sortOrder: index, isPrimary: Boolean(image.isPrimary), createdAt: FieldValue.serverTimestamp() });
     }
-  }
+  });
+  await batch.commit();
 }
 
-async function replaceProductVariants(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], productId: number, variants: VariantInput[]) {
+async function replaceProductVariants(productId: string, variants: VariantInput[]) {
   if (!variants.length) throw new GemstoneError("Every product needs at least one weight/price variant.");
-  const keepIds = variants.filter((variant) => variant.id).map((variant) => variant.id!);
-  if (keepIds.length) await tx.delete(gemstoneProductVariants).where(and(eq(gemstoneProductVariants.productId, productId), sql`${gemstoneProductVariants.id} not in (${sql.join(keepIds, sql`,`)})`));
-  else await tx.delete(gemstoneProductVariants).where(eq(gemstoneProductVariants.productId, productId));
+  const col = variantsCol(productId);
+  const existingSnap = await col.get();
+  const keepIds = new Set(variants.filter((variant) => variant.id).map((variant) => variant.id!));
 
+  const batch = db.batch();
+  existingSnap.docs.forEach((doc) => {
+    if (!keepIds.has(doc.id)) batch.delete(doc.ref);
+  });
   for (const variant of variants) {
     const values = {
+      productId,
       label: variant.label.trim() || "Standard",
       weightCarat: variant.weightCarat?.trim() ?? "",
       weightRatti: variant.weightRatti?.trim() ?? "",
@@ -128,17 +250,18 @@ async function replaceProductVariants(tx: Parameters<Parameters<typeof db.transa
       active: variant.active ?? true,
     };
     if (variant.id) {
-      await tx.update(gemstoneProductVariants).set(values).where(eq(gemstoneProductVariants.id, variant.id));
+      batch.update(col.doc(variant.id), { ...values, updatedAt: FieldValue.serverTimestamp() });
     } else {
-      await tx.insert(gemstoneProductVariants).values({ productId, ...values });
+      batch.set(col.doc(), { ...values, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     }
   }
+  await batch.commit();
 }
 
 /* ---------------------------------- admin product CRUD ---------------------------------- */
 
 export type ProductPayload = {
-  categoryId?: number;
+  categoryId?: string;
   name?: string;
   slug?: string;
   shortDescription?: string;
@@ -163,37 +286,40 @@ export type ProductPayload = {
 };
 
 export async function getAllProductsAdmin() {
-  const products = await db.select({ product: gemstoneProducts, categoryName: gemstoneCategories.name })
-    .from(gemstoneProducts)
-    .innerJoin(gemstoneCategories, eq(gemstoneProducts.categoryId, gemstoneCategories.id))
-    .orderBy(desc(gemstoneProducts.createdAt));
+  const snap = await productsCol.orderBy("createdAt", "desc").get();
+  const products = snap.docs.map(fromProductDoc);
   if (!products.length) return [];
 
-  const ids = products.map((row) => row.product.id);
-  const variants = await db.select().from(gemstoneProductVariants).where(inArray(gemstoneProductVariants.productId, ids));
-  const stockByProduct = new Map<number, number>();
-  const priceByProduct = new Map<number, number>();
-  for (const variant of variants) {
-    stockByProduct.set(variant.productId, (stockByProduct.get(variant.productId) ?? 0) + variant.stockQuantity);
-    const current = priceByProduct.get(variant.productId);
-    if (current === undefined || variant.price < current) priceByProduct.set(variant.productId, variant.price);
-  }
+  const categoryIds = [...new Set(products.map((product) => product.categoryId))];
+  const categorySnaps = categoryIds.length ? await db.getAll(...categoryIds.map((id) => categoriesCol.doc(id))) : [];
+  const categoryNameById = new Map(categorySnaps.map((categorySnap) => [categorySnap.id, (categorySnap.data()?.name as string | undefined) ?? "Uncategorized"]));
 
-  return products.map((row) => ({
-    ...row.product,
-    categoryName: row.categoryName,
-    totalStock: stockByProduct.get(row.product.id) ?? 0,
-    variantCount: variants.filter((variant) => variant.productId === row.product.id).length,
-    startingPrice: priceByProduct.get(row.product.id) ?? 0,
-  }));
+  const variantSnaps = await Promise.all(products.map((product) => variantsCol(product.id).get()));
+
+  return products.map((product, index) => {
+    const variants = variantSnaps[index].docs.map(fromVariantDoc);
+    const totalStock = variants.reduce((sum, variant) => sum + variant.stockQuantity, 0);
+    const startingPrice = variants.reduce<number | null>((min, variant) => (min === null || variant.price < min ? variant.price : min), null) ?? 0;
+    return {
+      ...product,
+      categoryName: categoryNameById.get(product.categoryId) ?? "Uncategorized",
+      totalStock,
+      variantCount: variants.length,
+      startingPrice,
+    };
+  });
 }
 
-export async function getProductAdminById(id: number): Promise<{ product: GemstoneProduct; images: GemstoneProductImage[]; variants: GemstoneProductVariant[] } | null> {
-  const [product] = await db.select().from(gemstoneProducts).where(eq(gemstoneProducts.id, id)).limit(1);
-  if (!product) return null;
-  const images = await db.select().from(gemstoneProductImages).where(eq(gemstoneProductImages.productId, id)).orderBy(asc(gemstoneProductImages.sortOrder));
-  const variants = await db.select().from(gemstoneProductVariants).where(eq(gemstoneProductVariants.productId, id)).orderBy(asc(gemstoneProductVariants.id));
-  return { product, images, variants };
+export async function getProductAdminById(id: string): Promise<{ product: GemstoneProduct; images: GemstoneProductImage[]; variants: GemstoneProductVariant[] } | null> {
+  const ref = productsCol.doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+
+  const [imagesSnap, variantsSnap] = await Promise.all([
+    imagesCol(id).orderBy("sortOrder", "asc").get(),
+    variantsCol(id).orderBy("createdAt", "asc").get(),
+  ]);
+  return { product: fromProductDoc(snap), images: imagesSnap.docs.map(fromImageDoc), variants: variantsSnap.docs.map(fromVariantDoc) };
 }
 
 export async function createProduct(payload: ProductPayload) {
@@ -204,72 +330,78 @@ export async function createProduct(payload: ProductPayload) {
   if (!sku) throw new GemstoneError("SKU is required.");
   const slug = payload.slug?.trim() ? toSlug(payload.slug) : toSlug(name);
 
-  return db.transaction(async (tx) => {
-    const [created] = await tx.insert(gemstoneProducts).values({
-      categoryId: payload.categoryId!,
-      name,
-      slug,
-      shortDescription: payload.shortDescription?.trim() ?? "",
-      description: payload.description?.trim() ?? "",
-      benefits: payload.benefits?.trim() ?? "",
-      whoShouldWear: payload.whoShouldWear?.trim() ?? "",
-      recommendedZodiac: payload.recommendedZodiac?.trim() ?? "",
-      recommendedPlanets: payload.recommendedPlanets?.trim() ?? "",
-      origin: payload.origin?.trim() ?? "",
-      color: payload.color?.trim() ?? "",
-      treatment: payload.treatment?.trim() ?? "",
-      certification: payload.certification?.trim() ?? "",
-      sku,
-      featured: payload.featured ?? false,
-      trending: payload.trending ?? false,
-      bestseller: payload.bestseller ?? false,
-      active: payload.active ?? true,
-      metaTitle: payload.metaTitle?.trim() ?? "",
-      metaDescription: payload.metaDescription?.trim() ?? "",
-    }).returning();
-
-    await replaceProductVariants(tx, created.id, payload.variants ?? []);
-    if (payload.images?.length) await replaceProductImages(tx, created.id, payload.images);
-    return created;
+  const ref = productsCol.doc();
+  await ref.set({
+    categoryId: payload.categoryId,
+    name,
+    slug,
+    shortDescription: payload.shortDescription?.trim() ?? "",
+    description: payload.description?.trim() ?? "",
+    benefits: payload.benefits?.trim() ?? "",
+    whoShouldWear: payload.whoShouldWear?.trim() ?? "",
+    recommendedZodiac: payload.recommendedZodiac?.trim() ?? "",
+    recommendedPlanets: payload.recommendedPlanets?.trim() ?? "",
+    origin: payload.origin?.trim() ?? "",
+    color: payload.color?.trim() ?? "",
+    treatment: payload.treatment?.trim() ?? "",
+    certification: payload.certification?.trim() ?? "",
+    currency: "INR",
+    sku,
+    featured: payload.featured ?? false,
+    trending: payload.trending ?? false,
+    bestseller: payload.bestseller ?? false,
+    active: payload.active ?? true,
+    metaTitle: payload.metaTitle?.trim() ?? "",
+    metaDescription: payload.metaDescription?.trim() ?? "",
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
   });
+
+  await replaceProductVariants(ref.id, payload.variants ?? []);
+  if (payload.images?.length) await replaceProductImages(ref.id, payload.images);
+
+  const created = await ref.get();
+  return fromProductDoc(created);
 }
 
-export async function updateProduct(id: number, payload: ProductPayload) {
-  return db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(gemstoneProducts).where(eq(gemstoneProducts.id, id)).limit(1);
-    if (!existing) throw new GemstoneError("Product not found.");
+export async function updateProduct(id: string, payload: ProductPayload) {
+  const ref = productsCol.doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new GemstoneError("Product not found.");
+  const existing = fromProductDoc(snap);
 
-    const [updated] = await tx.update(gemstoneProducts).set({
-      categoryId: payload.categoryId ?? existing.categoryId,
-      name: payload.name?.trim() || existing.name,
-      slug: payload.slug?.trim() ? toSlug(payload.slug) : existing.slug,
-      shortDescription: payload.shortDescription ?? existing.shortDescription,
-      description: payload.description ?? existing.description,
-      benefits: payload.benefits ?? existing.benefits,
-      whoShouldWear: payload.whoShouldWear ?? existing.whoShouldWear,
-      recommendedZodiac: payload.recommendedZodiac ?? existing.recommendedZodiac,
-      recommendedPlanets: payload.recommendedPlanets ?? existing.recommendedPlanets,
-      origin: payload.origin ?? existing.origin,
-      color: payload.color ?? existing.color,
-      treatment: payload.treatment ?? existing.treatment,
-      certification: payload.certification ?? existing.certification,
-      sku: payload.sku?.trim() || existing.sku,
-      featured: payload.featured ?? existing.featured,
-      trending: payload.trending ?? existing.trending,
-      bestseller: payload.bestseller ?? existing.bestseller,
-      active: payload.active ?? existing.active,
-      metaTitle: payload.metaTitle ?? existing.metaTitle,
-      metaDescription: payload.metaDescription ?? existing.metaDescription,
-      updatedAt: new Date(),
-    }).where(eq(gemstoneProducts.id, id)).returning();
-
-    if (payload.variants) await replaceProductVariants(tx, id, payload.variants);
-    if (payload.images) await replaceProductImages(tx, id, payload.images);
-    return updated;
+  await ref.update({
+    categoryId: payload.categoryId ?? existing.categoryId,
+    name: payload.name?.trim() || existing.name,
+    slug: payload.slug?.trim() ? toSlug(payload.slug) : existing.slug,
+    shortDescription: payload.shortDescription ?? existing.shortDescription,
+    description: payload.description ?? existing.description,
+    benefits: payload.benefits ?? existing.benefits,
+    whoShouldWear: payload.whoShouldWear ?? existing.whoShouldWear,
+    recommendedZodiac: payload.recommendedZodiac ?? existing.recommendedZodiac,
+    recommendedPlanets: payload.recommendedPlanets ?? existing.recommendedPlanets,
+    origin: payload.origin ?? existing.origin,
+    color: payload.color ?? existing.color,
+    treatment: payload.treatment ?? existing.treatment,
+    certification: payload.certification ?? existing.certification,
+    sku: payload.sku?.trim() || existing.sku,
+    featured: payload.featured ?? existing.featured,
+    trending: payload.trending ?? existing.trending,
+    bestseller: payload.bestseller ?? existing.bestseller,
+    active: payload.active ?? existing.active,
+    metaTitle: payload.metaTitle ?? existing.metaTitle,
+    metaDescription: payload.metaDescription ?? existing.metaDescription,
+    updatedAt: FieldValue.serverTimestamp(),
   });
+
+  if (payload.variants) await replaceProductVariants(id, payload.variants);
+  if (payload.images) await replaceProductImages(id, payload.images);
+
+  const updated = await ref.get();
+  return fromProductDoc(updated);
 }
 
-export async function duplicateProduct(id: number) {
+export async function duplicateProduct(id: string) {
   const detail = await getProductAdminById(id);
   if (!detail) throw new GemstoneError("Product not found.");
   const { product, images, variants } = detail;
@@ -300,18 +432,23 @@ export async function duplicateProduct(id: number) {
   });
 }
 
-export async function deleteProduct(id: number) {
-  try {
-    await db.delete(gemstoneProducts).where(eq(gemstoneProducts.id, id));
-  } catch {
-    throw new GemstoneError("This product has existing orders and cannot be deleted. Archive it instead.");
-  }
+export async function deleteProduct(id: string) {
+  // Collection-group lookup — requires a Firestore collection-group index on "items.productId" (see firestore.indexes.json).
+  const referenced = await db.collectionGroup("items").where("productId", "==", id).limit(1).get();
+  if (!referenced.empty) throw new GemstoneError("This product has existing orders and cannot be deleted. Archive it instead.");
+
+  const [imagesSnap, variantsSnap] = await Promise.all([imagesCol(id).get(), variantsCol(id).get()]);
+  const batch = db.batch();
+  imagesSnap.docs.forEach((doc) => batch.delete(doc.ref));
+  variantsSnap.docs.forEach((doc) => batch.delete(doc.ref));
+  batch.delete(productsCol.doc(id));
+  await batch.commit();
 }
 
 /* ---------------------------------- public catalog ---------------------------------- */
 
 export type ProductListItem = {
-  id: number;
+  id: string;
   slug: string;
   name: string;
   shortDescription: string;
@@ -323,7 +460,7 @@ export type ProductListItem = {
   currency: string;
   inStock: boolean;
   totalStock: number;
-  defaultVariantId: number | null;
+  defaultVariantId: string | null;
   defaultVariantLabel: string | null;
   defaultVariantStock: number;
   ratingAverage: number;
@@ -350,33 +487,37 @@ export type ProductFilters = {
   pageSize?: number;
 };
 
-async function decorateProducts(products: Array<{ product: GemstoneProduct; categoryName: string; categorySlug: string }>): Promise<ProductListItem[]> {
+type CatalogRow = { product: GemstoneProduct; categoryName: string; categorySlug: string };
+
+/** Fetches variants/images/ratings per product directly from their subcollections (no collection-group
+ * query needed) and assembles the storefront card shape. Review ratings are pulled via a top-level
+ * `gemstoneReviews` query chunked to respect Firestore's 30-item `in` limit. */
+async function decorateProducts(products: CatalogRow[]): Promise<ProductListItem[]> {
   if (!products.length) return [];
   const ids = products.map((row) => row.product.id);
 
-  const [variants, images, reviews] = await Promise.all([
-    db.select().from(gemstoneProductVariants).where(and(inArray(gemstoneProductVariants.productId, ids), eq(gemstoneProductVariants.active, true))),
-    db.select().from(gemstoneProductImages).where(inArray(gemstoneProductImages.productId, ids)).orderBy(asc(gemstoneProductImages.sortOrder)),
-    db.select({ productId: gemstoneReviews.productId, rating: gemstoneReviews.rating }).from(gemstoneReviews).where(and(inArray(gemstoneReviews.productId, ids), eq(gemstoneReviews.status, "published"))),
+  const [variantSnaps, imageSnaps, reviewChunkSnaps] = await Promise.all([
+    Promise.all(ids.map((id) => variantsCol(id).where("active", "==", true).get())),
+    Promise.all(ids.map((id) => imagesCol(id).orderBy("sortOrder", "asc").get())),
+    Promise.all(chunk(ids, 30).map((batch) => reviewsCol.where("productId", "in", batch).where("status", "==", "published").get())),
   ]);
 
-  const variantsByProduct = new Map<number, GemstoneProductVariant[]>();
-  for (const variant of variants) variantsByProduct.set(variant.productId, [...(variantsByProduct.get(variant.productId) ?? []), variant]);
+  const variantsByProduct = new Map(ids.map((id, index) => [id, variantSnaps[index].docs.map(fromVariantDoc)]));
+  const imagesByProduct = new Map(ids.map((id, index) => [id, imageSnaps[index].docs.map(fromImageDoc)]));
 
-  const imageByProduct = new Map<number, GemstoneProductImage>();
-  for (const image of images) {
-    const current = imageByProduct.get(image.productId);
-    if (!current || (image.isPrimary && !current.isPrimary)) imageByProduct.set(image.productId, image);
-  }
-
-  const ratingByProduct = new Map<number, { sum: number; count: number }>();
-  for (const review of reviews) {
-    const current = ratingByProduct.get(review.productId) ?? { sum: 0, count: 0 };
-    ratingByProduct.set(review.productId, { sum: current.sum + review.rating, count: current.count + 1 });
+  const ratingByProduct = new Map<string, { sum: number; count: number }>();
+  for (const reviewSnap of reviewChunkSnaps) {
+    for (const doc of reviewSnap.docs) {
+      const data = doc.data() as { productId: string; rating: number };
+      const current = ratingByProduct.get(data.productId) ?? { sum: 0, count: 0 };
+      ratingByProduct.set(data.productId, { sum: current.sum + data.rating, count: current.count + 1 });
+    }
   }
 
   return products.map((row) => {
     const productVariants = variantsByProduct.get(row.product.id) ?? [];
+    const images = imagesByProduct.get(row.product.id) ?? [];
+    const primaryImage = images.find((image) => image.isPrimary) ?? images[0] ?? null;
     const cheapest = productVariants.reduce<GemstoneProductVariant | null>((best, current) => (!best || current.price < best.price ? current : best), null);
     const totalStock = productVariants.reduce((sum, variant) => sum + variant.stockQuantity, 0);
     const rating = ratingByProduct.get(row.product.id);
@@ -387,7 +528,7 @@ async function decorateProducts(products: Array<{ product: GemstoneProduct; cate
       shortDescription: row.product.shortDescription,
       categoryName: row.categoryName,
       categorySlug: row.categorySlug,
-      primaryImageUrl: imageByProduct.get(row.product.id)?.url ?? null,
+      primaryImageUrl: primaryImage?.url ?? null,
       price: cheapest?.price ?? 0,
       compareAtPrice: cheapest?.compareAtPrice ?? null,
       currency: row.product.currency,
@@ -406,25 +547,46 @@ async function decorateProducts(products: Array<{ product: GemstoneProduct; cate
   });
 }
 
+/** Fetches every active product (a boutique catalog — expected to stay in the hundreds, not millions)
+ * and applies category/search/price/zodiac/planet filtering + sorting in JS, exactly mirroring the
+ * previous SQL behaviour. This avoids needing a large matrix of Firestore composite indexes for every
+ * optional filter combination. */
 export async function getProductCatalog(filters: ProductFilters = {}): Promise<{ items: ProductListItem[]; total: number; page: number; pageSize: number }> {
   await seedGemstoneCatalog();
-  const conditions = [eq(gemstoneProducts.active, true)];
-  if (filters.category) conditions.push(eq(gemstoneCategories.slug, filters.category));
-  if (filters.featured) conditions.push(eq(gemstoneProducts.featured, true));
-  if (filters.trending) conditions.push(eq(gemstoneProducts.trending, true));
-  if (filters.bestseller) conditions.push(eq(gemstoneProducts.bestseller, true));
-  if (filters.certification) conditions.push(ilike(gemstoneProducts.certification, `%${filters.certification}%`));
-  if (filters.zodiac) conditions.push(ilike(gemstoneProducts.recommendedZodiac, `%${filters.zodiac}%`));
-  if (filters.planet) conditions.push(ilike(gemstoneProducts.recommendedPlanets, `%${filters.planet}%`));
-  if (filters.search?.trim()) {
-    const term = `%${filters.search.trim()}%`;
-    conditions.push(or(ilike(gemstoneProducts.name, term), ilike(gemstoneProducts.shortDescription, term), ilike(gemstoneProducts.recommendedZodiac, term), ilike(gemstoneProducts.recommendedPlanets, term))!);
-  }
 
-  const rows = await db.select({ product: gemstoneProducts, categoryName: gemstoneCategories.name, categorySlug: gemstoneCategories.slug })
-    .from(gemstoneProducts)
-    .innerJoin(gemstoneCategories, eq(gemstoneProducts.categoryId, gemstoneCategories.id))
-    .where(and(...conditions));
+  const [productSnap, categorySnap] = await Promise.all([productsCol.where("active", "==", true).get(), categoriesCol.get()]);
+  const categoryById = new Map(categorySnap.docs.map((doc) => [doc.id, fromCategoryDoc(doc)]));
+
+  let rows: CatalogRow[] = productSnap.docs.map((doc) => {
+    const product = fromProductDoc(doc);
+    const category = categoryById.get(product.categoryId);
+    return { product, categoryName: category?.name ?? "Uncategorized", categorySlug: category?.slug ?? "" };
+  });
+
+  if (filters.category) rows = rows.filter((row) => row.categorySlug === filters.category);
+  if (filters.featured) rows = rows.filter((row) => row.product.featured);
+  if (filters.trending) rows = rows.filter((row) => row.product.trending);
+  if (filters.bestseller) rows = rows.filter((row) => row.product.bestseller);
+  if (filters.certification) {
+    const needle = filters.certification.toLowerCase();
+    rows = rows.filter((row) => row.product.certification.toLowerCase().includes(needle));
+  }
+  if (filters.zodiac) {
+    const needle = filters.zodiac.toLowerCase();
+    rows = rows.filter((row) => row.product.recommendedZodiac.toLowerCase().includes(needle));
+  }
+  if (filters.planet) {
+    const needle = filters.planet.toLowerCase();
+    rows = rows.filter((row) => row.product.recommendedPlanets.toLowerCase().includes(needle));
+  }
+  if (filters.search?.trim()) {
+    const needle = filters.search.trim().toLowerCase();
+    rows = rows.filter((row) =>
+      row.product.name.toLowerCase().includes(needle) ||
+      row.product.shortDescription.toLowerCase().includes(needle) ||
+      row.product.recommendedZodiac.toLowerCase().includes(needle) ||
+      row.product.recommendedPlanets.toLowerCase().includes(needle));
+  }
 
   let items = await decorateProducts(rows);
 
@@ -454,61 +616,85 @@ export async function getProductCatalog(filters: ProductFilters = {}): Promise<{
 
 export async function getProductBySlug(slug: string) {
   await seedGemstoneCatalog();
-  const [row] = await db.select({ product: gemstoneProducts, categoryName: gemstoneCategories.name, categorySlug: gemstoneCategories.slug })
-    .from(gemstoneProducts)
-    .innerJoin(gemstoneCategories, eq(gemstoneProducts.categoryId, gemstoneCategories.id))
-    .where(and(eq(gemstoneProducts.slug, slug), eq(gemstoneProducts.active, true)))
-    .limit(1);
-  if (!row) return null;
+  const snap = await productsCol.where("slug", "==", slug).limit(1).get();
+  if (snap.empty) return null;
+  const product = fromProductDoc(snap.docs[0]);
+  if (!product.active) return null;
 
-  const [images, variants, reviews] = await Promise.all([
-    db.select().from(gemstoneProductImages).where(eq(gemstoneProductImages.productId, row.product.id)).orderBy(asc(gemstoneProductImages.sortOrder)),
-    db.select().from(gemstoneProductVariants).where(and(eq(gemstoneProductVariants.productId, row.product.id), eq(gemstoneProductVariants.active, true))).orderBy(asc(gemstoneProductVariants.price)),
-    db.select({ rating: gemstoneReviews.rating }).from(gemstoneReviews).where(and(eq(gemstoneReviews.productId, row.product.id), eq(gemstoneReviews.status, "published"))),
+  const categoryDoc = await categoriesCol.doc(product.categoryId).get();
+  const category = categoryDoc.exists ? fromCategoryDoc(categoryDoc) : null;
+
+  const [imagesSnap, variantsSnap, reviewsSnap] = await Promise.all([
+    imagesCol(product.id).orderBy("sortOrder", "asc").get(),
+    variantsCol(product.id).where("active", "==", true).get(),
+    reviewsCol.where("productId", "==", product.id).where("status", "==", "published").get(),
   ]);
 
-  const ratingAverage = reviews.length ? Math.round((reviews.reduce((sum, review) => sum + review.rating, 0) / reviews.length) * 10) / 10 : 0;
+  const variants = variantsSnap.docs.map(fromVariantDoc).sort((a, b) => a.price - b.price);
+  const ratings = reviewsSnap.docs.map((doc) => (doc.data() as { rating: number }).rating);
+  const ratingAverage = ratings.length ? Math.round((ratings.reduce((sum, rating) => sum + rating, 0) / ratings.length) * 10) / 10 : 0;
 
   return {
-    ...row.product,
-    categoryName: row.categoryName,
-    categorySlug: row.categorySlug,
-    images,
+    ...product,
+    categoryName: category?.name ?? "Uncategorized",
+    categorySlug: category?.slug ?? "",
+    images: imagesSnap.docs.map(fromImageDoc),
     variants,
     ratingAverage,
-    ratingCount: reviews.length,
+    ratingCount: ratings.length,
   };
 }
 
-export async function getRelatedProducts(categoryId: number, excludeProductId: number, limit = 4): Promise<ProductListItem[]> {
-  const rows = await db.select({ product: gemstoneProducts, categoryName: gemstoneCategories.name, categorySlug: gemstoneCategories.slug })
-    .from(gemstoneProducts)
-    .innerJoin(gemstoneCategories, eq(gemstoneProducts.categoryId, gemstoneCategories.id))
-    .where(and(eq(gemstoneProducts.categoryId, categoryId), eq(gemstoneProducts.active, true), ne(gemstoneProducts.id, excludeProductId)))
-    .limit(limit);
+export async function getRelatedProducts(categoryId: string, excludeProductId: string, limit = 4): Promise<ProductListItem[]> {
+  const snap = await productsCol.where("categoryId", "==", categoryId).where("active", "==", true).limit(limit + 1).get();
+  const categoryDoc = await categoriesCol.doc(categoryId).get();
+  const category = categoryDoc.exists ? fromCategoryDoc(categoryDoc) : null;
+
+  const rows: CatalogRow[] = snap.docs
+    .map(fromProductDoc)
+    .filter((product) => product.id !== excludeProductId)
+    .slice(0, limit)
+    .map((product) => ({ product, categoryName: category?.name ?? "Uncategorized", categorySlug: category?.slug ?? "" }));
   return decorateProducts(rows);
 }
 
-export async function getProductsByIds(ids: number[]): Promise<ProductListItem[]> {
+export async function getProductsByIds(ids: string[]): Promise<ProductListItem[]> {
   if (!ids.length) return [];
-  const rows = await db.select({ product: gemstoneProducts, categoryName: gemstoneCategories.name, categorySlug: gemstoneCategories.slug })
-    .from(gemstoneProducts)
-    .innerJoin(gemstoneCategories, eq(gemstoneProducts.categoryId, gemstoneCategories.id))
-    .where(and(inArray(gemstoneProducts.id, ids), eq(gemstoneProducts.active, true)));
+  const snaps = await db.getAll(...ids.map((id) => productsCol.doc(id)));
+  const products = snaps.filter((snap) => snap.exists).map((snap) => fromProductDoc(snap)).filter((product) => product.active);
+
+  const categoryIds = [...new Set(products.map((product) => product.categoryId))];
+  const categorySnaps = categoryIds.length ? await db.getAll(...categoryIds.map((id) => categoriesCol.doc(id))) : [];
+  const categoryById = new Map(categorySnaps.map((snap) => [snap.id, snap.exists ? fromCategoryDoc(snap) : null]));
+
+  const rows: CatalogRow[] = products.map((product) => {
+    const category = categoryById.get(product.categoryId);
+    return { product, categoryName: category?.name ?? "Uncategorized", categorySlug: category?.slug ?? "" };
+  });
   return decorateProducts(rows);
 }
 
 export async function getAllActiveProductSlugs() {
-  const rows = await db.select({ slug: gemstoneProducts.slug, updatedAt: gemstoneProducts.updatedAt }).from(gemstoneProducts).where(eq(gemstoneProducts.active, true));
-  return rows;
+  const snap = await productsCol.where("active", "==", true).get();
+  return snap.docs.map((doc) => {
+    const data = doc.data() as { slug: string; updatedAt?: Timestamp };
+    return { slug: data.slug, updatedAt: toDate(data.updatedAt) };
+  });
 }
 
 export async function getProductsBySlugs(slugs: string[]): Promise<ProductListItem[]> {
   if (!slugs.length) return [];
-  const rows = await db.select({ product: gemstoneProducts, categoryName: gemstoneCategories.name, categorySlug: gemstoneCategories.slug })
-    .from(gemstoneProducts)
-    .innerJoin(gemstoneCategories, eq(gemstoneProducts.categoryId, gemstoneCategories.id))
-    .where(and(inArray(gemstoneProducts.slug, slugs), eq(gemstoneProducts.active, true)));
+  const snaps = await Promise.all(chunk(slugs, 30).map((batch) => productsCol.where("slug", "in", batch).get()));
+  const products = snaps.flatMap((snap) => snap.docs.map(fromProductDoc)).filter((product) => product.active);
+
+  const categoryIds = [...new Set(products.map((product) => product.categoryId))];
+  const categorySnaps = categoryIds.length ? await db.getAll(...categoryIds.map((id) => categoriesCol.doc(id))) : [];
+  const categoryById = new Map(categorySnaps.map((snap) => [snap.id, snap.exists ? fromCategoryDoc(snap) : null]));
+
+  const rows: CatalogRow[] = products.map((product) => {
+    const category = categoryById.get(product.categoryId);
+    return { product, categoryName: category?.name ?? "Uncategorized", categorySlug: category?.slug ?? "" };
+  });
   const decorated = await decorateProducts(rows);
   const bySlug = new Map(decorated.map((item) => [item.slug, item]));
   return slugs.map((slug) => bySlug.get(slug)).filter((item): item is ProductListItem => Boolean(item));

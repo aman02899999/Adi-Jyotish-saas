@@ -5,10 +5,10 @@ import Link from "next/link";
 import { Check, Clock3, MessageCircle, Send, ShieldCheck, X } from "lucide-react";
 import { createChatRealtimeClient } from "@/lib/ably-client";
 
-export type ChatMessageRow = { id: number; sessionId: number; senderType: string; senderName: string; body: string; createdAt: string | Date };
+export type ChatMessageRow = { id: string; sessionId: string; senderType: string; senderName: string; body: string; createdAt: string | Date };
 
 export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt, ratePerMinute, currency, holdMinutes, counterpartName, viewerRole, senderName }: {
-  sessionId: number;
+  sessionId: string;
   initialMessages: ChatMessageRow[];
   initialStatus: string;
   startedAt: string;

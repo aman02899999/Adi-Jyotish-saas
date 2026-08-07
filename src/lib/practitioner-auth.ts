@@ -1,17 +1,17 @@
 import "server-only";
 
-import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
 import { redirect } from "next/navigation";
-import { and, eq, gt, lt } from "drizzle-orm";
-import { db } from "@/db";
-import { practitionerSessions, practitioners } from "@/db/schema";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 const COOKIE_NAME = "jyotish_practitioner_session";
 const SESSION_DAYS = 14;
+const SESSION_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
 
 export type PractitionerIdentity = {
-  id: number;
+  id: string;
   name: string;
   slug: string;
   email: string;
@@ -19,47 +19,70 @@ export type PractitionerIdentity = {
   photoUrl: string | null;
 };
 
-function digest(token: string) {
-  return createHash("sha256").update(token).digest("hex");
+type PractitionerDoc = {
+  name: string;
+  slug: string;
+  email: string;
+  title: string;
+  photoUrl: string | null;
+  active: boolean;
+  firebaseUid: string | null;
+};
+
+/** Practitioner docs are keyed by slug (stable, human-readable, used in /astrologers/[slug]
+ * routing) rather than Firebase UID, because a practitioner record can exist — created by an
+ * admin invite, or seeded demo data — before any Firebase Auth account is linked to it. The
+ * `firebaseUid` field is the linkage, set once the practitioner actually signs in. */
+async function findPractitionerByUid(uid: string) {
+  const snap = await db.collection("practitioners").where("firebaseUid", "==", uid).limit(1).get();
+  return snap.empty ? null : snap.docs[0];
 }
 
-export async function createPractitionerSession(practitionerId: number) {
-  const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await db.delete(practitionerSessions).where(lt(practitionerSessions.expiresAt, new Date()));
-  await db.insert(practitionerSessions).values({ practitionerId, tokenHash: digest(token), expiresAt });
+/** Verifies a client-obtained Firebase ID token and creates a session cookie. Unlike members,
+ * practitioner accounts are never auto-created here — they must already exist (created by an
+ * admin invite) with this UID linked, or the sign-in is rejected by the caller before this runs. */
+export async function createPractitionerSession(idToken: string) {
+  const decoded = await getAuth().verifyIdToken(idToken, true);
+  const doc = await findPractitionerByUid(decoded.uid);
+  if (doc) await doc.ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
 
+  const sessionCookie = await getAuth().createSessionCookie(idToken, { expiresIn: SESSION_MS });
   const store = await cookies();
-  store.set(COOKIE_NAME, token, {
+  store.set(COOKIE_NAME, sessionCookie, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    expires: expiresAt,
+    maxAge: SESSION_MS / 1000,
   });
+
+  return decoded.uid;
 }
 
 export async function getCurrentPractitioner(): Promise<PractitionerIdentity | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  const cookie = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!cookie) return null;
 
-  const [practitioner] = await db.select({
-    id: practitioners.id,
-    name: practitioners.name,
-    slug: practitioners.slug,
-    email: practitioners.email,
-    title: practitioners.title,
-    photoUrl: practitioners.photoUrl,
-  }).from(practitionerSessions)
-    .innerJoin(practitioners, eq(practitionerSessions.practitionerId, practitioners.id))
-    .where(and(
-      eq(practitionerSessions.tokenHash, digest(token)),
-      gt(practitionerSessions.expiresAt, new Date()),
-      eq(practitioners.active, true),
-    ))
-    .limit(1);
+  let uid: string;
+  try {
+    uid = (await getAuth().verifySessionCookie(cookie, true)).uid;
+  } catch {
+    return null;
+  }
 
-  return practitioner ?? null;
+  const doc = await findPractitionerByUid(uid);
+  if (!doc) return null;
+  const data = doc.data() as PractitionerDoc;
+  if (!data.active) return null;
+
+  return {
+    id: doc.id,
+    name: data.name,
+    slug: data.slug,
+    email: data.email,
+    title: data.title,
+    photoUrl: data.photoUrl,
+  };
 }
 
 export async function requirePractitionerPage() {
@@ -70,7 +93,14 @@ export async function requirePractitionerPage() {
 
 export async function revokePractitionerSession() {
   const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (token) await db.delete(practitionerSessions).where(eq(practitionerSessions.tokenHash, digest(token)));
+  const cookie = store.get(COOKIE_NAME)?.value;
+  if (cookie) {
+    try {
+      const decoded = await getAuth().verifySessionCookie(cookie);
+      await getAuth().revokeRefreshTokens(decoded.uid);
+    } catch {
+      // Cookie already invalid/expired — nothing to revoke.
+    }
+  }
   store.set(COOKIE_NAME, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
 }

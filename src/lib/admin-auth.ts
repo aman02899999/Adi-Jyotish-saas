@@ -1,16 +1,16 @@
 import "server-only";
 
-import { createHash, randomBytes, scryptSync, timingSafeEqual } from "node:crypto";
 import { cookies } from "next/headers";
-import { and, eq, gt, lt, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { adminRoles, adminSessions, adminUsers, auditLogs } from "@/db/schema";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 const COOKIE_NAME = "jyotish_admin_session";
 const SESSION_DAYS = 7;
+const SESSION_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
 
 export type AdminIdentity = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   role: string;
@@ -51,80 +51,70 @@ export function normalizeEmail(email: string) {
   return email.trim().toLowerCase().slice(0, 180);
 }
 
-export function hashPassword(password: string) {
-  const salt = randomBytes(16).toString("hex");
-  const digest = scryptSync(password, salt, 64).toString("hex");
-  return `${salt}:${digest}`;
-}
-
-const dummyPasswordSalt = "65d7d561afd944c6d8de8a4ea3e09f04";
-const dummyPasswordHash = `${dummyPasswordSalt}:${scryptSync("jyotish-invalid-account", dummyPasswordSalt, 64).toString("hex")}`;
-
-export function verifyPassword(password: string, stored?: string | null) {
-  const [salt, digest] = (stored || dummyPasswordHash).split(":");
-  if (!salt || !digest || digest.length !== 128) return false;
-  const candidate = scryptSync(password, salt, 64);
-  const expected = Buffer.from(digest, "hex");
-  return expected.length === candidate.length && timingSafeEqual(candidate, expected);
-}
-
-function tokenDigest(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
+type AdminDoc = {
+  name: string;
+  email: string;
+  role: string;
+  active: boolean;
+};
 
 export async function getAdminCount() {
-  const [result] = await db.select({ count: sql<number>`count(*)::int` }).from(adminUsers);
-  return result?.count ?? 0;
+  const snap = await db.collection("adminUsers").count().get();
+  return snap.data().count;
 }
 
-export async function createAdminSession(adminId: number) {
-  const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
+/** Verifies a client-obtained Firebase ID token and creates a session cookie. The admin's
+ * Firestore profile document must already exist (created at invite-acceptance time). */
+export async function createAdminSession(idToken: string) {
+  const decoded = await getAuth().verifyIdToken(idToken, true);
+  await db.collection("adminUsers").doc(decoded.uid).update({ lastLoginAt: FieldValue.serverTimestamp() });
 
-  await db.delete(adminSessions).where(lt(adminSessions.expiresAt, new Date()));
-  await db.insert(adminSessions).values({ adminId, tokenHash: tokenDigest(token), expiresAt });
-
+  const sessionCookie = await getAuth().createSessionCookie(idToken, { expiresIn: SESSION_MS });
   const store = await cookies();
-  store.set(COOKIE_NAME, token, {
+  store.set(COOKIE_NAME, sessionCookie, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    expires: expiresAt,
+    maxAge: SESSION_MS / 1000,
   });
+
+  return decoded.uid;
 }
 
 export async function getCurrentAdmin(): Promise<AdminIdentity | null> {
-  const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  const cookie = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!cookie) return null;
 
-  const [row] = await db
-    .select({
-      id: adminUsers.id,
-      name: adminUsers.name,
-      email: adminUsers.email,
-      role: adminUsers.role,
-      permissions: adminRoles.permissions,
-    })
-    .from(adminSessions)
-    .innerJoin(adminUsers, eq(adminSessions.adminId, adminUsers.id))
-    .leftJoin(adminRoles, eq(adminRoles.slug, adminUsers.role))
-    .where(and(
-      eq(adminSessions.tokenHash, tokenDigest(token)),
-      gt(adminSessions.expiresAt, new Date()),
-      eq(adminUsers.active, true),
-    ))
-    .limit(1);
+  let uid: string;
+  try {
+    uid = (await getAuth().verifySessionCookie(cookie, true)).uid;
+  } catch {
+    return null;
+  }
 
-  if (!row) return null;
-  return { ...row, permissions: (row.permissions as AdminPermission[] | null) ?? [] };
+  const snap = await db.collection("adminUsers").doc(uid).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as AdminDoc;
+  if (!data.active) return null;
+
+  const roleSnap = await db.collection("adminRoles").doc(data.role).get();
+  const permissions = (roleSnap.exists ? (roleSnap.data()?.permissions as AdminPermission[] | undefined) : undefined) ?? [];
+
+  return { id: uid, name: data.name, email: data.email, role: data.role, permissions };
 }
 
 export async function revokeCurrentSession() {
   const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (token) await db.delete(adminSessions).where(eq(adminSessions.tokenHash, tokenDigest(token)));
+  const cookie = store.get(COOKIE_NAME)?.value;
+  if (cookie) {
+    try {
+      const decoded = await getAuth().verifySessionCookie(cookie);
+      await getAuth().revokeRefreshTokens(decoded.uid);
+    } catch {
+      // Cookie already invalid/expired — nothing to revoke.
+    }
+  }
   store.set(COOKIE_NAME, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
 }
 
@@ -135,12 +125,13 @@ export async function recordAudit(
   entityId?: string | number,
   details?: Record<string, unknown>,
 ) {
-  await db.insert(auditLogs).values({
+  await db.collection("auditLogs").add({
     adminId: admin.id,
     adminName: admin.name,
     action: action.slice(0, 80),
     entityType: entityType.slice(0, 50),
     entityId: entityId === undefined ? null : String(entityId).slice(0, 80),
     details: details ? JSON.stringify(details).slice(0, 4000) : null,
+    createdAt: FieldValue.serverTimestamp(),
   });
 }

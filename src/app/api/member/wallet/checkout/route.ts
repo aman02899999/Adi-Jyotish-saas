@@ -1,5 +1,5 @@
 import { getCurrentMember } from "@/lib/member-auth";
-import { getRazorpay } from "@/lib/razorpay";
+import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { getOrCreateWallet } from "@/lib/wallet";
 
@@ -28,8 +28,8 @@ export async function POST(request: Request) {
     amount: amount * 100,
     currency: wallet.currency,
     receipt: `wallet-${member.id}-${Date.now()}`,
-    notes: { memberId: String(member.id) },
+    notes: { memberId: String(member.id), purpose: "wallet_recharge" },
   });
 
-  return Response.json({ orderId: order.id, amount: order.amount, currency: order.currency, key: process.env.RAZORPAY_KEY_ID });
+  return Response.json({ orderId: order.id, amount: order.amount, currency: order.currency, key: getRazorpayKeyId() });
 }

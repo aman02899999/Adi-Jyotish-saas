@@ -1,6 +1,6 @@
 import Link from "next/link";
 import { Gem } from "lucide-react";
-import type { GemstoneOrder } from "@/db/schema";
+import type { GemstoneOrder } from "@/lib/gemstone-orders";
 
 export function MemberGemstoneOrders({ orders }: { orders: GemstoneOrder[] }) {
   return (

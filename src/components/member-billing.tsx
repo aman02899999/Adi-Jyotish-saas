@@ -6,8 +6,8 @@ import { ArrowRight, Check, CircleDollarSign, CreditCard, FileText, LockKeyhole,
 import type { FinanceInvoice } from "@/components/admin-billing";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
-export function MemberBilling({invoices,onlinePaymentsAvailable,checkoutState,member}:{invoices:FinanceInvoice[];onlinePaymentsAvailable:boolean;checkoutState?:string;member:{name:string;email:string}}){const[loading,setLoading]=useState<number|null>(null);const[notice,setNotice]=useState(checkoutState==="success"?"Payment submitted. Your receipt will appear after secure confirmation.":checkoutState==="cancelled"?"Checkout was cancelled. Your invoice remains open.":"");const outstanding=invoices.filter(x=>x.status==="open").reduce((s,x)=>s+x.amount,0);const paid=invoices.filter(x=>x.status==="paid").reduce((s,x)=>s+x.amount,0);
-  async function checkout(id:number,description:string){
+export function MemberBilling({invoices,onlinePaymentsAvailable,checkoutState,member}:{invoices:FinanceInvoice[];onlinePaymentsAvailable:boolean;checkoutState?:string;member:{name:string;email:string}}){const[loading,setLoading]=useState<string|null>(null);const[notice,setNotice]=useState(checkoutState==="success"?"Payment submitted. Your receipt will appear after secure confirmation.":checkoutState==="cancelled"?"Checkout was cancelled. Your invoice remains open.":"");const outstanding=invoices.filter(x=>x.status==="open").reduce((s,x)=>s+x.amount,0);const paid=invoices.filter(x=>x.status==="paid").reduce((s,x)=>s+x.amount,0);
+  async function checkout(id:string,description:string){
     setLoading(id);
     try{
       const response=await fetch(`/api/member/invoices/${id}/checkout`,{method:"POST"});

@@ -1,9 +1,10 @@
 import "server-only";
 
-import { db } from "@/db";
-import { kundliMatches } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { computeAshtakoot, type AshtakootResult } from "@/lib/ashtakoot";
 import { computeGrahaPositions, NAKSHATRAS, RASHIS } from "@/lib/astro-engine";
+import { computeCompatibilityTimeline, type TimelineMonth } from "@/lib/compatibility-timeline";
 import { PlaceNotFoundError, resolveBirthMoment } from "@/lib/geo";
 
 export class KundliMatchError extends Error {}
@@ -63,7 +64,7 @@ function buildNarrative({ nameA, nameB, result }: { nameA: string; nameB: string
 }
 
 export async function createKundliMatch({ memberId, nameA, birthDateA, birthTimeA, birthPlaceA, nameB, birthDateB, birthTimeB, birthPlaceB }: {
-  memberId: number | null;
+  memberId: string | null;
   nameA: string;
   birthDateA: string;
   birthTimeA: string;
@@ -101,8 +102,9 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
   });
 
   const narrative = buildNarrative({ nameA, nameB, result });
+  const timeline = computeCompatibilityTimeline({ nameA, moonARashiIndex: moonA.rashiIndex, nameB, moonBRashiIndex: moonB.rashiIndex });
 
-  const [saved] = await db.insert(kundliMatches).values({
+  const ref = await db.collection("kundliMatches").add({
     memberId,
     personAName: nameA,
     personABirthDate: birthDateA,
@@ -115,7 +117,10 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     compatibilityScore: result.totalScore,
     breakdown: result.breakdown,
     narrative,
-  }).returning();
+    timeline,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  const saved = { id: ref.id, memberId, personAName: nameA, personABirthDate: birthDateA, personABirthTime: birthTimeA, personABirthPlace: birthPlaceA, personBName: nameB, personBBirthDate: birthDateB, personBBirthTime: birthTimeB, personBBirthPlace: birthPlaceB, compatibilityScore: result.totalScore, breakdown: result.breakdown, narrative, timeline };
 
   return {
     match: saved,
@@ -124,5 +129,6 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     moonANakshatra: NAKSHATRAS[moonA.nakshatraIndex],
     moonBRashi: RASHIS[moonB.rashiIndex].name,
     moonBNakshatra: NAKSHATRAS[moonB.nakshatraIndex],
+    timeline: timeline as TimelineMonth[],
   };
 }

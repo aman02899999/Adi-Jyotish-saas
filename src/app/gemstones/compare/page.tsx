@@ -3,6 +3,7 @@ import Image from "next/image";
 import Link from "next/link";
 import { Gem, X } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getProductBySlug, getProductsByIds } from "@/lib/gemstones";
 
 export const dynamic = "force-dynamic";
@@ -10,7 +11,7 @@ export const metadata: Metadata = { title: "Compare Gemstones · Buy Gemstones" 
 
 export default async function GemstoneComparePage({ searchParams }: { searchParams: Promise<{ ids?: string }> }) {
   const { ids } = await searchParams;
-  const productIds = (ids ?? "").split(",").map((value) => Number(value)).filter((value) => Number.isInteger(value) && value > 0).slice(0, 3);
+  const productIds = (ids ?? "").split(",").map((value) => value.trim()).filter(Boolean).slice(0, 3);
   const items = await getProductsByIds(productIds);
   const details = await Promise.all(items.map((item) => getProductBySlug(item.slug)));
 
@@ -53,6 +54,7 @@ export default async function GemstoneComparePage({ searchParams }: { searchPara
           <div className="empty-state"><X size={26} /><h3>Nothing to compare</h3><p>Select up to 3 gemstones from the shop page.</p></div>
         )}
       </section>
+    <SiteFooter />
     </main>
   );
 }

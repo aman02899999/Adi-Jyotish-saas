@@ -4,7 +4,11 @@ import Link from "next/link";
 import { notFound } from "next/navigation";
 import { ArrowLeft, ArrowRight } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
+import { JsonLd } from "@/components/json-ld";
+import { ShareButtons } from "@/components/share-buttons";
 import { getAllPosts, getPostBySlug } from "@/lib/blog";
+import { getSiteUrl } from "@/lib/site-url";
 
 export function generateStaticParams() {
   return getAllPosts().map((post) => ({ slug: post.slug }));
@@ -34,12 +38,24 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
 
   return (
     <main className="marketing-page blog-post-page">
+      <JsonLd data={{
+        "@context": "https://schema.org",
+        "@type": "Article",
+        headline: post.title,
+        description: post.excerpt,
+        image: new URL(post.cover, getSiteUrl()).toString(),
+        datePublished: post.publishedAt,
+        author: { "@type": "Person", name: post.author },
+        publisher: { "@type": "Organization", name: "Adi Jyotish Gurus" },
+        mainEntityOfPage: new URL(`/blog/${post.slug}`, getSiteUrl()).toString(),
+      }} />
       <SiteHeader />
       <article className="blog-post shell">
         <Link href="/blog" className="text-arrow blog-post__back"><ArrowLeft size={15} /> The journal</Link>
         <p className="eyebrow"><span /> {post.category}</p>
         <h1>{post.title}</h1>
         <div className="blog-meta blog-meta--post"><span>{post.author}</span><b>·</b><span>{formatDate(post.publishedAt)}</span><b>·</b><span>{post.readMinutes} min read</span></div>
+        <ShareButtons url={new URL(`/blog/${post.slug}`, getSiteUrl()).toString()} title={post.title} text={post.excerpt} />
 
         <div className="blog-post__art">
           <Image src={post.cover} alt={post.title} fill priority sizes="(max-width: 900px) 100vw, 900px" />
@@ -80,6 +96,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           </div>
         )}
       </article>
+    <SiteFooter />
     </main>
   );
 }

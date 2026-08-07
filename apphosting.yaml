@@ -1,0 +1,84 @@
+# Firebase App Hosting build/run configuration.
+# Docs: https://firebase.google.com/docs/app-hosting/configure
+#
+# One-time setup (Firebase Console, not this file):
+#   1. Firebase Console → Build → App Hosting → Create backend.
+#   2. Connect this GitHub repo and pick the branch to deploy
+#      (e.g. main, or claude/website-saas-conversion-0agq71 for a preview backend).
+#   3. For every entry below marked `secret:`, create the secret first:
+#        firebase apphosting:secrets:set SECRET_NAME
+#      then grant the backend access when prompted (or via
+#        firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
+#      ).
+#   4. Optional integrations (Razorpay, Resend, Gemini, Ably, payout
+#      encryption, Turnstile, Sentry, a custom NEXT_PUBLIC_SITE_URL, etc.)
+#      are deliberately NOT declared below — the app gracefully disables
+#      each feature when its env vars are unset, matching .env.example.
+#      Add any of them back here, one at a time, once its secret exists
+#      AND is confirmed granted (see point 5) — a single misconfigured
+#      secret blocks the *entire* build, not just that feature.
+#   5. Every `secret:` entry below needs Secret Manager Secret Accessor
+#      granted to firebase-app-hosting-compute@<project>.iam.gserviceaccount.com
+#      for the *build* to even start (App Hosting resolves all secrets at
+#      the preparer step, not just the ones marked RUNTIME).
+
+runConfig:
+  minInstances: 0
+  maxInstances: 3
+  concurrency: 80
+  cpu: 1
+  memoryMiB: 512
+# (retrigger: FIREBASE_SERVICE_ACCOUNT_KEY secret content fixed, version 2)
+
+env:
+  # ── Firebase Google sign-in ───────────────────────────────────────
+  # Client config is public by design (Firebase secures access via Security
+  # Rules/authorized domains, not secrecy) — safe to commit.
+  - variable: NEXT_PUBLIC_FIREBASE_API_KEY
+    value: "AIzaSyA1Pbcaa7D2_JhOo7Qs3bkw5OTkvy4Gdtw"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN
+    value: "ask-astrologer-2c5b5.firebaseapp.com"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_PROJECT_ID
+    value: "ask-astrologer-2c5b5"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: NEXT_PUBLIC_FIREBASE_APP_ID
+    value: "1:473989526170:web:a8bbdefc0a46c6c3e12523"
+    availability:
+      - BUILD
+      - RUNTIME
+  # Server-side service account JSON — a real secret, never paste it in chat.
+  # Get it from Firebase Console → Project Settings → Service Accounts →
+  # Generate new private key, then: firebase apphosting:secrets:set FIREBASE_SERVICE_ACCOUNT_KEY
+  - variable: FIREBASE_SERVICE_ACCOUNT_KEY
+    secret: FIREBASE_SERVICE_ACCOUNT_KEY
+    availability:
+      - RUNTIME
+
+  # ── Analytics (Google Analytics) ──────────────────────────────────
+  # measurementId from the Firebase web config doubles as the GA4 ID.
+  - variable: NEXT_PUBLIC_GA_ID
+    value: "G-61D4BLFYET"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ── Ask Live / Gemini (the /ask free-form reading + Kundli-summary text) ──
+  # NOT declared yet — the secret doesn't exist in Secret Manager, and App
+  # Hosting resolves every declared secret at the *build* preparer step, so
+  # declaring a nonexistent one blocks the entire site's build, not just
+  # this feature (confirmed: this is what broke the previous rollout).
+  # Once the secret exists, add back:
+  #   - variable: GEMINI_API_KEY
+  #     secret: GEMINI_API_KEY
+  #     availability:
+  #       - RUNTIME
+  # Get a key from https://aistudio.google.com/apikey, then:
+  #   firebase apphosting:secrets:set GEMINI_API_KEY --project=ask-astrologer-2c5b5

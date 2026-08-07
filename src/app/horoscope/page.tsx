@@ -1,14 +1,17 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { ShareButtons } from "@/components/share-buttons";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { ZODIAC_SIGNS, getDailyHoroscope, isZodiacSign, todayCivilDate, type ZodiacSignKey } from "@/lib/horoscopes";
+import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Today's Horoscope · AI Daily Reading",
-  description: "A fresh, AI-generated Vedic horoscope for every zodiac sign, updated daily by our Jyotish guide Shree Santram Shashtri.",
-  openGraph: { title: "Today's Horoscope · AI Daily Reading", description: "A fresh Vedic horoscope for every sign, generated daily.", url: "/horoscope" },
+  title: "Today's Horoscope · Live Daily Reading",
+  description: "A fresh, Live-generated Vedic horoscope for every zodiac sign, updated daily by our Jyotish guide Shree Santram Shashtri.",
+  openGraph: { title: "Today's Horoscope · Live Daily Reading", description: "A fresh Vedic horoscope for every sign, generated daily.", url: "/horoscope" },
 };
 
 export default async function HoroscopePage({ searchParams }: { searchParams: Promise<{ sign?: string }> }) {
@@ -23,7 +26,7 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
       <SiteHeader />
 
       <section className="zodiac-hero shell">
-        <p className="eyebrow"><span /> AI daily horoscope</p>
+        <p className="eyebrow"><span /> Live daily horoscope</p>
         <h1>Today&rsquo;s sky,<br /><em>sign by sign.</em></h1>
         <p className="zodiac-hero__lead">Shree Santram Shashtri reads the day&rsquo;s planetary transits for every sign — choose yours below.</p>
       </section>
@@ -60,7 +63,10 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
           <span>Want guidance on your own chart?</span>
           <Link href="/ask" className="button button--small">Ask a personal question <ArrowRight size={14} /></Link>
         </div>
+        <ShareButtons url={new URL(`/horoscope?sign=${sign}`, getSiteUrl()).toString()} title={`${definition.name} Horoscope Today`} text={`Today's ${definition.name} horoscope on Adi Jyotish Gurus:`} />
+        <p className="legal-note">This horoscope offers guidance and reflection, not a guarantee of any outcome.</p>
       </section>
+    <SiteFooter />
     </main>
   );
 }

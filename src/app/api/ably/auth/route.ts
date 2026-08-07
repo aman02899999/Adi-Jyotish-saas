@@ -9,8 +9,8 @@ export async function GET(request: Request) {
   const ably = getAbly();
   if (!ably) return Response.json({ error: "Realtime is not configured." }, { status: 503 });
 
-  const sessionId = Number(new URL(request.url).searchParams.get("sessionId"));
-  if (!Number.isInteger(sessionId) || sessionId <= 0) return Response.json({ error: "Invalid session." }, { status: 400 });
+  const sessionId = new URL(request.url).searchParams.get("sessionId");
+  if (!sessionId) return Response.json({ error: "Invalid session." }, { status: 400 });
 
   const [member, admin] = await Promise.all([getCurrentMember(), getCurrentAdmin()]);
 

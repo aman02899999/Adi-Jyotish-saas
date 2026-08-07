@@ -1,11 +1,10 @@
-import { db } from "@/db";
-import { sql } from "drizzle-orm";
+import { db } from "@/lib/firestore";
 
 export const dynamic = "force-dynamic";
 
 export async function GET() {
   try {
-    await db.execute(sql`select 1`);
+    await db.collection("studioSettings").doc("main").get();
     return Response.json({ ok: true });
   } catch {
     return Response.json({ ok: false }, { status: 500 });

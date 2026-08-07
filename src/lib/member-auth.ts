@@ -1,16 +1,16 @@
 import "server-only";
 
-import { createHash, randomBytes } from "node:crypto";
 import { cookies } from "next/headers";
-import { and, eq, gt, lt } from "drizzle-orm";
-import { db } from "@/db";
-import { memberSessions, memberUsers } from "@/db/schema";
+import { getAuth } from "firebase-admin/auth";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 const COOKIE_NAME = "jyotish_member_session";
 const SESSION_DAYS = 14;
+const SESSION_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
 
 export type MemberIdentity = {
-  id: number;
+  id: string;
   name: string;
   email: string;
   phone: string | null;
@@ -19,57 +19,110 @@ export type MemberIdentity = {
   birthPlace: string | null;
   plan: string;
   onboardingComplete: boolean;
+  emailVerified: boolean;
 };
 
-function digest(token: string) {
-  return createHash("sha256").update(token).digest("hex");
-}
+type MemberDoc = {
+  name: string;
+  email: string;
+  phone: string | null;
+  birthDate: string | null;
+  birthTime: string | null;
+  birthPlace: string | null;
+  plan: string;
+  onboardingComplete: boolean;
+  active: boolean;
+};
 
-export async function createMemberSession(memberId: number) {
-  const token = randomBytes(32).toString("base64url");
-  const expiresAt = new Date(Date.now() + SESSION_DAYS * 24 * 60 * 60 * 1000);
-  await db.delete(memberSessions).where(lt(memberSessions.expiresAt, new Date()));
-  await db.insert(memberSessions).values({ memberId, tokenHash: digest(token), expiresAt });
+/** Verifies a client-obtained Firebase ID token, creates a long-lived session cookie, and
+ * ensures a Firestore profile document exists for this member (created on first sign-in).
+ * `referralCode`, if given, is only meaningful the moment the profile is first created — it's
+ * how a signup started from someone else's invite link gets linked back to them. */
+export async function createMemberSession(idToken: string, initialName?: string, referralCode?: string) {
+  const decoded = await getAuth().verifyIdToken(idToken, true);
+  const uid = decoded.uid;
 
+  const ref = db.collection("members").doc(uid);
+  const snap = await ref.get();
+  if (!snap.exists) {
+    await ref.set({
+      name: initialName || decoded.name || decoded.email?.split("@")[0] || "Member",
+      email: decoded.email ?? "",
+      phone: null,
+      birthDate: null,
+      birthTime: null,
+      birthPlace: null,
+      plan: "member",
+      onboardingComplete: false,
+      active: true,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      lastLoginAt: FieldValue.serverTimestamp(),
+    } satisfies MemberDoc & Record<string, unknown>);
+    if (referralCode) {
+      const { recordReferral } = await import("@/lib/referrals");
+      await recordReferral({ refereeId: uid, code: referralCode });
+    }
+  } else {
+    await ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
+  }
+
+  const sessionCookie = await getAuth().createSessionCookie(idToken, { expiresIn: SESSION_MS });
   const store = await cookies();
-  store.set(COOKIE_NAME, token, {
+  store.set(COOKIE_NAME, sessionCookie, {
     httpOnly: true,
     sameSite: "lax",
     secure: process.env.NODE_ENV === "production",
     path: "/",
-    expires: expiresAt,
+    maxAge: SESSION_MS / 1000,
   });
+
+  return uid;
 }
 
 export async function getCurrentMember(): Promise<MemberIdentity | null> {
-  const token = (await cookies()).get(COOKIE_NAME)?.value;
-  if (!token) return null;
+  const cookie = (await cookies()).get(COOKIE_NAME)?.value;
+  if (!cookie) return null;
 
-  const [member] = await db.select({
-    id: memberUsers.id,
-    name: memberUsers.name,
-    email: memberUsers.email,
-    phone: memberUsers.phone,
-    birthDate: memberUsers.birthDate,
-    birthTime: memberUsers.birthTime,
-    birthPlace: memberUsers.birthPlace,
-    plan: memberUsers.plan,
-    onboardingComplete: memberUsers.onboardingComplete,
-  }).from(memberSessions)
-    .innerJoin(memberUsers, eq(memberSessions.memberId, memberUsers.id))
-    .where(and(
-      eq(memberSessions.tokenHash, digest(token)),
-      gt(memberSessions.expiresAt, new Date()),
-      eq(memberUsers.active, true),
-    ))
-    .limit(1);
+  let uid: string;
+  let emailVerified: boolean;
+  try {
+    const decoded = await getAuth().verifySessionCookie(cookie, true);
+    uid = decoded.uid;
+    emailVerified = decoded.email_verified === true;
+  } catch {
+    return null;
+  }
 
-  return member ?? null;
+  const snap = await db.collection("members").doc(uid).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as MemberDoc;
+  if (!data.active) return null;
+
+  return {
+    id: uid,
+    name: data.name,
+    email: data.email,
+    phone: data.phone,
+    birthDate: data.birthDate,
+    birthTime: data.birthTime,
+    birthPlace: data.birthPlace,
+    plan: data.plan,
+    onboardingComplete: data.onboardingComplete,
+    emailVerified,
+  };
 }
 
 export async function revokeMemberSession() {
   const store = await cookies();
-  const token = store.get(COOKIE_NAME)?.value;
-  if (token) await db.delete(memberSessions).where(eq(memberSessions.tokenHash, digest(token)));
+  const cookie = store.get(COOKIE_NAME)?.value;
+  if (cookie) {
+    try {
+      const decoded = await getAuth().verifySessionCookie(cookie);
+      await getAuth().revokeRefreshTokens(decoded.uid);
+    } catch {
+      // Cookie already invalid/expired — nothing to revoke.
+    }
+  }
   store.set(COOKIE_NAME, "", { httpOnly: true, sameSite: "lax", secure: process.env.NODE_ENV === "production", path: "/", maxAge: 0 });
 }

@@ -2,12 +2,17 @@
 
 import { useState } from "react";
 import { CalendarDays, Check, Clock3, HeartHandshake, LoaderCircle, MapPin, UserRound, X } from "lucide-react";
+import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
 
 type Breakdown = { varna: number; vashya: number; tara: number; yoni: number; grahaMaitri: number; gana: number; bhakoot: number; nadi: number };
+type TimelineMonth = { monthLabel: string; score: number; tier: "favorable" | "supportive" | "neutral" | "caution"; headline: string };
 type Result = {
   score: number; maxScore: number; breakdown: Breakdown; nadiDosha: boolean; bhakootDosha: boolean;
   moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string; narrative: string;
+  timeline: TimelineMonth[];
 };
+
+const TIER_LABEL: Record<TimelineMonth["tier"], string> = { favorable: "Favorable", supportive: "Supportive", neutral: "Neutral", caution: "Use caution" };
 
 const KOOTA_META: Array<{ key: keyof Breakdown; label: string; max: number }> = [
   { key: "varna", label: "Varna", max: 1 },
@@ -32,6 +37,7 @@ export function KundliMatchingForm() {
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   async function submit() {
     setError("");
@@ -39,12 +45,16 @@ export function KundliMatchingForm() {
       setError("Please complete both people's name, exact birth date, time, and place — Guna Milan needs the Moon's real position.");
       return;
     }
+    if (isTurnstileEnabled() && !turnstileToken) {
+      setError("Please complete the verification check above.");
+      return;
+    }
     setLoading(true);
     try {
       const response = await fetch("/api/kundli-matching", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ nameA, birthDateA, birthTimeA, birthPlaceA, nameB, birthDateB, birthTimeB, birthPlaceB }),
+        body: JSON.stringify({ nameA, birthDateA, birthTimeA, birthPlaceA, nameB, birthDateB, birthTimeB, birthPlaceB, turnstileToken }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Your compatibility reading could not be prepared.");
@@ -72,6 +82,16 @@ export function KundliMatchingForm() {
         </div>
         <h2>From Shree Santram Shashtri</h2>
         <div className="ask-answer__body">{result.narrative.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}</div>
+        <h2>12-month compatibility timeline</h2>
+        <p className="timeline-intro">Real Jupiter, Venus, and Saturn transits checked against both your natal Moons — not a static score, but when the sky actually favors this pairing.</p>
+        <div className="compat-timeline">
+          {result.timeline.map((month) => (
+            <div key={month.monthLabel} className={`timeline-month timeline-month--${month.tier}`}>
+              <div className="timeline-month__head"><strong>{month.monthLabel}</strong><span>{TIER_LABEL[month.tier]}</span></div>
+              <p>{month.headline}</p>
+            </div>
+          ))}
+        </div>
         <div className="ask-answer__actions">
           <button type="button" className="button button--ghost" onClick={() => { setResult(null); }}>Match another pair</button>
         </div>
@@ -92,6 +112,7 @@ export function KundliMatchingForm() {
         <label><span>Their birth time</span><div><Clock3 size={16} /><input type="time" value={birthTimeB} onChange={(event) => setBirthTimeB(event.target.value)} /></div></label>
         <label><span>Their birth place</span><div><MapPin size={16} /><input value={birthPlaceB} onChange={(event) => setBirthPlaceB(event.target.value)} placeholder="City, country" /></div></label>
       </div>
+      <TurnstileWidget onVerify={setTurnstileToken} />
       <button type="button" className="button ask-form-card__submit" disabled={loading} onClick={submit}>
         {loading ? <><LoaderCircle size={16} className="spin" /> Comparing charts…</> : <><HeartHandshake size={16} /> Check compatibility</>}
       </button>

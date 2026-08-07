@@ -3,10 +3,10 @@
 import { useState } from "react";
 import Link from "next/link";
 import { Check, Sparkles, X } from "lucide-react";
-import type { MembershipPlan } from "@/db/schema";
+import type { MembershipPlan } from "@/lib/plans";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
-type CurrentSubscription = { planId: number; status: string; billingInterval: "monthly" | "yearly" } | null;
+type CurrentSubscription = { planId: string; status: string; billingInterval: "monthly" | "yearly" } | null;
 
 export function PricingPlans({ plans, memberSignedIn, member, currentSubscription, razorpayConfigured }: {
   plans: MembershipPlan[];
@@ -16,7 +16,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
   razorpayConfigured: boolean;
 }) {
   const [interval, setInterval] = useState<"monthly" | "yearly">("monthly");
-  const [loadingId, setLoadingId] = useState<number | null>(null);
+  const [loadingId, setLoadingId] = useState<string | null>(null);
   const [notice, setNotice] = useState("");
   const activePlanId = currentSubscription && ["active", "authenticated", "created", "pending"].includes(currentSubscription.status) ? currentSubscription.planId : null;
 

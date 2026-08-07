@@ -4,14 +4,14 @@ import { useState } from "react";
 import { Check, Lock, Plus, Save, Trash2, X } from "lucide-react";
 
 export type AdminPermissionOption = { key: string; label: string };
-export type RoleRow = { id: number; slug: string; name: string; isSystem: boolean; permissions: string[]; adminCount: number };
+export type RoleRow = { id: string; slug: string; name: string; isSystem: boolean; permissions: string[]; adminCount: number };
 
 export function AdminRoleManager({ initialRoles, allPermissions }: { initialRoles: RoleRow[]; allPermissions: AdminPermissionOption[] }) {
   const [roles, setRoles] = useState(initialRoles);
   const [notice, setNotice] = useState("");
   const [creating, setCreating] = useState(false);
   const [draft, setDraft] = useState({ name: "", slug: "", permissions: [] as string[] });
-  const [saving, setSaving] = useState<number | "new" | null>(null);
+  const [saving, setSaving] = useState<string | "new" | null>(null);
 
   function togglePermission(list: string[], key: string) {
     return list.includes(key) ? list.filter((item) => item !== key) : [...list, key];

@@ -1,5 +1,5 @@
-import { db } from "@/db";
-import { availabilityRules, practitioners } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 import { toSlug } from "@/lib/services";
@@ -36,30 +36,40 @@ export async function POST(request:Request){
   const bio=body.bio?.trim().slice(0,1200)??"";
   if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||bio.length<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
   const photoUrl=body.photoUrl?.trim();
-  try{
-    const [created]=await db.insert(practitioners).values({
-      name,
-      email,
-      slug:`${toSlug(name)}-${Date.now().toString(36).slice(-4)}`,
-      title:body.title?.trim().slice(0,120)||"Vedic Astrologer",
-      bio,
-      specialties:body.specialties?.trim().slice(0,500)||"Birth charts",
-      languages:body.languages?.trim().slice(0,240)||"English, Hindi",
-      consultationModes:body.consultationModes?.trim().slice(0,160)||"Video, Audio, Chat",
-      experienceYears:Math.max(0,Number(body.experienceYears)||0),
-      verified:body.verified??false,
-      verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
-      photoUrl:photoUrl?photoUrl.slice(0,500):null,
-      online:body.online??false,
-      chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||15),
-      active:body.active??true,
-      featured:body.featured??false,
-    }).returning();
-    await db.insert(availabilityRules).values([1,2,3,4,5].map(weekday=>({practitionerId:created.id,weekday,startTime:"09:30",endTime:"17:30",active:true})));
-    await recordAudit(admin,"practitioner.created","practitioner",created.id,{name,email});
-    const all=await getPractitionerDirectory(false);
-    return Response.json(all.find(x=>x.id===created.id),{status:201});
-  }catch{
-    return Response.json({error:"A practitioner with this email already exists."},{status:409});
+
+  const existing = await db.collection("practitioners").where("email","==",email).limit(1).get();
+  if(!existing.empty) return Response.json({error:"A practitioner with this email already exists."},{status:409});
+
+  const slug = `${toSlug(name)}-${Date.now().toString(36).slice(-4)}`;
+  const ref = db.collection("practitioners").doc(slug);
+  await ref.set({
+    name,
+    slug,
+    email,
+    title:body.title?.trim().slice(0,120)||"Vedic Astrologer",
+    bio,
+    specialties:body.specialties?.trim().slice(0,500)||"Birth charts",
+    languages:body.languages?.trim().slice(0,240)||"English, Hindi",
+    consultationModes:body.consultationModes?.trim().slice(0,160)||"Video, Audio, Chat",
+    experienceYears:Math.max(0,Number(body.experienceYears)||0),
+    verified:body.verified??false,
+    verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
+    photoUrl:photoUrl?photoUrl.slice(0,500):null,
+    online:body.online??false,
+    chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||15),
+    active:body.active??true,
+    featured:body.featured??false,
+    firebaseUid:null,
+    createdAt:FieldValue.serverTimestamp(),
+    updatedAt:FieldValue.serverTimestamp(),
+  });
+  const batch = db.batch();
+  for (const weekday of [1,2,3,4,5]) {
+    batch.set(ref.collection("availabilityRules").doc(), { weekday, startTime: "09:30", endTime: "17:30", active: true });
   }
+  await batch.commit();
+
+  await recordAudit(admin,"practitioner.created","practitioner",slug,{name,email});
+  const all=await getPractitionerDirectory(false);
+  return Response.json(all.find(x=>x.id===slug),{status:201});
 }

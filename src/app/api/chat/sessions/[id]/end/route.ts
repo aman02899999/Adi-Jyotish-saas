@@ -3,12 +3,9 @@ import { ChatSessionNotFoundError, endChatSession, getSessionOr404 } from "@/lib
 import { getCurrentMember } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export async function POST(_: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id: raw } = await params;
-  const id = parseId(raw);
-  if (!id) return Response.json({ error: "Invalid session id." }, { status: 400 });
+  const { id } = await params;
 
   const [member, admin] = await Promise.all([getCurrentMember(), getCurrentAdmin()]);
   const isAdmin = Boolean(admin && hasAdminPermission(admin, "messages"));

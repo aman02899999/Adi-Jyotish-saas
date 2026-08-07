@@ -1,21 +1,92 @@
 import "server-only";
 
 import { randomBytes } from "node:crypto";
-import { and, asc, desc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { gemstoneCoupons, gemstoneOrderItems, gemstoneOrders, gemstoneProductVariants, gemstoneProducts, type GemstoneOrder } from "@/db/schema";
+import { AggregateField, FieldValue, Timestamp } from "firebase-admin/firestore";
+import { db, withIndexFallback } from "@/lib/firestore";
 import { validateCoupon } from "@/lib/gemstone-coupons";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
+import { getStudioSettings } from "@/lib/studio-settings";
+import { splitGstInclusive } from "@/lib/gst";
 
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
 
-const VARIANT_LOCK_OFFSET = 4_000_000_000;
 const FREE_SHIPPING_THRESHOLD = 2000;
 const FLAT_SHIPPING_FEE = 99;
 
-export type CartLineInput = { variantId: number; quantity: number };
+const ordersCol = db.collection("gemstoneOrders");
+const productsCol = db.collection("gemstoneProducts");
+const couponsCol = db.collection("gemstoneCoupons");
+
+function variantRef(productId: string, variantId: string) {
+  return productsCol.doc(productId).collection("variants").doc(variantId);
+}
+function itemsCol(orderId: string) {
+  return ordersCol.doc(orderId).collection("items");
+}
+
+function toDate(value: unknown): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date();
+}
+
+export type GemstoneOrder = {
+  id: string;
+  orderNumber: string;
+  memberId: string | null;
+  guestName: string | null;
+  guestEmail: string | null;
+  guestPhone: string | null;
+  shippingName: string;
+  shippingPhone: string;
+  shippingLine1: string;
+  shippingLine2: string | null;
+  shippingCity: string;
+  shippingState: string;
+  shippingPincode: string;
+  shippingCountry: string;
+  subtotal: number;
+  discount: number;
+  shippingFee: number;
+  tax: number;
+  total: number;
+  currency: string;
+  couponCode: string | null;
+  status: string;
+  paymentStatus: string;
+  razorpayOrderId: string | null;
+  razorpayPaymentId: string | null;
+  notes: string | null;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+export type GemstoneOrderItem = {
+  id: string;
+  orderId: string;
+  productId: string;
+  variantId: string;
+  productName: string;
+  variantLabel: string;
+  unitPrice: number;
+  quantity: number;
+  lineTotal: number;
+  createdAt: Date;
+};
+
+function fromOrderDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneOrder {
+  const data = doc.data() as Omit<GemstoneOrder, "id" | "createdAt" | "updatedAt"> & { createdAt?: Timestamp; updatedAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt), updatedAt: toDate(data.updatedAt) };
+}
+
+function fromItemDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneOrderItem {
+  const data = doc.data() as Omit<GemstoneOrderItem, "id" | "createdAt"> & { createdAt?: Timestamp };
+  return { ...data, id: doc.id, createdAt: toDate(data.createdAt) };
+}
+
+export type CartLineInput = { productId: string; variantId: string; quantity: number };
 
 export type ShippingAddressInput = {
   name: string;
@@ -38,42 +109,37 @@ export function computeShippingFee(subtotal: number) {
   return subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_FEE;
 }
 
-async function lockVariant(tx: Parameters<Parameters<typeof db.transaction>[0]>[0], variantId: number) {
-  await tx.execute(sql`select pg_advisory_xact_lock(${VARIANT_LOCK_OFFSET + variantId})`);
-  const [row] = await tx.select({ variant: gemstoneProductVariants, product: gemstoneProducts })
-    .from(gemstoneProductVariants)
-    .innerJoin(gemstoneProducts, eq(gemstoneProductVariants.productId, gemstoneProducts.id))
-    .where(eq(gemstoneProductVariants.id, variantId))
-    .limit(1);
-  return row ?? null;
-}
+type PricedItem = { productId: string; variantId: string; productName: string; variantLabel: string; unitPrice: number; quantity: number; lineTotal: number };
 
-/** Re-prices a cart against the database — never trusts client-supplied prices. */
-export async function priceCart(lines: CartLineInput[]) {
+/** Re-prices a cart against Firestore — never trusts client-supplied prices. Reads each variant
+ * directly by its (productId, variantId) path, since variants live in a per-product subcollection. */
+export async function priceCart(lines: CartLineInput[]): Promise<{ items: PricedItem[]; subtotal: number }> {
   if (!lines.length) throw new CartValidationError("Your cart is empty.");
 
-  const ids = [...new Set(lines.map((line) => line.variantId))];
-  const rows = await db.select({ variant: gemstoneProductVariants, product: gemstoneProducts })
-    .from(gemstoneProductVariants)
-    .innerJoin(gemstoneProducts, eq(gemstoneProductVariants.productId, gemstoneProducts.id))
-    .where(sql`${gemstoneProductVariants.id} in (${sql.join(ids, sql`,`)})`);
+  const dedupedProductIds = [...new Set(lines.map((line) => line.productId))];
+  const [variantSnaps, productSnaps] = await Promise.all([
+    Promise.all(lines.map((line) => variantRef(line.productId, line.variantId).get())),
+    db.getAll(...dedupedProductIds.map((id) => productsCol.doc(id))),
+  ]);
+  const productById = new Map(productSnaps.map((snap) => [snap.id, snap]));
 
-  const byId = new Map(rows.map((row) => [row.variant.id, row]));
-
-  const items = lines.map((line) => {
-    const found = byId.get(line.variantId);
-    if (!found) throw new CartValidationError("One of the items in your cart is no longer available.");
-    if (!found.variant.active || !found.product.active) throw new CartValidationError(`${found.product.name} is currently unavailable.`);
+  const items = lines.map((line, index) => {
+    const variantSnap = variantSnaps[index];
+    const productSnap = productById.get(line.productId);
+    if (!variantSnap.exists || !productSnap?.exists) throw new CartValidationError("One of the items in your cart is no longer available.");
+    const variant = variantSnap.data() as { label: string; price: number; stockQuantity: number; active: boolean };
+    const product = productSnap.data() as { name: string; active: boolean };
+    if (!variant.active || !product.active) throw new CartValidationError(`${product.name} is currently unavailable.`);
     const quantity = Math.max(1, Math.min(20, Math.round(line.quantity)));
-    if (found.variant.stockQuantity < quantity) throw new CartValidationError(`Only ${found.variant.stockQuantity} left of ${found.product.name} (${found.variant.label}).`);
+    if (variant.stockQuantity < quantity) throw new CartValidationError(`Only ${variant.stockQuantity} left of ${product.name} (${variant.label}).`);
     return {
-      variantId: found.variant.id,
-      productId: found.product.id,
-      productName: found.product.name,
-      variantLabel: found.variant.label,
-      unitPrice: found.variant.price,
+      productId: line.productId,
+      variantId: line.variantId,
+      productName: product.name,
+      variantLabel: variant.label,
+      unitPrice: variant.price,
       quantity,
-      lineTotal: found.variant.price * quantity,
+      lineTotal: variant.price * quantity,
     };
   });
 
@@ -81,8 +147,26 @@ export async function priceCart(lines: CartLineInput[]) {
   return { items, subtotal };
 }
 
+const PENDING_ORDER_TTL_MS = 30 * 60 * 1000;
+
+/** Self-healing cleanup for checkout abandonment: a pending order reserves stock (and coupon
+ * usage) the moment it's created, before payment — if the customer never completes payment
+ * (closed the tab, a failed Razorpay attempt with no retry), that reservation would otherwise
+ * never be released. There's no scheduled job in this deployment, so this runs opportunistically
+ * from a couple of natural trigger points (new checkout attempts, the admin orders list) instead
+ * of on a timer. Reuses updateOrderStatus so stock/coupon release stays in one place. */
+export async function expireStalePendingOrders() {
+  const cutoff = Timestamp.fromMillis(Date.now() - PENDING_ORDER_TTL_MS);
+  const snap = await ordersCol.where("status", "==", "pending").where("createdAt", "<", cutoff).limit(25).get();
+  for (const doc of snap.docs) {
+    await updateOrderStatus(doc.id, "cancelled").catch((error) => {
+      console.error(`Failed to expire stale pending order ${doc.id}`, error);
+    });
+  }
+}
+
 export async function createPendingOrder({ memberId, guestName, guestEmail, guestPhone, shipping, lines, couponCode }: {
-  memberId: number | null;
+  memberId: string | null;
   guestName?: string;
   guestEmail?: string;
   guestPhone?: string;
@@ -90,32 +174,70 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
   lines: CartLineInput[];
   couponCode?: string;
 }): Promise<GemstoneOrder> {
+  await expireStalePendingOrders().catch((error) => console.error("Stale pending order sweep failed", error));
   const { items, subtotal } = await priceCart(lines);
 
   let discount = 0;
   let appliedCouponCode: string | null = null;
   if (couponCode?.trim()) {
     const { coupon, discountAmount } = await validateCoupon(couponCode, subtotal);
+    if (coupon.perCustomerLimit != null) {
+      let usedQuery = ordersCol.where("couponCode", "==", coupon.code).where("paymentStatus", "==", "paid");
+      if (memberId) usedQuery = usedQuery.where("memberId", "==", memberId);
+      else if (guestEmail?.trim()) usedQuery = usedQuery.where("guestEmail", "==", guestEmail.trim());
+      // Fails open (treats as "not yet used") if the composite index is still building on a fresh
+      // deploy, same fallback philosophy used elsewhere in this codebase — better to let one order
+      // through under-checked than 500 every checkout attempt.
+      const usedCount = await withIndexFallback(async () => (await usedQuery.count().get()).data().count, 0);
+      if (usedCount >= coupon.perCustomerLimit) {
+        throw new CartValidationError("You've already used this coupon the maximum number of times.");
+      }
+    }
     discount = discountAmount;
     appliedCouponCode = coupon.code;
   }
 
   const shippingFee = computeShippingFee(subtotal - discount);
   const total = Math.max(0, subtotal - discount) + shippingFee;
+  const settings = await getStudioSettings();
+  // Listed prices are treated as GST-inclusive, so this only splits out the tax for invoicing — the checkout total is unchanged.
+  const { taxAmount } = splitGstInclusive(Math.max(0, subtotal - discount), settings.gstRate);
   const orderNumber = generateOrderNumber();
 
-  return db.transaction(async (tx) => {
-    for (const item of items) {
-      const locked = await lockVariant(tx, item.variantId);
-      if (!locked || locked.variant.stockQuantity < item.quantity) {
+  // Firestore transactions retry automatically on write conflicts (optimistic concurrency), which gives
+  // the same atomic stock-check-and-decrement guarantee the old `pg_advisory_xact_lock` provided.
+  const orderRef = ordersCol.doc();
+  const couponRef = appliedCouponCode ? couponsCol.doc(appliedCouponCode) : null;
+  await db.runTransaction(async (tx) => {
+    const variantRefs = items.map((item) => variantRef(item.productId, item.variantId));
+    const [variantSnaps, couponSnap] = await Promise.all([
+      Promise.all(variantRefs.map((ref) => tx.get(ref))),
+      couponRef ? tx.get(couponRef) : Promise.resolve(null),
+    ]);
+
+    for (let index = 0; index < items.length; index += 1) {
+      const snap = variantSnaps[index];
+      const item = items[index];
+      const data = snap.exists ? (snap.data() as { stockQuantity: number } | undefined) : undefined;
+      if (!snap.exists || !data || data.stockQuantity < item.quantity) {
         throw new CartValidationError(`${item.productName} just sold out. Please update your cart.`);
       }
-      await tx.update(gemstoneProductVariants)
-        .set({ stockQuantity: sql`${gemstoneProductVariants.stockQuantity} - ${item.quantity}` })
-        .where(eq(gemstoneProductVariants.id, item.variantId));
     }
 
-    const [order] = await tx.insert(gemstoneOrders).values({
+    // Reserving usage here (not at payment time) closes the race where many concurrent pending
+    // orders all pass validateCoupon's pre-transaction usageCount read and then all pay —
+    // reservation is atomic with the read-check here, same guarantee as the stock check above.
+    // Released back on cancellation/expiry (see updateOrderStatus and the stale-order sweep).
+    if (couponRef && couponSnap) {
+      if (!couponSnap.exists) throw new CartValidationError("This coupon code is not valid.");
+      const couponData = couponSnap.data() as { usageLimit: number | null; usageCount: number };
+      if (couponData.usageLimit != null && couponData.usageCount >= couponData.usageLimit) {
+        throw new CartValidationError("This coupon has reached its usage limit.");
+      }
+      tx.update(couponRef, { usageCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+    }
+
+    tx.set(orderRef, {
       orderNumber,
       memberId,
       guestName: memberId ? null : guestName?.trim() ?? null,
@@ -132,53 +254,65 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
       subtotal,
       discount,
       shippingFee,
-      tax: 0,
+      tax: taxAmount,
       total,
+      currency: "INR",
       couponCode: appliedCouponCode,
       status: "pending",
       paymentStatus: "pending",
-    }).returning();
+      razorpayOrderId: null,
+      razorpayPaymentId: null,
+      notes: null,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
 
-    await tx.insert(gemstoneOrderItems).values(items.map((item) => ({
-      orderId: order.id,
-      productId: item.productId,
-      variantId: item.variantId,
-      productName: item.productName,
-      variantLabel: item.variantLabel,
-      unitPrice: item.unitPrice,
-      quantity: item.quantity,
-      lineTotal: item.lineTotal,
-    })));
+    for (const item of items) {
+      tx.set(itemsCol(orderRef.id).doc(), {
+        orderId: orderRef.id,
+        productId: item.productId,
+        variantId: item.variantId,
+        productName: item.productName,
+        variantLabel: item.variantLabel,
+        unitPrice: item.unitPrice,
+        quantity: item.quantity,
+        lineTotal: item.lineTotal,
+        createdAt: FieldValue.serverTimestamp(),
+      });
+    }
 
-    return order;
+    variantRefs.forEach((ref, index) => {
+      tx.update(ref, { stockQuantity: FieldValue.increment(-items[index].quantity), updatedAt: FieldValue.serverTimestamp() });
+    });
   });
+
+  const created = await orderRef.get();
+  return fromOrderDoc(created);
 }
 
-export async function attachRazorpayOrder(orderId: number, razorpayOrderId: string) {
-  await db.update(gemstoneOrders).set({ razorpayOrderId }).where(eq(gemstoneOrders.id, orderId));
+export async function attachRazorpayOrder(orderId: string, razorpayOrderId: string) {
+  await ordersCol.doc(orderId).update({ razorpayOrderId });
 }
 
 /** Idempotent per razorpayPaymentId. */
-export async function markOrderPaid({ orderId, razorpayPaymentId }: { orderId: number; razorpayPaymentId: string }) {
-  const result = await db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(gemstoneOrders).where(eq(gemstoneOrders.id, orderId)).limit(1);
-    if (!existing) throw new OrderNotFoundError("Order not found.");
+export async function markOrderPaid({ orderId, razorpayPaymentId }: { orderId: string; razorpayPaymentId: string }) {
+  const ref = ordersCol.doc(orderId);
+  const result = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new OrderNotFoundError("Order not found.");
+    const existing = fromOrderDoc(snap);
     if (existing.paymentStatus === "paid") return { order: existing, justPaid: false };
+    if (existing.paymentStatus !== "pending") return { order: existing, justPaid: false };
 
-    const [updated] = await tx.update(gemstoneOrders)
-      .set({ paymentStatus: "paid", status: "processing", razorpayPaymentId, updatedAt: new Date() })
-      .where(and(eq(gemstoneOrders.id, orderId), eq(gemstoneOrders.paymentStatus, "pending")))
-      .returning();
-
-    if (updated?.couponCode) {
-      await tx.update(gemstoneCoupons).set({ usageCount: sql`${gemstoneCoupons.usageCount} + 1` }).where(eq(gemstoneCoupons.code, updated.couponCode));
-    }
-
-    return { order: updated ?? existing, justPaid: Boolean(updated) };
+    // Coupon usageCount is reserved when the order is created (see createPendingOrder), not here —
+    // incrementing it again on payment would double-count every order that used a coupon.
+    tx.update(ref, { paymentStatus: "paid", status: "processing", razorpayPaymentId, updatedAt: FieldValue.serverTimestamp() });
+    return { order: { ...existing, paymentStatus: "paid", status: "processing", razorpayPaymentId }, justPaid: true };
   });
 
   if (result.justPaid) await notifyOrderPaid(result.order).catch(() => {});
-  return result.order;
+  const finalSnap = await ref.get();
+  return fromOrderDoc(finalSnap);
 }
 
 async function notifyOrderPaid(order: GemstoneOrder) {
@@ -201,60 +335,93 @@ async function notifyOrderPaid(order: GemstoneOrder) {
   }
 }
 
-export async function getOrderItems(orderId: number) {
-  return db.select().from(gemstoneOrderItems).where(eq(gemstoneOrderItems.orderId, orderId));
+export async function getOrderItems(orderId: string): Promise<GemstoneOrderItem[]> {
+  const snap = await itemsCol(orderId).get();
+  return snap.docs.map(fromItemDoc);
 }
 
-export async function getOrderById(orderId: number) {
-  const [order] = await db.select().from(gemstoneOrders).where(eq(gemstoneOrders.id, orderId)).limit(1);
-  return order ?? null;
+export async function getOrderById(orderId: string) {
+  const snap = await ordersCol.doc(orderId).get();
+  return snap.exists ? fromOrderDoc(snap) : null;
 }
 
 /** Scoped lookup for the confirmation page: must belong to the member, or match the guest email used at checkout. */
-export async function getOrderByNumberScoped(orderNumber: string, { memberId, guestEmail }: { memberId?: number | null; guestEmail?: string | null }) {
-  const [order] = await db.select().from(gemstoneOrders).where(eq(gemstoneOrders.orderNumber, orderNumber)).limit(1);
-  if (!order) return null;
+export async function getOrderByNumberScoped(orderNumber: string, { memberId, guestEmail }: { memberId?: string | null; guestEmail?: string | null }) {
+  const snap = await ordersCol.where("orderNumber", "==", orderNumber).limit(1).get();
+  if (snap.empty) return null;
+  const order = fromOrderDoc(snap.docs[0]);
   const ownedByMember = memberId != null && order.memberId === memberId;
   const ownedByGuest = !order.memberId && guestEmail && order.guestEmail?.toLowerCase() === guestEmail.toLowerCase();
   if (!ownedByMember && !ownedByGuest) return null;
   return order;
 }
 
-export async function getOrdersForMember(memberId: number) {
-  return db.select().from(gemstoneOrders).where(eq(gemstoneOrders.memberId, memberId)).orderBy(desc(gemstoneOrders.createdAt));
+export async function getOrdersForMember(memberId: string) {
+  // Requires a composite index: gemstoneOrders (memberId ASC, createdAt DESC) — see firestore.indexes.json.
+  const snap = await ordersCol.where("memberId", "==", memberId).orderBy("createdAt", "desc").get();
+  return snap.docs.map(fromOrderDoc);
 }
 
 export async function getAllOrdersAdmin(status?: string) {
-  const query = db.select().from(gemstoneOrders).orderBy(desc(gemstoneOrders.createdAt));
-  if (status && status !== "all") return query.where(eq(gemstoneOrders.status, status));
-  return query;
+  await expireStalePendingOrders().catch((error) => console.error("Stale pending order sweep failed", error));
+  if (status && status !== "all") {
+    // Requires a composite index: gemstoneOrders (status ASC, createdAt DESC) — see firestore.indexes.json.
+    const snap = await ordersCol.where("status", "==", status).orderBy("createdAt", "desc").get();
+    return snap.docs.map(fromOrderDoc);
+  }
+  const snap = await ordersCol.orderBy("createdAt", "desc").get();
+  return snap.docs.map(fromOrderDoc);
 }
 
 const CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
 
-export async function updateOrderStatus(orderId: number, status: string) {
-  const updated = await db.transaction(async (tx) => {
-    const [existing] = await tx.select().from(gemstoneOrders).where(eq(gemstoneOrders.id, orderId)).limit(1);
-    if (!existing) throw new OrderNotFoundError("Order not found.");
+export async function updateOrderStatus(orderId: string, status: string) {
+  const ref = ordersCol.doc(orderId);
+  const updated = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new OrderNotFoundError("Order not found.");
+    const existing = fromOrderDoc(snap);
 
-    if (status === "cancelled" && existing.status !== "cancelled") {
-      if (!CANCELLABLE_STATUSES.has(existing.status)) throw new CartValidationError("This order can no longer be cancelled.");
-      const items = await tx.select().from(gemstoneOrderItems).where(eq(gemstoneOrderItems.orderId, orderId));
-      for (const item of items) {
-        await tx.update(gemstoneProductVariants)
-          .set({ stockQuantity: sql`${gemstoneProductVariants.stockQuantity} + ${item.quantity}` })
-          .where(eq(gemstoneProductVariants.id, item.variantId));
-      }
+    let itemDocs: FirebaseFirestore.QueryDocumentSnapshot[] = [];
+    let variantSnaps: FirebaseFirestore.DocumentSnapshot[] = [];
+    // A refund means the goods aren't shipping either, same as a cancellation — restore stock (and
+    // the coupon reservation below) for both, not just "cancelled".
+    const willRestoreStock = (status === "cancelled" || status === "refunded") && existing.status !== "cancelled" && existing.status !== "refunded";
+    if (willRestoreStock) {
+      if (status === "cancelled" && !CANCELLABLE_STATUSES.has(existing.status)) throw new CartValidationError("This order can no longer be cancelled.");
+      const itemsSnap = await tx.get(itemsCol(orderId));
+      itemDocs = itemsSnap.docs;
+      variantSnaps = await Promise.all(itemDocs.map((doc) => {
+        const item = doc.data() as { productId: string; variantId: string };
+        return tx.get(variantRef(item.productId, item.variantId));
+      }));
     }
 
-    const [row] = await tx.update(gemstoneOrders)
-      .set({ status, paymentStatus: status === "refunded" ? "refunded" : existing.paymentStatus, updatedAt: new Date() })
-      .where(eq(gemstoneOrders.id, orderId))
-      .returning();
-    return row;
+    if (willRestoreStock && existing.couponCode) {
+      // Mirrors the stock restore below — a cancelled order shouldn't count against a coupon's
+      // usage limit or the customer's per-customer limit, since the reservation happened at
+      // order-creation time (see createPendingOrder), not at payment.
+      tx.update(couponsCol.doc(existing.couponCode), { usageCount: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() });
+    }
+
+    if (willRestoreStock) {
+      itemDocs.forEach((doc, index) => {
+        if (!variantSnaps[index].exists) return;
+        const item = doc.data() as { productId: string; variantId: string; quantity: number };
+        tx.update(variantRef(item.productId, item.variantId), { stockQuantity: FieldValue.increment(item.quantity), updatedAt: FieldValue.serverTimestamp() });
+      });
+    }
+
+    tx.update(ref, {
+      status,
+      paymentStatus: status === "refunded" ? "refunded" : existing.paymentStatus,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+
+    return { ...existing, status, paymentStatus: status === "refunded" ? "refunded" : existing.paymentStatus };
   });
 
-  if (updated?.memberId) {
+  if (updated.memberId) {
     await createNotification({
       recipientType: "member",
       recipientId: updated.memberId,
@@ -263,40 +430,59 @@ export async function updateOrderStatus(orderId: number, status: string) {
       link: `/gemstones/order/${updated.orderNumber}`,
     }).catch(() => {});
   }
-  return updated;
+
+  const finalSnap = await ref.get();
+  return fromOrderDoc(finalSnap);
 }
 
 export async function getGemstoneAdminStats() {
-  const [revenueRow] = await db.select({ revenue: sql<number>`coalesce(sum(${gemstoneOrders.total}),0)::int`, paidCount: sql<number>`count(*)::int` })
-    .from(gemstoneOrders).where(eq(gemstoneOrders.paymentStatus, "paid"));
-  const statusCounts = await db.select({ status: gemstoneOrders.status, count: sql<number>`count(*)::int` }).from(gemstoneOrders).groupBy(gemstoneOrders.status);
-  const [lowStockRow] = await db.select({ count: sql<number>`count(*)::int` }).from(gemstoneProductVariants).where(and(sql`${gemstoneProductVariants.stockQuantity} <= 5`, eq(gemstoneProductVariants.active, true)));
+  const paidOrders = ordersCol.where("paymentStatus", "==", "paid");
+  const revenueSnap = await paidOrders.aggregate({ revenue: AggregateField.sum("total"), paidCount: AggregateField.count() }).get();
+  const revenueData = revenueSnap.data();
+
+  const statuses = ["pending", "processing", "packed", "shipped", "delivered", "cancelled", "refunded"];
+  const statusCountSnaps = await Promise.all(statuses.map((status) => ordersCol.where("status", "==", status).count().get()));
+  const statusCounts = Object.fromEntries(statuses.map((status, index) => [status, statusCountSnaps[index].data().count]));
+
+  // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see firestore.indexes.json.
+  const lowStockSnap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", 5).count().get();
 
   return {
-    revenue: revenueRow?.revenue ?? 0,
-    paidOrderCount: revenueRow?.paidCount ?? 0,
-    statusCounts: Object.fromEntries(statusCounts.map((row) => [row.status, row.count])),
-    lowStockVariantCount: lowStockRow?.count ?? 0,
+    revenue: Number(revenueData.revenue ?? 0),
+    paidOrderCount: revenueData.paidCount ?? 0,
+    statusCounts,
+    lowStockVariantCount: lowStockSnap.data().count,
   };
 }
 
 export async function getLowStockVariants(threshold = 5) {
-  return db.select({ variant: gemstoneProductVariants, productName: gemstoneProducts.name, productSlug: gemstoneProducts.slug })
-    .from(gemstoneProductVariants)
-    .innerJoin(gemstoneProducts, eq(gemstoneProductVariants.productId, gemstoneProducts.id))
-    .where(and(sql`${gemstoneProductVariants.stockQuantity} <= ${threshold}`, eq(gemstoneProductVariants.active, true)))
-    .orderBy(asc(gemstoneProductVariants.stockQuantity));
+  // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see firestore.indexes.json.
+  const snap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", threshold).orderBy("stockQuantity", "asc").get();
+  if (snap.empty) return [];
+
+  const productIds = [...new Set(snap.docs.map((doc) => (doc.data() as { productId: string }).productId))];
+  const productSnaps = await db.getAll(...productIds.map((id) => productsCol.doc(id)));
+  const productById = new Map(productSnaps.map((productSnap) => [productSnap.id, productSnap.data() as { name?: string; slug?: string } | undefined]));
+
+  return snap.docs.map((doc) => {
+    const data = doc.data() as { productId: string; label: string; stockQuantity: number };
+    const product = productById.get(data.productId);
+    return {
+      variant: { id: doc.id, productId: data.productId, label: data.label, stockQuantity: data.stockQuantity },
+      productName: product?.name ?? "Unknown product",
+      productSlug: product?.slug ?? "",
+    };
+  });
 }
 
-export async function memberHasPurchasedProduct(memberId: number, productId: number) {
-  const [row] = await db.select({ id: gemstoneOrders.id })
-    .from(gemstoneOrders)
-    .innerJoin(gemstoneOrderItems, eq(gemstoneOrderItems.orderId, gemstoneOrders.id))
-    .where(and(
-      eq(gemstoneOrders.memberId, memberId),
-      eq(gemstoneOrderItems.productId, productId),
-      eq(gemstoneOrders.paymentStatus, "paid"),
-    ))
-    .limit(1);
-  return row ?? null;
+export async function memberHasPurchasedProduct(memberId: string, productId: string) {
+  // Requires a composite index: gemstoneOrders (memberId ASC, paymentStatus ASC) — see firestore.indexes.json.
+  const ordersSnap = await ordersCol.where("memberId", "==", memberId).where("paymentStatus", "==", "paid").get();
+  if (ordersSnap.empty) return null;
+
+  for (const orderDoc of ordersSnap.docs) {
+    const match = await itemsCol(orderDoc.id).where("productId", "==", productId).limit(1).get();
+    if (!match.empty) return { id: orderDoc.id };
+  }
+  return null;
 }

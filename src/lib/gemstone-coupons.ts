@@ -1,18 +1,69 @@
 import "server-only";
 
-import { desc, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { gemstoneCoupons, type GemstoneCoupon } from "@/db/schema";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
 export class CouponError extends Error {}
 
-export async function getAllCouponsAdmin(): Promise<GemstoneCoupon[]> {
-  return db.select().from(gemstoneCoupons).orderBy(desc(gemstoneCoupons.createdAt));
+/** Doc ID = the normalized coupon code itself, so lookup-by-code at checkout is a single doc read
+ * instead of a query. */
+const couponsCol = db.collection("gemstoneCoupons");
+
+export type GemstoneCoupon = {
+  id: string;
+  code: string;
+  description: string;
+  discountType: string;
+  discountValue: number;
+  minOrderAmount: number;
+  maxDiscountAmount: number | null;
+  usageLimit: number | null;
+  usageCount: number;
+  perCustomerLimit: number | null;
+  startsAt: Date | null;
+  expiresAt: Date | null;
+  active: boolean;
+  createdAt: Date;
+  updatedAt: Date;
+};
+
+function toDate(value: unknown): Date {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  return new Date();
 }
 
-export async function getCouponById(id: number) {
-  const [coupon] = await db.select().from(gemstoneCoupons).where(eq(gemstoneCoupons.id, id)).limit(1);
-  return coupon ?? null;
+function toDateOrNull(value: unknown): Date | null {
+  if (value instanceof Timestamp) return value.toDate();
+  if (value instanceof Date) return value;
+  return null;
+}
+
+function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): GemstoneCoupon {
+  const data = doc.data() as Omit<GemstoneCoupon, "id" | "startsAt" | "expiresAt" | "createdAt" | "updatedAt"> & {
+    startsAt?: Timestamp | null;
+    expiresAt?: Timestamp | null;
+    createdAt?: Timestamp;
+    updatedAt?: Timestamp;
+  };
+  return {
+    ...data,
+    id: doc.id,
+    startsAt: toDateOrNull(data.startsAt),
+    expiresAt: toDateOrNull(data.expiresAt),
+    createdAt: toDate(data.createdAt),
+    updatedAt: toDate(data.updatedAt),
+  };
+}
+
+export async function getAllCouponsAdmin(): Promise<GemstoneCoupon[]> {
+  const snap = await couponsCol.orderBy("createdAt", "desc").get();
+  return snap.docs.map(fromDoc);
+}
+
+export async function getCouponById(id: string) {
+  const snap = await couponsCol.doc(id).get();
+  return snap.exists ? fromDoc(snap) : null;
 }
 
 export type CouponPayload = {
@@ -41,7 +92,11 @@ export async function createCoupon(payload: CouponPayload) {
   if (discountValue <= 0) throw new CouponError("Discount value must be greater than zero.");
   if (discountType === "percent" && discountValue > 100) throw new CouponError("Percentage discounts cannot exceed 100.");
 
-  const [created] = await db.insert(gemstoneCoupons).values({
+  const ref = couponsCol.doc(code);
+  const existing = await ref.get();
+  if (existing.exists) throw new CouponError("A coupon with this code already exists.");
+
+  await ref.set({
     code,
     description: payload.description?.trim() ?? "",
     discountType,
@@ -49,24 +104,31 @@ export async function createCoupon(payload: CouponPayload) {
     minOrderAmount: Math.max(0, Number(payload.minOrderAmount) || 0),
     maxDiscountAmount: payload.maxDiscountAmount != null ? Math.max(0, Number(payload.maxDiscountAmount)) : null,
     usageLimit: payload.usageLimit != null ? Math.max(0, Number(payload.usageLimit)) : null,
+    usageCount: 0,
     perCustomerLimit: payload.perCustomerLimit != null ? Math.max(0, Number(payload.perCustomerLimit)) : null,
     startsAt: payload.startsAt ? new Date(payload.startsAt) : null,
     expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null,
     active: payload.active ?? true,
-  }).returning();
-  return created;
+    createdAt: FieldValue.serverTimestamp(),
+    updatedAt: FieldValue.serverTimestamp(),
+  });
+  const created = await ref.get();
+  return fromDoc(created);
 }
 
-export async function updateCoupon(id: number, payload: CouponPayload) {
-  const existing = await getCouponById(id);
-  if (!existing) throw new CouponError("Coupon not found.");
+export async function updateCoupon(id: string, payload: CouponPayload) {
+  const ref = couponsCol.doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new CouponError("Coupon not found.");
+  const existing = fromDoc(snap);
 
   const discountType = payload.discountType === "flat" || payload.discountType === "percent" ? payload.discountType : existing.discountType;
   const discountValue = payload.discountValue != null ? Math.max(0, Number(payload.discountValue) || 0) : existing.discountValue;
   if (discountType === "percent" && discountValue > 100) throw new CouponError("Percentage discounts cannot exceed 100.");
 
-  const [updated] = await db.update(gemstoneCoupons).set({
-    code: payload.code ? normalizeCode(payload.code) : existing.code,
+  const nextCode = payload.code ? normalizeCode(payload.code) : existing.code;
+  const fields = {
+    code: nextCode,
     description: payload.description ?? existing.description,
     discountType,
     discountValue,
@@ -77,16 +139,31 @@ export async function updateCoupon(id: number, payload: CouponPayload) {
     startsAt: payload.startsAt !== undefined ? (payload.startsAt ? new Date(payload.startsAt) : null) : existing.startsAt,
     expiresAt: payload.expiresAt !== undefined ? (payload.expiresAt ? new Date(payload.expiresAt) : null) : existing.expiresAt,
     active: payload.active ?? existing.active,
-    updatedAt: new Date(),
-  }).where(eq(gemstoneCoupons.id, id)).returning();
-  return updated;
+  };
+
+  if (nextCode !== existing.code) {
+    // The doc ID is the code, so a code change means migrating to a new doc — keep usageCount/createdAt.
+    const nextRef = couponsCol.doc(nextCode);
+    const conflict = await nextRef.get();
+    if (conflict.exists) throw new CouponError("A coupon with this code already exists.");
+    await nextRef.set({ ...fields, usageCount: existing.usageCount, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    await ref.delete();
+    const created = await nextRef.get();
+    return fromDoc(created);
+  }
+
+  await ref.update({ ...fields, updatedAt: FieldValue.serverTimestamp() });
+  const updated = await ref.get();
+  return fromDoc(updated);
 }
 
 /** Pure validation — does not consume usage. Usage is recorded once an order actually pays. */
 export async function validateCoupon(code: string, subtotal: number): Promise<{ coupon: GemstoneCoupon; discountAmount: number }> {
   const normalized = normalizeCode(code);
-  const [coupon] = await db.select().from(gemstoneCoupons).where(eq(gemstoneCoupons.code, normalized)).limit(1);
-  if (!coupon || !coupon.active) throw new CouponError("This coupon code is not valid.");
+  const snap = await couponsCol.doc(normalized).get();
+  if (!snap.exists) throw new CouponError("This coupon code is not valid.");
+  const coupon = fromDoc(snap);
+  if (!coupon.active) throw new CouponError("This coupon code is not valid.");
 
   const now = new Date();
   if (coupon.startsAt && now < coupon.startsAt) throw new CouponError("This coupon is not active yet.");
@@ -99,8 +176,4 @@ export async function validateCoupon(code: string, subtotal: number): Promise<{ 
   discountAmount = Math.min(discountAmount, subtotal);
 
   return { coupon, discountAmount };
-}
-
-export async function incrementCouponUsage(couponId: number) {
-  await db.update(gemstoneCoupons).set({ usageCount: sql`${gemstoneCoupons.usageCount} + 1` }).where(eq(gemstoneCoupons.id, couponId));
 }

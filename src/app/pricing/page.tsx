@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { PricingPlans } from "@/components/pricing-plans";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPublicPlans } from "@/lib/plans";
 import { isRazorpayConfigured } from "@/lib/razorpay";
@@ -34,6 +35,7 @@ export default async function PricingPage() {
           razorpayConfigured={isRazorpayConfigured()}
         />
       </section>
+    <SiteFooter />
     </main>
   );
 }

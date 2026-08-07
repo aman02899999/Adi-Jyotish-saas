@@ -5,7 +5,9 @@ import { ChevronRight } from "lucide-react";
 import { GemstoneProductCard } from "@/components/gemstone-product-card";
 import { GemstoneProductDetail } from "@/components/gemstone-product-detail";
 import { GemstoneRecentlyViewed } from "@/components/gemstone-recently-viewed";
+import { JsonLd } from "@/components/json-ld";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getPublishedReviews } from "@/lib/gemstone-reviews";
 import { getWishlistProductIds } from "@/lib/gemstone-wishlist";
 import { getProductBySlug, getRelatedProducts } from "@/lib/gemstones";
@@ -57,10 +59,21 @@ export default async function GemstoneProductPage({ params }: { params: Promise<
     aggregateRating: product.ratingCount > 0 ? { "@type": "AggregateRating", ratingValue: product.ratingAverage, reviewCount: product.ratingCount } : undefined,
   };
 
+  const breadcrumbJsonLd = {
+    "@context": "https://schema.org",
+    "@type": "BreadcrumbList",
+    itemListElement: [
+      { "@type": "ListItem", position: 1, name: "Gemstones", item: new URL("/gemstones", site).toString() },
+      { "@type": "ListItem", position: 2, name: product.categoryName, item: new URL(`/gemstones/shop?category=${product.categorySlug}`, site).toString() },
+      { "@type": "ListItem", position: 3, name: product.name, item: new URL(`/gemstones/${product.slug}`, site).toString() },
+    ],
+  };
+
   return (
     <main className="marketing-page gem-store">
       <SiteHeader />
-      <script type="application/ld+json" dangerouslySetInnerHTML={{ __html: JSON.stringify(jsonLd) }} />
+      <JsonLd data={jsonLd} />
+      <JsonLd data={breadcrumbJsonLd} />
 
       <nav className="gem-breadcrumbs shell" aria-label="Breadcrumb">
         <Link href="/gemstones">Gemstones</Link><ChevronRight size={13} />
@@ -91,6 +104,7 @@ export default async function GemstoneProductPage({ params }: { params: Promise<
       )}
 
       <GemstoneRecentlyViewed excludeSlug={product.slug} wishlistIds={wishlistIds} signedIn={Boolean(member)} />
+    <SiteFooter />
     </main>
   );
 }

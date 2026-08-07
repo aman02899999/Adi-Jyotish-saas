@@ -1,24 +1,41 @@
 import type { Metadata, Viewport } from "next";
 import type { ReactNode } from "react";
+import { GoogleAnalytics } from "@/components/google-analytics";
+import { JsonLd } from "@/components/json-ld";
+import { MetaPixel } from "@/components/meta-pixel";
+import { PromoBanner } from "@/components/promo-banner";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
+const siteUrl = getSiteUrl();
+const websiteJsonLd = {
+  "@context": "https://schema.org",
+  "@type": "WebSite",
+  name: "Adi Jyotish Gurus",
+  url: siteUrl.toString(),
+  potentialAction: {
+    "@type": "SearchAction",
+    target: { "@type": "EntryPoint", urlTemplate: `${new URL("/astrologers", siteUrl).toString()}?q={search_term_string}` },
+    "query-input": "required name=search_term_string",
+  },
+};
+
 export const metadata: Metadata = {
-  metadataBase: getSiteUrl(),
-  applicationName: "Jyotish",
-  title: { default: "Jyotish — Ancient clarity for modern life", template: "%s · Jyotish" },
+  metadataBase: siteUrl,
+  applicationName: "Adi Jyotish Gurus",
+  title: { default: "Adi Jyotish Gurus — Ancient clarity for modern life", template: "%s · Adi Jyotish Gurus" },
   description: "Personal Vedic astrology readings, cosmic insights, and auspicious timing for modern life.",
   openGraph: {
     type: "website",
-    title: "Jyotish — Ancient clarity for modern life",
+    title: "Adi Jyotish Gurus — Ancient clarity for modern life",
     description: "Personal Vedic astrology readings and thoughtful cosmic guidance.",
     url: "/",
-    siteName: "Jyotish",
-    images: [{ url: "/images/vedic-hero.jpg", width: 1200, height: 675, alt: "Jyotish Vedic astrology experience" }],
+    siteName: "Adi Jyotish Gurus",
+    images: [{ url: "/images/vedic-hero.jpg", width: 1200, height: 675, alt: "Adi Jyotish Gurus Vedic astrology experience" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Jyotish — Ancient clarity for modern life",
+    title: "Adi Jyotish Gurus — Ancient clarity for modern life",
     description: "Personal Vedic astrology readings and thoughtful cosmic guidance.",
     images: ["/images/vedic-hero.jpg"],
   },
@@ -34,7 +51,13 @@ export const viewport: Viewport = {
 export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
-      <body>{children}</body>
+      <body>
+        <JsonLd data={websiteJsonLd} />
+        <PromoBanner />
+        {children}
+      </body>
+      <GoogleAnalytics />
+      <MetaPixel />
     </html>
   );
 }

@@ -1,14 +1,24 @@
 import "server-only";
 
-import { and, eq, sql } from "drizzle-orm";
-import { db } from "@/db";
-import { adminRoles, adminUsers } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { ALL_ADMIN_PERMISSIONS, type AdminPermission } from "@/lib/admin-auth";
 
 export class RoleError extends Error {}
 
 const SLUG_PATTERN = /^[a-z][a-z0-9_]{1,29}$/;
 const VALID_PERMISSIONS = new Set(ALL_ADMIN_PERMISSIONS.map((permission) => permission.key));
+
+export type AdminRoleRow = {
+  id: string;
+  slug: string;
+  name: string;
+  isSystem: boolean;
+  permissions: AdminPermission[];
+  adminCount: number;
+};
+
+type AdminRoleDoc = { name: string; isSystem: boolean; permissions: AdminPermission[] };
 
 function sanitizePermissions(input: string[]): AdminPermission[] {
   const unique = Array.from(new Set(input));
@@ -17,39 +27,58 @@ function sanitizePermissions(input: string[]): AdminPermission[] {
   return unique as AdminPermission[];
 }
 
-export async function getAllRolesAdmin() {
-  const roles = await db.select().from(adminRoles).orderBy(adminRoles.id);
-  const counts = await db
-    .select({ role: adminUsers.role, count: sql<number>`count(*)::int` })
-    .from(adminUsers)
-    .groupBy(adminUsers.role);
-  const countByRole = new Map(counts.map((row) => [row.role, row.count]));
+export async function getAllRolesAdmin(): Promise<AdminRoleRow[]> {
+  const [rolesSnap, usersSnap] = await Promise.all([
+    db.collection("adminRoles").get(),
+    db.collection("adminUsers").select("role").get(),
+  ]);
 
-  return roles.map((role) => ({ ...role, adminCount: countByRole.get(role.slug) ?? 0 }));
+  const countByRole = new Map<string, number>();
+  for (const doc of usersSnap.docs) {
+    const role = doc.data().role as string | undefined;
+    if (!role) continue;
+    countByRole.set(role, (countByRole.get(role) ?? 0) + 1);
+  }
+
+  return rolesSnap.docs
+    .map((doc) => {
+      const data = doc.data() as AdminRoleDoc;
+      return { id: doc.id, slug: doc.id, name: data.name, isSystem: data.isSystem, permissions: data.permissions ?? [], adminCount: countByRole.get(doc.id) ?? 0 };
+    })
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function createRole(input: { name: string; slug: string; permissions: string[] }) {
+export async function createRole(input: { name: string; slug: string; permissions: string[] }): Promise<AdminRoleRow> {
   const name = input.name.trim().slice(0, 80);
   const slug = input.slug.trim().toLowerCase().slice(0, 40);
   if (name.length < 2) throw new RoleError("Enter a role name.");
   if (!SLUG_PATTERN.test(slug)) throw new RoleError("Slug must be lowercase letters, numbers, or underscores, starting with a letter.");
   const permissions = sanitizePermissions(input.permissions);
 
-  const [existing] = await db.select({ id: adminRoles.id }).from(adminRoles).where(eq(adminRoles.slug, slug)).limit(1);
-  if (existing) throw new RoleError("A role with that slug already exists.");
+  const ref = db.collection("adminRoles").doc(slug);
+  const existing = await ref.get();
+  if (existing.exists) throw new RoleError("A role with that slug already exists.");
 
-  const [created] = await db.insert(adminRoles).values({ name, slug, isSystem: false, permissions }).returning();
-  return created;
+  await ref.set({ name, isSystem: false, permissions, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  return { id: slug, slug, name, isSystem: false, permissions, adminCount: 0 };
 }
 
-export async function updateRole(id: number, input: { name?: string; permissions?: string[] }) {
-  const [role] = await db.select().from(adminRoles).where(eq(adminRoles.id, id)).limit(1);
-  if (!role) throw new RoleError("Role not found.");
-  if (role.slug === "owner" && input.permissions) {
+export async function updateRole(slug: string, input: { name?: string; permissions?: string[] }, actingAdminRole?: string): Promise<AdminRoleRow> {
+  const ref = db.collection("adminRoles").doc(slug);
+  const snap = await ref.get();
+  if (!snap.exists) throw new RoleError("Role not found.");
+  const current = snap.data() as AdminRoleDoc;
+  if (slug === "owner" && input.permissions) {
     throw new RoleError("The Owner role always has full access and can't be restricted.");
   }
+  // An admin editing the permissions of their own current role could otherwise grant themselves
+  // more access (e.g. add "team", then use it to promote their account to owner) — have someone
+  // else with the "roles" permission make that change instead.
+  if (slug === actingAdminRole && input.permissions) {
+    throw new RoleError("You can't change the permissions of your own role. Ask another team member to make this change.");
+  }
 
-  const patch: Partial<typeof adminRoles.$inferInsert> = { updatedAt: new Date() };
+  const patch: Partial<AdminRoleDoc> & { updatedAt: FirebaseFirestore.FieldValue } = { updatedAt: FieldValue.serverTimestamp() };
   if (input.name !== undefined) {
     const name = input.name.trim().slice(0, 80);
     if (name.length < 2) throw new RoleError("Enter a role name.");
@@ -59,37 +88,51 @@ export async function updateRole(id: number, input: { name?: string; permissions
     patch.permissions = sanitizePermissions(input.permissions);
   }
 
-  const [updated] = await db.update(adminRoles).set(patch).where(eq(adminRoles.id, id)).returning();
-  return updated;
+  await ref.update(patch);
+  const usersSnap = await db.collection("adminUsers").where("role", "==", slug).select().get();
+  return {
+    id: slug,
+    slug,
+    name: patch.name ?? current.name,
+    isSystem: current.isSystem,
+    permissions: patch.permissions ?? current.permissions,
+    adminCount: usersSnap.size,
+  };
 }
 
-export async function deleteRole(id: number) {
-  const [role] = await db.select().from(adminRoles).where(eq(adminRoles.id, id)).limit(1);
-  if (!role) throw new RoleError("Role not found.");
-  if (role.isSystem) throw new RoleError("Built-in roles can't be deleted.");
+export async function deleteRole(slug: string) {
+  const ref = db.collection("adminRoles").doc(slug);
+  const snap = await ref.get();
+  if (!snap.exists) throw new RoleError("Role not found.");
+  const data = snap.data() as AdminRoleDoc;
+  if (data.isSystem) throw new RoleError("Built-in roles can't be deleted.");
 
-  const [{ count }] = await db.select({ count: sql<number>`count(*)::int` }).from(adminUsers).where(eq(adminUsers.role, role.slug));
+  const usersSnap = await db.collection("adminUsers").where("role", "==", slug).select().get();
+  const count = usersSnap.size;
   if (count > 0) throw new RoleError(`${count} team member${count === 1 ? "" : "s"} still ${count === 1 ? "has" : "have"} this role — reassign them first.`);
 
-  await db.delete(adminRoles).where(eq(adminRoles.id, id));
+  await ref.delete();
 }
 
 export async function getAssignableRoleSlugs() {
-  const roles = await db.select({ slug: adminRoles.slug, name: adminRoles.name }).from(adminRoles).orderBy(adminRoles.id);
-  return roles;
+  const snap = await db.collection("adminRoles").get();
+  return snap.docs
+    .map((doc) => ({ slug: doc.id, name: (doc.data() as AdminRoleDoc).name }))
+    .sort((a, b) => a.name.localeCompare(b.name));
 }
 
 export async function roleSlugExists(slug: string) {
-  const [row] = await db.select({ id: adminRoles.id }).from(adminRoles).where(eq(adminRoles.slug, slug)).limit(1);
-  return Boolean(row);
+  const snap = await db.collection("adminRoles").doc(slug).get();
+  return snap.exists;
 }
 
 /** Active admin ids whose role grants the given permission — used to fan out notifications. */
-export async function getAdminIdsWithPermission(permission: AdminPermission) {
-  const rows = await db
-    .select({ id: adminUsers.id })
-    .from(adminUsers)
-    .innerJoin(adminRoles, eq(adminRoles.slug, adminUsers.role))
-    .where(and(eq(adminUsers.active, true), sql`${adminRoles.permissions} @> ${JSON.stringify([permission])}::jsonb`));
-  return rows.map((row) => row.id);
+export async function getAdminIdsWithPermission(permission: AdminPermission): Promise<string[]> {
+  const rolesSnap = await db.collection("adminRoles").where("permissions", "array-contains", permission).select().get();
+  const roleSlugs = rolesSnap.docs.map((doc) => doc.id);
+  if (!roleSlugs.length) return [];
+
+  // Firestore "in" queries are capped at 30 values; role counts stay well under that in practice.
+  const usersSnap = await db.collection("adminUsers").where("active", "==", true).where("role", "in", roleSlugs.slice(0, 30)).select().get();
+  return usersSnap.docs.map((doc) => doc.id);
 }

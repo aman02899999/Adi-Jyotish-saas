@@ -1,17 +1,13 @@
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { practitioners } from "@/db/schema";
+import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { ChatSessionEndedError, ChatSessionNotFoundError, getSessionOr404, sendMessage } from "@/lib/chat";
 import { getCurrentMember } from "@/lib/member-auth";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
-function parseId(value: string) { const id = Number(value); return Number.isInteger(id) && id > 0 ? id : null; }
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
-  const { id: raw } = await params;
-  const id = parseId(raw);
-  if (!id) return Response.json({ error: "Invalid session id." }, { status: 400 });
+  const { id } = await params;
 
   const body = (await request.json()) as { body?: string };
   const text = body.body?.trim();
@@ -21,6 +17,10 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const isAdmin = Boolean(admin && hasAdminPermission(admin, "messages"));
   if (!member && !isAdmin) return Response.json({ error: "Sign-in required." }, { status: 401 });
 
+  // Generous enough for real typing-speed back-and-forth, tight enough to block a scripted flood.
+  const throttle = await checkRateLimit("chat-message", member ? `member:${member.id}` : `admin:${admin!.id}`, 60, 300);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   try {
     const session = await getSessionOr404(id);
     if (member && session.memberId === member.id) {
@@ -28,8 +28,9 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return Response.json(message, { status: 201 });
     }
     if (isAdmin) {
-      const [practitioner] = await db.select().from(practitioners).where(eq(practitioners.id, session.practitionerId)).limit(1);
-      const message = await sendMessage({ sessionId: id, senderType: "practitioner", senderName: practitioner?.name ?? "Studio", body: text });
+      const practitionerSnap = await db.collection("practitioners").doc(session.practitionerId).get();
+      const practitionerName = practitionerSnap.exists ? (practitionerSnap.data() as { name?: string }).name : undefined;
+      const message = await sendMessage({ sessionId: id, senderType: "practitioner", senderName: practitionerName ?? "Studio", body: text });
       return Response.json(message, { status: 201 });
     }
     return Response.json({ error: "You do not have access to this chat." }, { status: 403 });

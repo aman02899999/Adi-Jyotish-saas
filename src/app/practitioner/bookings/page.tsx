@@ -11,7 +11,7 @@ export default async function PractitionerBookingsPage() {
 
   return (
     <PractitionerShell practitioner={practitioner} active="Bookings">
-      <div className="consultation-heading billing-heading"><div><p>Your workspace</p><h1>Bookings</h1><span>Every client session, past and upcoming. Expand a session for an AI-generated Kundli summary.</span></div></div>
+      <div className="consultation-heading billing-heading"><div><p>Your workspace</p><h1>Bookings</h1><span>Every client session, past and upcoming. Expand a session for a Live-generated Kundli summary.</span></div></div>
       <PractitionerBookings initialBookings={bookings} />
     </PractitionerShell>
   );

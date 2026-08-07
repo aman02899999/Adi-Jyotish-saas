@@ -1,21 +1,27 @@
 import { createKundliMatch, KundliMatchError } from "@/lib/kundli-matching";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 export const dynamic = "force-dynamic";
 
 type Payload = {
   nameA?: string; birthDateA?: string; birthTimeA?: string; birthPlaceA?: string;
   nameB?: string; birthDateB?: string; birthTimeB?: string; birthPlaceB?: string;
+  turnstileToken?: string;
 };
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();
+  const ip = requestIp(request);
 
-  const throttle = await checkRateLimit("kundli-matching", `ip:${requestIp(request)}`, 5, 3600);
+  const throttle = await checkRateLimit("kundli-matching", `ip:${ip}`, 5, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as Payload;
+  if (!(await verifyTurnstileToken(body.turnstileToken, ip))) {
+    return Response.json({ error: "Verification failed. Please try again." }, { status: 403 });
+  }
   const nameA = body.nameA?.trim().slice(0, 120) ?? "";
   const birthDateA = body.birthDateA?.trim() ?? "";
   const birthTimeA = body.birthTimeA?.trim() ?? "";
@@ -35,7 +41,7 @@ export async function POST(request: Request) {
   if (!birthPlaceA || !birthPlaceB) return Response.json({ error: "Please share both birth places." }, { status: 400 });
 
   try {
-    const { match, result, moonARashi, moonANakshatra, moonBRashi, moonBNakshatra } = await createKundliMatch({
+    const { match, result, moonARashi, moonANakshatra, moonBRashi, moonBNakshatra, timeline } = await createKundliMatch({
       memberId: member?.id ?? null, nameA, birthDateA, birthTimeA, birthPlaceA, nameB, birthDateB, birthTimeB, birthPlaceB,
     });
     return Response.json({
@@ -46,6 +52,7 @@ export async function POST(request: Request) {
       bhakootDosha: result.bhakootDosha,
       moonARashi, moonANakshatra, moonBRashi, moonBNakshatra,
       narrative: match.narrative,
+      timeline,
     }, { status: 201 });
   } catch (error) {
     if (error instanceof KundliMatchError) return Response.json({ error: error.message }, { status: 400 });

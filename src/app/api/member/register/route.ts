@@ -1,37 +1,27 @@
-import { db } from "@/db";
-import { memberUsers } from "@/db/schema";
-import { createMemberSession } from "@/lib/member-auth";
-import { hashPassword, normalizeEmail } from "@/lib/admin-auth";
+import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
+/** Completes member self-registration: the client already created the Firebase Auth account
+ * (createUserWithEmailAndPassword) and hands us the resulting ID token, plus the display name,
+ * to create the Firestore profile document and mint a session cookie. */
 export async function POST(request: Request) {
   const throttle = await checkRateLimit("member-register", requestIp(request), 8, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = await request.json() as { name?: string; email?: string; password?: string };
+  const body = await request.json() as { idToken?: string; name?: string; ref?: string };
   const name = body.name?.trim().slice(0, 120) ?? "";
-  const email = normalizeEmail(body.email ?? "");
-  const password = body.password ?? "";
-
-  if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) {
-    return Response.json({ error: "Enter your name and a valid email address." }, { status: 400 });
-  }
-  if (password.length < 10 || password.length > 128) {
-    return Response.json({ error: "Use a password between 10 and 128 characters." }, { status: 400 });
-  }
+  if (name.length < 2) return Response.json({ error: "Enter your name." }, { status: 400 });
+  if (!body.idToken) return Response.json({ error: "Your account could not be created." }, { status: 400 });
 
   try {
-    const [member] = await db.insert(memberUsers).values({
-      name,
-      email,
-      passwordHash: hashPassword(password),
-      lastLoginAt: new Date(),
-    }).returning({ id: memberUsers.id, name: memberUsers.name });
-    await createMemberSession(member.id);
-    return Response.json({ ok: true, member }, { status: 201 });
+    await createMemberSession(body.idToken, name, body.ref?.trim().slice(0, 20));
   } catch {
-    return Response.json({ error: "An account with this email already exists." }, { status: 409 });
+    return Response.json({ error: "Your account could not be created." }, { status: 401 });
   }
+
+  const member = await getCurrentMember();
+  if (!member) return Response.json({ error: "Your account could not be created." }, { status: 401 });
+  return Response.json({ ok: true, member }, { status: 201 });
 }

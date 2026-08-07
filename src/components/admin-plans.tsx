@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Check, Crown, Edit3, Plus, ShieldCheck, Sparkles, X } from "lucide-react";
-import type { MembershipPlan } from "@/db/schema";
+import type { MembershipPlan } from "@/lib/plans";
 
 type FormState = {
   key: string;
@@ -32,7 +32,7 @@ const emptyForm: FormState = {
   sortOrder: "1",
 };
 
-export function AdminPlans({ initialPlans, razorpayConfigured }: { initialPlans: MembershipPlan[]; razorpayConfigured: boolean }) {
+export function AdminPlans({ initialPlans, razorpayConfigured, razorpayMode }: { initialPlans: MembershipPlan[]; razorpayConfigured: boolean; razorpayMode: "test" | "live" }) {
   const [items, setItems] = useState(initialPlans);
   const [editing, setEditing] = useState<MembershipPlan | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -108,7 +108,8 @@ export function AdminPlans({ initialPlans, razorpayConfigured }: { initialPlans:
 
   return (
     <>
-      {!razorpayConfigured && <div className="finance-config-note"><ShieldCheck size={18} /><div><strong>Manual mode is active</strong><span>Add server-side RAZORPAY_KEY_ID and RAZORPAY_KEY_SECRET to auto-create billing plans and accept subscriptions.</span></div></div>}
+      {!razorpayConfigured && <div className="finance-config-note"><ShieldCheck size={18} /><div><strong>Manual mode is active</strong><span>Add server-side RAZORPAY_TEST_KEY_ID/SECRET (or RAZORPAY_KEY_ID/SECRET) to auto-create billing plans and accept subscriptions.</span></div></div>}
+      {razorpayConfigured && razorpayMode === "test" && <div className="finance-config-note"><ShieldCheck size={18} /><div><strong>Razorpay is in test mode</strong><span>No real money moves. Set RAZORPAY_MODE=live with RAZORPAY_LIVE_KEY_ID/SECRET when you&rsquo;re ready to accept real payments.</span></div></div>}
       <section className="admin-table-card">
         <div className="admin-table-header">
           <div><h2>Membership plans</h2><p>Recurring tiers members can subscribe to from Pricing.</p></div>

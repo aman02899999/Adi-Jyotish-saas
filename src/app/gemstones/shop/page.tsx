@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { GemstoneShopExplorer } from "@/components/gemstone-shop-explorer";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getWishlistProductIds } from "@/lib/gemstone-wishlist";
 import { getActiveCategories, getProductCatalog, type ProductFilters } from "@/lib/gemstones";
 import { getCurrentMember } from "@/lib/member-auth";
@@ -54,6 +55,7 @@ export default async function GemstoneShopPage({ searchParams }: { searchParams:
         wishlistIds={wishlistIds}
         signedIn={Boolean(member)}
       />
+    <SiteFooter />
     </main>
   );
 }

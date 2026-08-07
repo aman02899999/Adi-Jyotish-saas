@@ -21,6 +21,12 @@ export function proxy(request: NextRequest) {
     if (!host || origin !== `${protocol}://${host}`) {
       return NextResponse.json({ error: "Request origin is not allowed." }, { status: 403 });
     }
+  } else if (!fetchSite) {
+    // Neither header present means this request's origin can't be verified at all — every
+    // legitimate same-origin fetch/XHR from a modern browser sends at least one of the two, so
+    // failing closed here (rather than letting an unverifiable request through) only affects
+    // non-browser or very old clients, not real app traffic.
+    return NextResponse.json({ error: "Request origin is not allowed." }, { status: 403 });
   }
 
   return NextResponse.next();

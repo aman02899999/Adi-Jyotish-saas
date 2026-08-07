@@ -9,26 +9,35 @@ import {
   Star,
   SunMedium,
 } from "lucide-react";
-import { and, asc, eq, gt } from "drizzle-orm";
 import { MemberAppShell } from "@/components/member-app-shell";
-import { db } from "@/db";
-import { bookings } from "@/db/schema";
+import { db, withIndexFallback } from "@/lib/firestore";
+import { bookingFromDoc } from "@/app/api/bookings/route";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPublishedServices } from "@/lib/services";
+import { getCosmicWeather } from "@/lib/transit-alerts";
 
 export const dynamic = "force-dynamic";
+
+const SADE_SATI_LABEL = { rising: "Rising phase", peak: "Peak phase", setting: "Setting phase" } as const;
+const GRAHA_LABEL = { jupiter: "Jupiter", saturn: "Saturn" } as const;
 
 export default async function DashboardPage() {
   const member = await getCurrentMember();
   if (!member) return null;
-  const [services, upcoming] = await Promise.all([
+  const [services, upcomingSnap, weather] = await Promise.all([
     getPublishedServices(),
-    db.select().from(bookings).where(and(eq(bookings.clientEmail, member.email), gt(bookings.scheduledAt, new Date()))).orderBy(asc(bookings.scheduledAt)).limit(1),
+    // Falls back to no "next session" card (not a page crash) if the (clientEmail, scheduledAt)
+    // composite index isn't built yet.
+    withIndexFallback(
+      () => db.collection("bookings").where("clientEmail", "==", member.email).where("scheduledAt", ">", new Date()).orderBy("scheduledAt", "asc").limit(1).get(),
+      { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
+    ),
+    getCosmicWeather(member, member.id),
   ]);
   const firstName = member.name.split(" ")[0];
   const location = member.birthPlace?.split(",")[0] || "Your location";
   const today = new Date().toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric" });
-  const nextBooking = upcoming[0];
+  const nextBooking = upcomingSnap.docs[0] ? bookingFromDoc(upcomingSnap.docs[0]) : undefined;
 
   return (
     <MemberAppShell member={member} active="Dashboard">
@@ -67,18 +76,35 @@ export default async function DashboardPage() {
           <div className="number-row"><span><small>Core</small><strong>17</strong></span><span><small>Power</small><strong>3</strong></span><span><small>Focus</small><strong>81</strong></span><span><small>Color</small><strong>Gold</strong></span></div>
         </article>
 
-        <article className="glass-card dasha-card">
-          <div className="card-heading"><div><p>Planetary period</p><h2>Current Dasha</h2></div><span className="mini-tag mini-tag--copper">Jupiter</span></div>
-          <div className="dasha-track"><span className="dasha-track__fill" /><span className="dasha-now">Today</span>{["2021","2023","2025","2027","2029"].map((year)=><small key={year}>{year}</small>)}</div>
-          <div className="dasha-metrics">
-            <div className="bar-chart">{[30,55,70,40,82,62,92,57,48,72,34,61].map((height,i)=><span key={i} style={{height: `${height}%`}} />)}</div>
-            <div className="metric-bars"><span><small>Purpose</small><i><b style={{width:"78%"}} /></i><strong>78%</strong></span><span><small>Vitality</small><i><b style={{width:"65%"}} /></i><strong>65%</strong></span><span><small>Intuition</small><i><b style={{width:"88%"}} /></i><strong>88%</strong></span></div>
+        <article className="glass-card weather-card" id="cosmic-weather">
+          <div className="card-heading">
+            <div><p>Your personal sky</p><h2>Cosmic Weather</h2></div>
+            {weather?.sadeSatiPhase && <span className="mini-tag mini-tag--copper">Sade Sati · {SADE_SATI_LABEL[weather.sadeSatiPhase]}</span>}
           </div>
+          {weather ? (
+            <>
+              <p className="weather-moon"><strong>Moon, from your natal {weather.moonSignName} Moon:</strong> {weather.moonTheme}</p>
+              <div className="weather-transits">
+                {weather.activeTransits.map((transit) => (
+                  <div key={transit.graha} className="weather-transit">
+                    <span className="weather-transit__planet">{GRAHA_LABEL[transit.graha]}{transit.isNew && <em className="mini-tag">Just shifted</em>}</span>
+                    <p>{transit.theme}</p>
+                  </div>
+                ))}
+              </div>
+              <p className="weather-rahuketu">{weather.rahuKetuNote}</p>
+            </>
+          ) : (
+            <div className="weather-empty">
+              <p>Add your birth date, time, and place to unlock personal transit tracking — see exactly how today&rsquo;s sky affects your own chart, not a generic sun-sign forecast.</p>
+              <Link href="/onboarding" className="button button--small">Complete birth profile <ArrowUpRight size={14} /></Link>
+            </div>
+          )}
         </article>
 
         <article className="glass-card insight-card" id="insights">
           <div className="insight-icon"><Sparkles size={21} /></div>
-          <div><p>Personal intelligence</p><h2>AI Insight</h2></div>
+          <div><p>Personal intelligence</p><h2>Live Insight</h2></div>
           <p>The shift you feel is not a disruption—it is an invitation to be more visible. Choose one brave, specific action today.</p>
           <Link href="#services-list">Read full insight <ArrowRight size={14} /></Link>
           <span className="insight-star">✦</span>

@@ -1,10 +1,10 @@
-import { db } from "@/db";
-import { bookings } from "@/db/schema";
-import { and, eq, lt, ne, sql } from "drizzle-orm";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { sendBookingNotification } from "@/lib/messaging";
 import { dateInTimeZone, validateAvailableSlot } from "@/lib/scheduling";
 import { getStudioSettings } from "@/lib/studio-settings";
+import { bookingFromDoc } from "@/app/api/bookings/route";
 
 export const dynamic = "force-dynamic";
 
@@ -19,20 +19,12 @@ type BookingUpdate = {
   notes?: string;
 };
 
-function parseId(value: string) {
-  const id = Number(value);
-  return Number.isInteger(id) && id > 0 ? id : null;
-}
-
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "bookings")) return Response.json({ error: "Booking permission required." }, { status: 403 });
 
-  const { id: rawId } = await params;
-  const id = parseId(rawId);
-  if (!id) return Response.json({ error: "Invalid booking id." }, { status: 400 });
-
+  const { id } = await params;
   const body = (await request.json()) as BookingUpdate;
   if (body.status && !statuses.includes(body.status as (typeof statuses)[number])) {
     return Response.json({ error: "Invalid booking status." }, { status: 400 });
@@ -43,45 +35,56 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const scheduledAt = body.scheduledAt ? new Date(body.scheduledAt) : undefined;
   if (scheduledAt && Number.isNaN(scheduledAt.getTime())) return Response.json({ error: "Invalid appointment date." }, { status: 400 });
-  const [existing] = await db.select().from(bookings).where(eq(bookings.id, id)).limit(1);
-  if (!existing) return Response.json({ error: "Booking not found." }, { status: 404 });
+
+  const ref = db.collection("bookings").doc(id);
+  const existingSnap = await ref.get();
+  if (!existingSnap.exists) return Response.json({ error: "Booking not found." }, { status: 404 });
+  const existing = bookingFromDoc(existingSnap);
+
   if (scheduledAt && existing.practitionerId) {
     const settings = await getStudioSettings();
     const available = await validateAvailableSlot({ date: dateInTimeZone(scheduledAt, settings.timezone), duration: existing.serviceDuration, practitionerId: existing.practitionerId, startsAt: scheduledAt, excludeBookingId: existing.id });
     if (!available) return Response.json({ error: "That practitioner is unavailable at the new time." }, { status: 409 });
   }
 
-  let updated: typeof bookings.$inferSelect;
+  let updated;
   try {
-    updated = await db.transaction(async (tx) => {
+    updated = await db.runTransaction(async (tx) => {
       if (scheduledAt && existing.practitionerId) {
-        await tx.execute(sql`select pg_advisory_xact_lock(${existing.practitionerId})`);
         const endsAt = new Date(scheduledAt.getTime() + existing.serviceDuration * 60000);
-        const [conflict] = await tx.select({ id: bookings.id }).from(bookings).where(and(
-          eq(bookings.practitionerId, existing.practitionerId),
-          ne(bookings.id, existing.id),
-          ne(bookings.status, "cancelled"),
-          lt(bookings.scheduledAt, endsAt),
-          sql`${bookings.scheduledAt} + (${bookings.serviceDuration} * interval '1 minute') > ${scheduledAt}`,
-        )).limit(1);
+        const candidatesSnap = await tx.get(
+          db.collection("bookings").where("practitionerId", "==", existing.practitionerId).where("status", "!=", "cancelled").where("scheduledAt", "<", endsAt),
+        );
+        const conflict = candidatesSnap.docs.some((doc) => {
+          if (doc.id === existing.id) return false;
+          const data = doc.data();
+          const bookedStart = (data.scheduledAt as FirebaseFirestore.Timestamp).toDate();
+          const bookedEnd = new Date(bookedStart.getTime() + (data.serviceDuration as number) * 60000);
+          return bookedEnd > scheduledAt;
+        });
         if (conflict) throw new ScheduleConflictError();
       }
-      const [row] = await tx.update(bookings).set({
+      const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+      if (body.status) patch.status = body.status;
+      if (scheduledAt) patch.scheduledAt = scheduledAt;
+      if (typeof body.notes === "string") patch.notes = body.notes.trim().slice(0, 1500) || null;
+      tx.update(ref, patch);
+      return {
+        ...existing,
         ...(body.status ? { status: body.status } : {}),
         ...(scheduledAt ? { scheduledAt } : {}),
         ...(typeof body.notes === "string" ? { notes: body.notes.trim().slice(0, 1500) || null } : {}),
         updatedAt: new Date(),
-      }).where(eq(bookings.id, id)).returning();
-      if (!row) throw new Error("Booking not found");
-      return row;
+      };
     });
   } catch (error) {
-    if (error instanceof ScheduleConflictError || (error as { code?: string }).code === "23505") {
+    if (error instanceof ScheduleConflictError) {
       return Response.json({ error: "That practitioner is unavailable at the new time." }, { status: 409 });
     }
     console.error("Booking update transaction failed", error instanceof Error ? error.message : "unknown error");
     return Response.json({ error: "Booking could not be updated." }, { status: 500 });
   }
+
   await recordAudit(admin, "booking.updated", "booking", updated.reference, {
     status: updated.status,
     paymentStatus: updated.paymentStatus,
@@ -103,12 +106,12 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "bookings")) return Response.json({ error: "Booking permission required." }, { status: 403 });
 
-  const { id: rawId } = await params;
-  const id = parseId(rawId);
-  if (!id) return Response.json({ error: "Invalid booking id." }, { status: 400 });
-
-  const [deleted] = await db.delete(bookings).where(eq(bookings.id, id)).returning({ id: bookings.id, reference: bookings.reference });
-  if (!deleted) return Response.json({ error: "Booking not found." }, { status: 404 });
-  await recordAudit(admin, "booking.deleted", "booking", deleted.reference);
-  return Response.json({ ok: true, id: deleted.id });
+  const { id } = await params;
+  const ref = db.collection("bookings").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) return Response.json({ error: "Booking not found." }, { status: 404 });
+  const reference = snap.data()?.reference as string;
+  await ref.delete();
+  await recordAudit(admin, "booking.deleted", "booking", reference);
+  return Response.json({ ok: true, id });
 }

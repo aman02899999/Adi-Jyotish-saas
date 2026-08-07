@@ -1,11 +1,46 @@
 import "server-only";
 
-import { eq } from "drizzle-orm";
-import { db } from "@/db";
-import { studioSettings } from "@/db/schema";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 
-export async function getStudioSettings() {
-  await db.insert(studioSettings).values({ id: 1 }).onConflictDoNothing({ target: studioSettings.id });
-  const [settings] = await db.select().from(studioSettings).where(eq(studioSettings.id, 1)).limit(1);
-  return settings;
+export type StudioSettings = {
+  studioName: string;
+  supportEmail: string;
+  timezone: string;
+  currency: string;
+  cancellationHours: number;
+  bookingLeadMinutes: number;
+  replySlaHours: number;
+  gstRate: number;
+  gstin: string | null;
+  updatedAt: Date;
+};
+
+const defaults: Omit<StudioSettings, "updatedAt"> = {
+  studioName: "Jyotish Studio",
+  supportEmail: "support@jyotish.studio",
+  timezone: "Asia/Kolkata",
+  currency: "INR",
+  cancellationHours: 24,
+  bookingLeadMinutes: 15,
+  replySlaHours: 24,
+  gstRate: 18,
+  gstin: null,
+};
+
+const ref = db.collection("studioSettings").doc("main");
+
+export async function getStudioSettings(): Promise<StudioSettings> {
+  const snap = await ref.get();
+  if (!snap.exists) {
+    await ref.set({ ...defaults, updatedAt: FieldValue.serverTimestamp() });
+    return { ...defaults, updatedAt: new Date() };
+  }
+  const data = snap.data() as Partial<StudioSettings> & { updatedAt?: FirebaseFirestore.Timestamp };
+  return { ...defaults, ...data, updatedAt: data.updatedAt?.toDate() ?? new Date() };
+}
+
+export async function updateStudioSettings(patch: Partial<StudioSettings>) {
+  await ref.set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  return getStudioSettings();
 }

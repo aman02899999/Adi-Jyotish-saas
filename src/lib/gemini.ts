@@ -26,7 +26,7 @@ export async function getAiReadingAnswer({ name, birthDate, birthTime, birthPlac
   question: string;
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
-  if (!apiKey) throw new Error("AI readings are not configured.");
+  if (!apiKey) throw new Error("Live readings are not configured.");
 
   const userPrompt = `Seeker: ${name}\nBirth date: ${birthDate}\nBirth time: ${birthTime}\nBirth place: ${birthPlace}\n\nQuestion: ${question}`;
 

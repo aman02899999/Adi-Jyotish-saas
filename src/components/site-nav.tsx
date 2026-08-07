@@ -2,7 +2,7 @@
 
 import Link from "next/link";
 import { usePathname } from "next/navigation";
-import { useEffect, useState } from "react";
+import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Menu, ShoppingBag } from "lucide-react";
 
 const NAV_ITEMS = [
@@ -10,7 +10,7 @@ const NAV_ITEMS = [
   { href: "/astrologers", label: "Practitioners" },
   { href: "/#services", label: "Readings" },
   { href: "/#method", label: "Our method" },
-  { href: "/ask", label: "Ask AI" },
+  { href: "/ask", label: "Ask Live" },
   { href: "/horoscope", label: "Horoscope" },
   { href: "/blog", label: "Journal" },
   { href: "/pricing", label: "Pricing" },
@@ -39,6 +39,8 @@ function isNavItemActive(pathname: string, href: string) {
 export function SiteNav({ signedInName }: { signedInName: string | null }) {
   const pathname = usePathname();
   const [cartCount, setCartCount] = useState(0);
+  const [menuOpen, setMenuOpen] = useState(false);
+  const menuRef = useRef<HTMLDivElement>(null);
 
   useEffect(() => {
     // Cart lives in localStorage, so the real count can only be read after hydration to avoid a server/client mismatch.
@@ -52,6 +54,29 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
       window.removeEventListener("gemstone-cart-updated", sync);
     };
   }, []);
+
+  // Closes the mobile menu on outside tap/click, Escape, or navigation — a plain <details> only
+  // closes on re-clicking its own <summary>, which reads as "stuck open" on mobile.
+  useEffect(() => {
+    if (!menuOpen) return;
+    function onOutside(event: PointerEvent) {
+      if (menuRef.current && !menuRef.current.contains(event.target as Node)) setMenuOpen(false);
+    }
+    function onEscape(event: KeyboardEvent) {
+      if (event.key === "Escape") setMenuOpen(false);
+    }
+    document.addEventListener("pointerdown", onOutside);
+    document.addEventListener("keydown", onEscape);
+    return () => {
+      document.removeEventListener("pointerdown", onOutside);
+      document.removeEventListener("keydown", onEscape);
+    };
+  }, [menuOpen]);
+
+  useEffect(() => {
+    // eslint-disable-next-line react-hooks/set-state-in-effect
+    setMenuOpen(false);
+  }, [pathname]);
 
   return (
     <>
@@ -70,15 +95,17 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
         <ShoppingBag size={19} />
         {cartCount > 0 && <span className="header-cart__badge">{cartCount > 99 ? "99+" : cartCount}</span>}
       </Link>
-      <details className="mobile-menu">
-        <summary aria-label="Open navigation"><Menu size={22} /></summary>
-        <nav>
-          {NAV_ITEMS.map((item) => (
-            <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{item.label}</Link>
-          ))}
-          <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? "My account" : "Sign in"}</Link>
-        </nav>
-      </details>
+      <div className="mobile-menu" ref={menuRef}>
+        <button type="button" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Menu size={22} /></button>
+        {menuOpen && (
+          <nav>
+            {NAV_ITEMS.map((item) => (
+              <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{item.label}</Link>
+            ))}
+            <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? "My account" : "Sign in"}</Link>
+          </nav>
+        )}
+      </div>
     </>
   );
 }

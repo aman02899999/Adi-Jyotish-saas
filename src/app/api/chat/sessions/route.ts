@@ -8,9 +8,9 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Sign in to start an instant chat." }, { status: 401 });
 
-  const body = (await request.json()) as { practitionerId?: number };
-  const practitionerId = Number(body.practitionerId);
-  if (!Number.isInteger(practitionerId) || practitionerId <= 0) return Response.json({ error: "Invalid practitioner." }, { status: 400 });
+  const body = (await request.json()) as { practitionerId?: string };
+  const practitionerId = body.practitionerId?.trim();
+  if (!practitionerId) return Response.json({ error: "Invalid practitioner." }, { status: 400 });
 
   try {
     const { session, holdMinutes, practitioner } = await startChatSession(member.id, practitionerId);

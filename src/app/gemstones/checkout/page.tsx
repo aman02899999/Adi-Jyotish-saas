@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Suspense } from "react";
 import { GemstoneCheckoutForm } from "@/components/gemstone-checkout-form";
 import { SiteHeader } from "@/components/site-header";
+import { SiteFooter } from "@/components/site-footer";
 import { getCurrentMember } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
@@ -19,6 +20,7 @@ export default async function GemstoneCheckoutPage() {
       <Suspense fallback={null}>
         <GemstoneCheckoutForm member={member ? { name: member.name, email: member.email, phone: member.phone } : null} />
       </Suspense>
+    <SiteFooter />
     </main>
   );
 }

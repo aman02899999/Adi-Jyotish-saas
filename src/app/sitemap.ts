@@ -4,6 +4,8 @@ import { getAllActiveProductSlugs, getActiveCategories } from "@/lib/gemstones";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { getSiteUrl } from "@/lib/site-url";
 
+export const dynamic = "force-dynamic";
+
 export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const site = getSiteUrl();
   const updated = new Date();
@@ -22,8 +24,13 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: new URL("/gemstones/recommend", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.75 },
     { url: new URL("/kundli-matching", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.75 },
     { url: new URL("/panchang", site).toString(), lastModified: updated, changeFrequency: "daily", priority: 0.75 },
+    { url: new URL("/muhurat", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.75 },
     { url: new URL("/numerology", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.7 },
     { url: new URL("/blog", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.7 },
+    { url: new URL("/pricing", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.6 },
+    { url: new URL("/privacy", site).toString(), lastModified: updated, changeFrequency: "yearly", priority: 0.3 },
+    { url: new URL("/terms", site).toString(), lastModified: updated, changeFrequency: "yearly", priority: 0.3 },
+    { url: new URL("/refund-policy", site).toString(), lastModified: updated, changeFrequency: "yearly", priority: 0.3 },
     ...people.map((person) => ({ url: new URL(`/astrologers/${person.slug}`, site).toString(), lastModified: person.updatedAt, changeFrequency: "weekly" as const, priority: 0.8 })),
     ...posts.map((post) => ({ url: new URL(`/blog/${post.slug}`, site).toString(), lastModified: new Date(post.publishedAt), changeFrequency: "monthly" as const, priority: 0.6 })),
     ...gemstoneCategories.map((category) => ({ url: new URL(`/gemstones/shop?category=${category.slug}`, site).toString(), lastModified: updated, changeFrequency: "weekly" as const, priority: 0.7 })),

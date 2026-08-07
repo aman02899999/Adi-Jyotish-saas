@@ -23,7 +23,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
   const [error, setError] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
-  const [readingId, setReadingId] = useState<number | null>(null);
+  const [readingId, setReadingId] = useState<string | null>(null);
 
   if (!member) {
     return (
@@ -42,7 +42,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
 
   const memberEmail = member.email;
 
-  async function pollForAnswer(id: number, attemptsLeft: number) {
+  async function pollForAnswer(id: string, attemptsLeft: number) {
     if (attemptsLeft <= 0) { setWaiting(false); return; }
     await new Promise((resolve) => setTimeout(resolve, 4000));
     const response = await fetch(`/api/ai-readings/${id}`);

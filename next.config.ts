@@ -2,11 +2,12 @@ import type { NextConfig } from "next";
 
 const contentSecurityPolicy = [
   "default-src 'self'",
-  "script-src 'self' 'unsafe-inline'",
+  "script-src 'self' 'unsafe-inline' https://apis.google.com https://challenges.cloudflare.com https://www.googletagmanager.com https://connect.facebook.net",
   "style-src 'self' 'unsafe-inline'",
-  "img-src 'self' data: blob:",
+  "img-src 'self' data: blob: https://www.google-analytics.com https://www.facebook.com",
   "font-src 'self' data:",
-  "connect-src 'self'",
+  "connect-src 'self' https://*.googleapis.com https://apis.google.com https://*.sentry.io https://challenges.cloudflare.com https://www.googletagmanager.com https://*.google-analytics.com https://connect.facebook.net https://www.facebook.com",
+  "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://challenges.cloudflare.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",
   "form-action 'self'",
@@ -24,6 +25,9 @@ const securityHeaders = [
 
 const nextConfig: NextConfig = {
   poweredByHeader: false,
+  // firebase-admin's grpc/protobuf dependency tree defeats bundler tracing when inlined;
+  // externalizing lets the platform's own Node-module resolution handle it at runtime.
+  serverExternalPackages: ["firebase-admin", "google-gax", "@grpc/grpc-js", "@sentry/nextjs"],
   async headers() {
     return [{ source: "/(.*)", headers: securityHeaders }];
   },
