@@ -114,16 +114,16 @@ export async function resolvePrediction({ memberId, predictionId, status }: { me
   return fromDoc(updated);
 }
 
-/** Global scan, grouped in application code rather than queried per-practitioner — mirrors how
- * practitioner reviews are aggregated (see getMarketplacePractitioners), and keeps this to the one
- * automatically-indexed single-field orderBy rather than adding another composite index. */
+/** Grouped in application code rather than queried per-practitioner — mirrors how practitioner
+ * reviews are aggregated (see getMarketplacePractitioners). Filtered to resolved statuses only
+ * (a single-field "in" filter, still covered by Firestore's automatic index, no composite needed)
+ * so this doesn't grow with every still-pending prediction — only ones actually verified count. */
 export async function getPractitionerAccuracyMap(): Promise<Map<string, { accuracyPercent: number; resolvedCount: number }>> {
-  const snap = await db.collection("predictions").orderBy("createdAt", "desc").get();
+  const snap = await db.collection("predictions").where("status", "in", ["came_true", "did_not_happen"]).get();
   const byPractitioner = new Map<string, { resolved: number; accurate: number }>();
   for (const doc of snap.docs) {
     const data = doc.data();
     const status = data.status as PredictionStatus;
-    if (status !== "came_true" && status !== "did_not_happen") continue;
     const practitionerId = data.practitionerId as string;
     const entry = byPractitioner.get(practitionerId) ?? { resolved: 0, accurate: 0 };
     entry.resolved += 1;
