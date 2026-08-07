@@ -64,7 +64,7 @@ export function MemberWallet({ balance, currency, entries, onlinePaymentsAvailab
         <header><div><p>Add funds</p><h2>Recharge your wallet</h2></div></header>
         <div className="wallet-recharge">
           <div className="wallet-presets">{PRESETS.map((value) => <button key={value} className={value === amount ? "active" : ""} onClick={() => setAmount(value)}>{currency} {value}</button>)}</div>
-          <div className="wallet-custom"><label>Custom amount<div className="input-prefix"><b>{currency}</b><input type="number" min={50} max={50000} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div></label>
+          <div className="wallet-custom"><label>Custom amount<div className="input-prefix input-prefix--wide"><b>{currency}</b><input type="number" min={50} max={50000} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div></label>
             <button className="button" disabled={loading || !onlinePaymentsAvailable} onClick={recharge}><PlusCircle size={16} />{loading ? "Opening…" : `Add ${currency} ${amount}`}</button>
           </div>
         </div>

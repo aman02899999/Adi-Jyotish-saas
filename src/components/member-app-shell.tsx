@@ -10,7 +10,6 @@ import {
   Coins,
   Gem,
   Gift,
-  Grid2X2,
   Heart,
   HeartHandshake,
   LayoutDashboard,
@@ -34,7 +33,6 @@ import { getMemberUnreadCount } from "@/lib/messaging";
 
 const navItems = [
   { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
-  { label: "Birth Chart", icon: Grid2X2, href: "/dashboard" },
   { label: "Family Charts", icon: Users, href: "/dashboard/family" },
   { label: "My Consultations", icon: BookOpenText, href: "/dashboard/consultations" },
   { label: "Predictions", icon: CircleCheck, href: "/dashboard/predictions" },
@@ -61,7 +59,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
       <nav className="app-nav" aria-label="Member navigation">
         <p>My cosmos</p>
         {navItems.map(({ label, icon: Icon, href }) => {
-          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Birth Chart") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions");
+          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions");
           return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
         })}
         <p className="app-nav__lower">Account</p>
