@@ -370,7 +370,8 @@ button { border: 0; }
 .ask-persona-card ul li { display:flex; align-items:center; gap:8px; color:var(--muted); font-size:13px; }
 .ask-persona-card ul li svg { flex:0 0 auto; color:#5e9442; }
 
-.ask-form-section { padding-block:20px 110px; display:flex; justify-content:center; }
+.ask-form-section { padding-block:20px 110px; display:flex; flex-direction:column; align-items:center; }
+.ask-form-section .legal-note { width:min(720px,100%); }
 .ask-form-card, .ask-signin, .ask-waiting, .ask-answer { width:min(720px,100%); border:1px solid var(--line); border-radius:20px; background:rgba(255,255,255,.4); }
 .ask-form-card { padding:36px 40px 40px; }
 .ask-form-card > header { margin-bottom:26px; }
