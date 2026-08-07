@@ -103,7 +103,7 @@ export function MemberFamilyCharts({ initialFamilyMembers }: { initialFamilyMemb
                 <div><p>{member.relationship || "Family member"}</p><h2>{member.name}</h2></div>
                 <button type="button" aria-label={`Remove ${member.name}`} disabled={removingId === member.id} onClick={() => remove(member.id)}>{removingId === member.id ? <LoaderCircle size={16} className="spin" /> : <Trash2 size={16} />}</button>
               </div>
-              <p className="family-card__birth">{new Date(`${member.birthDate}T00:00:00Z`).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })} · {member.birthTime} · {member.birthPlace}</p>
+              <p className="family-card__birth">{new Date(`${member.birthDate}T00:00:00Z`).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })} · {member.birthTime} · {member.birthPlace}</p>
               {member.chart ? (
                 <div className="family-card__chart">
                   <div><small>Ascendant</small><strong>{member.chart.ascendantRashi}</strong></div>

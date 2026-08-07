@@ -1,5 +1,4 @@
-import { addFamilyMember, buildFamilyChart, chartSnapshot, FamilyMemberError, listFamilyMembers } from "@/lib/family-members";
-import { KundliEngineError } from "@/lib/kundli-engine";
+import { addFamilyMember, buildFamilyChart, chartSnapshot, FamilyMemberError, listFamilyMembersWithCharts } from "@/lib/family-members";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -9,16 +8,7 @@ export async function GET() {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
 
-  const familyMembers = await listFamilyMembers(member.id);
-  const withCharts = familyMembers.map((familyMember) => {
-    try {
-      return { ...familyMember, chart: chartSnapshot(buildFamilyChart(familyMember)) };
-    } catch (error) {
-      if (error instanceof KundliEngineError) return { ...familyMember, chart: null };
-      throw error;
-    }
-  });
-  return Response.json({ familyMembers: withCharts });
+  return Response.json({ familyMembers: await listFamilyMembersWithCharts(member.id) });
 }
 
 export async function POST(request: Request) {

@@ -1,15 +1,13 @@
 import "server-only";
 
 import { dailyPanchanga, type DailyPanchanga } from "panchanga";
-import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
+import { REFERENCE_LOCATION } from "@/lib/panchang";
 
 /** Every "muhurat table" on other platforms is a generic daily good/bad list. This instead takes a
  * specific decision (start a business, sign a contract, travel, move house, get married, have a hard
  * conversation) and a date range, then ranks each day with the real Panchang for that day — riktā
  * tithis, weekday rulership, and a short list of classically auspicious nakshatras — so what comes
  * back is "here are your best three days for THIS", not a table the member has to interpret alone. */
-
-const REFERENCE_LOCATION = { latitude: 28.6139, longitude: 77.209, timeZone: "Asia/Kolkata" } as const;
 
 // Riktā ("empty") tithis — the 4th, 9th, and 14th of each paksha — classically avoided for
 // auspicious beginnings. Tithi.number runs 1..30 across both pakshas, plus 30 = Amavasya.
@@ -112,7 +110,7 @@ export function rankMuhurtaWindows({ decisionType, startDate, endDate }: { decis
     const { score, reasons } = scoreDay(decisionType, panchang);
     days.push({
       date: panchang.date,
-      dateLabel: new Date(`${panchang.date}T00:00:00Z`).toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric" }),
+      dateLabel: new Date(`${panchang.date}T00:00:00Z`).toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric", timeZone: "UTC" }),
       score,
       tier: tierFromScore(score),
       reasons,
@@ -130,5 +128,3 @@ export function rankMuhurtaWindows({ decisionType, startDate, endDate }: { decis
 export function decisionVaraNote(decisionType: DecisionType) {
   return DECISION_META[decisionType].varaNote;
 }
-
-export { REFERENCE_LOCATION_LABEL };

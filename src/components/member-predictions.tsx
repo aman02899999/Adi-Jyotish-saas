@@ -116,7 +116,7 @@ export function MemberPredictions({ initialPredictions, eligibleBookings }: { in
           {due.map((prediction) => (
             <div key={prediction.id} className="prediction-card prediction-card--due">
               <p className="prediction-card__text">&ldquo;{prediction.text}&rdquo;</p>
-              <p className="prediction-card__meta">{prediction.practitionerName} · {prediction.serviceTitle} · expected by {new Date(`${prediction.expectedByDate}T00:00:00Z`).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</p>
+              <p className="prediction-card__meta">{prediction.practitionerName} · {prediction.serviceTitle} · expected by {new Date(`${prediction.expectedByDate}T00:00:00Z`).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</p>
               <div className="prediction-card__resolve">
                 <button type="button" disabled={resolvingId === prediction.id} onClick={() => resolve(prediction.id, "came_true")}><ThumbsUp size={14} /> Came true</button>
                 <button type="button" disabled={resolvingId === prediction.id} onClick={() => resolve(prediction.id, "did_not_happen")}><ThumbsDown size={14} /> Didn&rsquo;t happen</button>
@@ -133,7 +133,7 @@ export function MemberPredictions({ initialPredictions, eligibleBookings }: { in
             <div key={prediction.id} className={`prediction-card prediction-card--${prediction.status}`}>
               <div className="prediction-card__head"><span>{STATUS_LABEL[prediction.status]}</span><small>{new Date(prediction.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</small></div>
               <p className="prediction-card__text">&ldquo;{prediction.text}&rdquo;</p>
-              <p className="prediction-card__meta">{prediction.practitionerName} · {prediction.serviceTitle} · expected by {new Date(`${prediction.expectedByDate}T00:00:00Z`).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</p>
+              <p className="prediction-card__meta">{prediction.practitionerName} · {prediction.serviceTitle} · expected by {new Date(`${prediction.expectedByDate}T00:00:00Z`).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "UTC" })}</p>
             </div>
           ))}
         </div>

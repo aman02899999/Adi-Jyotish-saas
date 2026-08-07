@@ -112,31 +112,40 @@ export async function getCosmicWeather(member: { name: string; birthDate: string
   const rahuHouse = relativeHouse(natalMoonRashiIndex, positionOf("rahu").rashiIndex);
   const ketuHouse = relativeHouse(natalMoonRashiIndex, positionOf("ketu").rashiIndex);
 
-  const ref = weatherDoc(memberId);
-  const snap = await ref.get();
-  const stored = (snap.data()?.houses as StoredHouses | undefined) ?? {};
+  // Persisting "last known houses" (to detect changes and notify) is best-effort — this runs on
+  // every dashboard load, so a transient Firestore error here must not take down the whole page.
+  // The weather returned below is computed either way; isNew simply stays false if persistence fails.
+  let jupiterIsNew = false;
+  let saturnIsNew = false;
+  try {
+    const ref = weatherDoc(memberId);
+    const snap = await ref.get();
+    const stored = (snap.data()?.houses as StoredHouses | undefined) ?? {};
 
-  const jupiterIsNew = stored.jupiter !== undefined && stored.jupiter !== jupiterHouse;
-  const saturnIsNew = stored.saturn !== undefined && stored.saturn !== saturnHouse;
-  const unchanged = stored.moon === moonHouse && stored.jupiter === jupiterHouse && stored.saturn === saturnHouse && stored.rahu === rahuHouse && stored.ketu === ketuHouse;
+    jupiterIsNew = stored.jupiter !== undefined && stored.jupiter !== jupiterHouse;
+    saturnIsNew = stored.saturn !== undefined && stored.saturn !== saturnHouse;
+    const unchanged = stored.moon === moonHouse && stored.jupiter === jupiterHouse && stored.saturn === saturnHouse && stored.rahu === rahuHouse && stored.ketu === ketuHouse;
 
-  // Skips the write when nothing has moved since the last visit — this runs on every dashboard
-  // load, and most days a member checks the dashboard more than once, so without this every
-  // repeat visit would re-write an identical document.
-  if (!unchanged) {
-    await ref.set({ houses: { moon: moonHouse, jupiter: jupiterHouse, saturn: saturnHouse, rahu: rahuHouse, ketu: ketuHouse }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-  }
+    // Skips the write when nothing has moved since the last visit — most days a member checks
+    // the dashboard more than once, so without this every repeat visit would re-write an
+    // identical document.
+    if (!unchanged) {
+      await ref.set({ houses: { moon: moonHouse, jupiter: jupiterHouse, saturn: saturnHouse, rahu: rahuHouse, ketu: ketuHouse }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    }
 
-  if (jupiterIsNew || saturnIsNew) {
-    const changed = [jupiterIsNew ? "Jupiter" : null, saturnIsNew ? "Saturn" : null].filter(Boolean).join(" and ");
-    await createNotification({
-      recipientType: "member",
-      recipientId: memberId,
-      type: "cosmic_weather.transit_changed",
-      title: `${changed} moved into a new house for you`,
-      body: "A significant transit just shifted in your personal chart — see what it means on your dashboard.",
-      link: "/dashboard#cosmic-weather",
-    }).catch(() => {});
+    if (jupiterIsNew || saturnIsNew) {
+      const changed = [jupiterIsNew ? "Jupiter" : null, saturnIsNew ? "Saturn" : null].filter(Boolean).join(" and ");
+      await createNotification({
+        recipientType: "member",
+        recipientId: memberId,
+        type: "cosmic_weather.transit_changed",
+        title: `${changed} moved into a new house for you`,
+        body: "A significant transit just shifted in your personal chart — see what it means on your dashboard.",
+        link: "/dashboard#cosmic-weather",
+      }).catch(() => {});
+    }
+  } catch (error) {
+    console.error("Cosmic weather persistence failed", error instanceof Error ? error.message : "unknown error");
   }
 
   const rahuTheme = RAHU_KETU_HOUSE_THEMES[rahuHouse];

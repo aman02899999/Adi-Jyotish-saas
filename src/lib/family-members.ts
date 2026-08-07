@@ -114,3 +114,18 @@ export function chartSnapshot(chart: KundliChart): FamilyChartSnapshot {
 export function buildFamilyChart(familyMember: FamilyMember) {
   return buildKundliChart({ name: familyMember.name, birthDate: familyMember.birthDate, birthTime: familyMember.birthTime, birthPlace: familyMember.birthPlace });
 }
+
+export type FamilyMemberWithChart = FamilyMember & { chart: FamilyChartSnapshot | null };
+
+/** Shared by the API route and the dashboard page — both need the same list-then-snapshot shape. */
+export async function listFamilyMembersWithCharts(memberId: string): Promise<FamilyMemberWithChart[]> {
+  const familyMembers = await listFamilyMembers(memberId);
+  return familyMembers.map((familyMember) => {
+    try {
+      return { ...familyMember, chart: chartSnapshot(buildFamilyChart(familyMember)) };
+    } catch (error) {
+      if (error instanceof KundliEngineError) return { ...familyMember, chart: null };
+      throw error;
+    }
+  });
+}
