@@ -20,6 +20,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: new URL("/book", site).toString(), lastModified: updated, changeFrequency: "daily", priority: 0.9 },
     { url: new URL("/ask", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.85 },
     { url: new URL("/palm-reading", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.85 },
+    { url: new URL("/tarot-reading", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.85 },
     { url: new URL("/kundli", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.85 },
     { url: new URL("/horoscope", site).toString(), lastModified: updated, changeFrequency: "daily", priority: 0.8 },
     { url: new URL("/gemstones/recommend", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.75 },

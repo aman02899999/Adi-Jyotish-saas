@@ -2,13 +2,15 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
-import { getAiReadingAnswer, getPalmReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { getAiReadingAnswer, getPalmReadingAnswer, getTarotReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
+import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 export const AI_READING_PRICE = 149;
 export const AI_KUNDLI_PRICE = 499;
 export const AI_PALM_READING_PRICE = 99;
 export const AI_PALM_READING_ORIGINAL_PRICE = 495;
+export const AI_TAROT_READING_PRICE = 149;
 export const AI_READING_CURRENCY = "INR";
 
 export type AiReading = {
@@ -22,6 +24,7 @@ export type AiReading = {
   question: string | null;
   leftPalmImagePath: string | null;
   rightPalmImagePath: string | null;
+  tarotCards: TarotCardDraw[] | null;
   price: number;
   currency: string;
   status: string;
@@ -42,6 +45,7 @@ type AiReadingDoc = {
   question: string | null;
   leftPalmImagePath?: string | null;
   rightPalmImagePath?: string | null;
+  tarotCards?: TarotCardDraw[] | null;
   price: number;
   currency: string;
   status: string;
@@ -67,6 +71,7 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     question: data.question ?? null,
     leftPalmImagePath: data.leftPalmImagePath ?? null,
     rightPalmImagePath: data.rightPalmImagePath ?? null,
+    tarotCards: data.tarotCards ?? null,
     price: data.price,
     currency: data.currency,
     status: data.status,
@@ -245,6 +250,33 @@ export async function createPendingPalmReading({ readingId, memberId, clientName
   return toReading(await ref.get());
 }
 
+export async function createPendingTarotReading({ memberId, clientName, question, cards }: {
+  memberId: string;
+  clientName: string;
+  question: string;
+  cards: TarotCardDraw[];
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "tarot",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question,
+    tarotCards: cards,
+    price: AI_TAROT_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
 export async function attachRazorpayOrder(readingId: string, orderId: string) {
   await collection.doc(readingId).update({ razorpayOrderId: orderId });
 }
@@ -273,8 +305,8 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
 }
 
 /** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays "paid" so it can be retried.
- * The Kundli report is computed by the real chart engine (no AI); the free-form question and palm
- * reading paths call Gemini (the latter with the two uploaded palm images as vision input). */
+ * The Kundli report is computed by the real chart engine (no AI); the free-form question, palm,
+ * and tarot paths call Gemini (palm with the two uploaded images, tarot with the drawn spread). */
 export async function generateReadingAnswer(reading: AiReading): Promise<AiReading> {
   if (reading.status === "answered" && reading.answer) return reading;
 
@@ -290,6 +322,10 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
         downloadPalmImage(reading.rightPalmImagePath),
       ]);
       return getPalmReadingAnswer({ name: reading.clientName, leftPalmImage, rightPalmImage });
+    }
+    if (reading.readingType === "tarot") {
+      if (!reading.tarotCards || reading.tarotCards.length === 0) throw new Error("Tarot cards are missing for this reading.");
+      return getTarotReadingAnswer({ name: reading.clientName, question: reading.question ?? "", cards: reading.tarotCards });
     }
     return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
   })();

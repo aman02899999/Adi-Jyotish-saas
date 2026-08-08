@@ -1,12 +1,13 @@
 import "server-only";
+import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 /**
  * The only AI calls left in the platform. Every other tool (horoscope, Kundli report,
  * Kundli matching, Panchang, numerology, gemstone recommender) is a deterministic
  * engine — see astro-engine.ts, ashtakoot.ts, kundli-engine.ts, panchang.ts,
  * numerology.ts, gemstone-recommendations.ts, horoscopes.ts. These stay on AI because
- * they answer open-ended, free-form input (a question, a pair of palm photographs)
- * that can't be reduced to a template.
+ * they answer open-ended, free-form input (a question, a pair of palm photographs,
+ * a drawn tarot spread) that can't be reduced to a template.
  */
 
 const MODEL = "gemini-3.6-flash";
@@ -94,4 +95,29 @@ export async function getPalmReadingAnswer({ name, leftPalmImage, rightPalmImage
     { inline_data: { mime_type: rightPalmImage.mimeType, data: rightPalmImage.base64 } },
   ];
   return callGemini({ systemPrompt: PALM_SYSTEM_PROMPT, parts, temperature: 0.85, maxOutputTokens: 1600 });
+}
+
+// Same Hinglish + no-scientific-claim requirements as the palm-reading persona above — Tarot is
+// likewise a traditional intuitive practice, not an empirically validated predictive method.
+const TAROT_SYSTEM_PROMPT = `Aap Tarot Mystic Divya hain — ek roshni se bhari (luminous), anubhavi tarot reader jinka mool mantra hai "Divine Light and Vision", ek premium Jyotish studio ke liye kaam karti hain. Aapko client ka naam, unka sawaal, aur ek teen-card spread diya jaayega — ek card "Bhoot (Past)" position mein, ek "Vartaman (Present)" position mein, aur ek "Bhavishya (Future)" position mein — har card ke saath yeh bhi bataya jaayega ki woh seedha (upright) hai ya ulta (reversed).
+
+Aapka jawaab HINGLISH mein hona chahiye (Hindi-English mila hua, Roman/English script mein likha hua — jaise log WhatsApp par likhte hain), na ki shudh Hindi ya shudh English mein. Rahasyamayi (mystic) lekin sasneh andaz mein baat karein, client ka naam lekar sambodhit karein, aur unke sawaal ko dhyan mein rakhkar teenon cards ka gehra vishleshan karein.
+
+Report ko in sections mein baantein (har section ke liye ek bold heading likhein):
+1. **Cards ki Jhalak** — teenon nikle cards ke naam aur unka saamaanya symbolism, ek-do vaakya mein
+2. **Bhoot (Past)** — pehle card ka client ke sawaal se sambandh
+3. **Vartaman (Present)** — doosre card ke anusaar abhi kya ho raha hai
+4. **Bhavishya (Future)** — teesre card ke anusaar aage kya sambhavnaayein hain — koi exact tareekh ya guarantee na dein
+5. **Divya ki Roshni (Divya's Guidance)** — ek practical, sakaratmak sujhaav jo seedhe client ke sawaal se juda ho
+
+Har section 2-4 vaakya ka ho. Agar koi card reversed (ulta) hai to uska matlab thoda alag andaaz mein samjhaayein (jaise energy rukna, deri, ya andar ki taraf dhyan). Kabhi bhi medical, legal, ya financial guarantee na dein, aur kabhi yeh dawa na karein ki yeh vigyanik roop se saabit hai — Tarot ek paramparik aur sahajik (intuitive) vidya hai, ise usi imaandaari se present karein. Hamesha ek poora, vishwasneey reading dein — kabhi khaali jawaab na dein. Ant mein "— Tarot Mystic Divya" likhkar sign off karein.`;
+
+export async function getTarotReadingAnswer({ name, question, cards }: {
+  name: string;
+  question: string;
+  cards: TarotCardDraw[];
+}) {
+  const cardLines = cards.map((card) => `${card.position}: ${card.name} (${card.reversed ? "Reversed / Ulta" : "Upright / Seedha"})`).join("\n");
+  const userPrompt = `Client ka naam: ${name}\n\nSawaal: ${question}\n\nNikala gaya teen-card spread:\n${cardLines}\n\nInn cards ka client ke sawaal ke sandarbh mein poora Hinglish tarot reading banayein.`;
+  return callGemini({ systemPrompt: TAROT_SYSTEM_PROMPT, parts: [{ text: userPrompt }], temperature: 0.85, maxOutputTokens: 1400 });
 }

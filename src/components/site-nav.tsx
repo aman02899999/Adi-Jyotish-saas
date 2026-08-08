@@ -12,6 +12,7 @@ const NAV_ITEMS = [
   { href: "/#method", label: "Our method" },
   { href: "/ask", label: "Ask Live" },
   { href: "/palm-reading", label: "Palm Reading" },
+  { href: "/tarot-reading", label: "Tarot Reading" },
   { href: "/horoscope", label: "Horoscope" },
   { href: "/blog", label: "Journal" },
   { href: "/pricing", label: "Pricing" },
