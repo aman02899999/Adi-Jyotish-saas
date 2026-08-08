@@ -99,7 +99,7 @@ export function MemberPredictions({ initialPredictions, eligibleBookings }: { in
         <div className="ask-form-card family-form">
           <header><div><p>From a completed consultation</p><h2>Log a prediction</h2></div></header>
           <div className="booking-fields">
-            <label className="wide"><span>Which consultation was this from?</span><div><select value={bookingId} onChange={(event) => setBookingId(event.target.value)}>{eligibleBookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.serviceTitle} with {booking.practitionerName} · {new Date(booking.scheduledAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}</option>)}</select></div></label>
+            <label className="wide"><span>Which consultation was this from?</span><div><select value={bookingId} onChange={(event) => setBookingId(event.target.value)}>{eligibleBookings.map((booking) => <option key={booking.id} value={booking.id}>{booking.serviceTitle} with {booking.practitionerName} · {new Date(booking.scheduledAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</option>)}</select></div></label>
             <label className="wide"><span>What did they predict?</span><textarea value={text} onChange={(event) => setText(event.target.value)} placeholder="e.g. A career change or promotion is likely within the next 6 months" maxLength={600} /></label>
             <label><span>Expected by</span><div><input type="date" min={addDaysIso(todayIso(), 1)} value={expectedByDate} onChange={(event) => setExpectedByDate(event.target.value)} /></div></label>
           </div>

@@ -31,8 +31,11 @@ function sweepIfDue() {
 }
 
 export function requestIp(request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  return forwarded || request.headers.get("x-real-ip") || "unknown";
+  // The rightmost entry in X-Forwarded-For is appended by our own trusted edge/proxy hop and
+  // can't be spoofed by the client; every entry to its left is client-supplied and would let an
+  // attacker rotate through fake IPs to dodge the rate limit if we trusted it instead.
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean);
+  return forwarded?.[forwarded.length - 1] || request.headers.get("x-real-ip") || "unknown";
 }
 
 export async function checkRateLimit(action: string, identifier: string, limit: number, windowSeconds: number) {

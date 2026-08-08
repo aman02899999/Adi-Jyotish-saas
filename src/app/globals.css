@@ -397,6 +397,29 @@ button { border: 0; }
 .ask-answer__body p { margin:0 0 16px; color:#4c433c; font:15px/1.85 var(--sans); }
 .ask-answer__actions { display:flex; gap:10px; margin-top:24px; }
 .ask-answer__products { margin-top:22px; padding-top:22px; border-top:1px solid var(--line); }
+
+.palm-price-row { display:flex; align-items:center; gap:9px; margin-top:14px; }
+.palm-price-original { color:var(--faint); font-size:15px; text-decoration:line-through; }
+.palm-price-badge { padding:3px 9px; border-radius:999px; color:#fff; background:#c0553a; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
+.palm-upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
+.palm-upload-slot { display:flex; flex-direction:column; align-items:center; gap:8px; padding:26px 16px; border:1.5px dashed var(--line); border-radius:16px; cursor:pointer; text-align:center; color:var(--muted); background:rgba(255,255,255,.35); transition:.2s; }
+.palm-upload-slot:hover { border-color:var(--copper); color:var(--copper-dark); }
+.palm-upload-slot svg { color:var(--copper); }
+.palm-upload-slot strong { color:var(--ink); font-size:14px; font-weight:600; }
+.palm-upload-slot span { max-width:100%; overflow:hidden; font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
+.palm-upload-slot__preview { width:100%; height:110px; border-radius:10px; object-fit:cover; }
+.palm-upload-tip { margin:12px 0 0; color:var(--faint); font-size:12.5px; line-height:1.6; }
+
+.tarot-card-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:22px 0; }
+.tarot-card { display:flex; flex-direction:column; align-items:center; gap:8px; padding:24px 12px 20px; border:1.5px solid var(--line); border-radius:16px; text-align:center; background:linear-gradient(160deg,rgba(169,88,56,.08),rgba(255,255,255,.5)); animation:tarot-reveal .5s ease both; }
+.tarot-card:nth-child(2) { animation-delay:.12s; }
+.tarot-card:nth-child(3) { animation-delay:.24s; }
+@keyframes tarot-reveal { from { opacity:0; transform:translateY(10px) scale(.94); } to { opacity:1; transform:none; } }
+.tarot-card__position { color:var(--copper-dark); font-size:11px; font-weight:700; letter-spacing:.07em; text-transform:uppercase; }
+.tarot-card__name { font:400 17px var(--serif); color:var(--ink); }
+.tarot-card__orientation { padding:2px 10px; border-radius:999px; font-size:11px; font-weight:700; letter-spacing:.03em; text-transform:uppercase; }
+.tarot-card__orientation--upright { color:#3f6b2c; background:rgba(94,148,66,.14); }
+.tarot-card__orientation--reversed { color:#9a4326; background:rgba(192,85,58,.14); }
 .kundli-report__section { margin-bottom:22px; }
 .kundli-report__section:last-child { margin-bottom:0; }
 .kundli-report__section h3 { margin:0 0 10px; color:var(--copper); font:400 16px var(--serif); }
@@ -550,6 +573,8 @@ button { border: 0; }
 @media (max-width:900px) {
   .ask-hero { grid-template-columns:1fr; gap:36px; padding-block:50px 30px; }
   .ask-form-card .booking-fields { grid-template-columns:1fr; }
+  .palm-upload-grid { grid-template-columns:1fr; }
+  .tarot-card-grid { grid-template-columns:1fr; }
   .zodiac-grid { grid-template-columns:repeat(4,1fr); }
 }
 @media (max-width:600px) {
@@ -1448,6 +1473,7 @@ button { border: 0; }
 .two-factor-card > .button { margin:0 19px 19px; }
 .two-factor-disable { padding:0 19px 4px; }
 .two-factor-disable .field { max-width:280px; margin-bottom:10px; }
+.two-factor-challenge-hint { display:flex; align-items:center; gap:10px; margin-bottom:19px; padding:13px; border:1px solid rgba(169,88,56,.18); border-radius:9px; color:var(--copper-dark); background:rgba(169,88,56,.06); font-size:13px; line-height:1.5; }
 .settings-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:20px; }
 .settings-fields label,.policy-settings label > div { display:flex; flex-direction:column; gap:7px; }
 .settings-fields label > span { font-size:12px; font-weight:700; }
@@ -1679,6 +1705,8 @@ button { border: 0; }
 .member-auth-forgot:hover { color:var(--copper); }
 .member-auth-sent { margin:0; padding:16px 17px; border-radius:10px; color:#3c7a56; background:rgba(60,122,86,.08); font-size:13.5px; line-height:1.7; }
 .member-auth-sent a { color:#3c7a56; text-decoration:underline; }
+.member-auth-forgot { display:block; margin:-8px 0 18px; color:var(--muted); font-size:12.5px; text-align:right; text-decoration:underline; text-underline-offset:2px; }
+.member-auth-forgot:hover { color:var(--copper-dark); }
 .member-auth-divider { display:flex; align-items:center; gap:12px; margin:16px 0; color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
 .member-auth-divider::before, .member-auth-divider::after { content:""; flex:1; height:1px; background:var(--line); }
 .member-auth-google { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:43px; border:1px solid var(--line); border-radius:8px; color:var(--ink,#201c17); background:rgba(255,255,255,.6); font-size:13px; font-weight:700; transition:.2s; }
@@ -2174,6 +2202,7 @@ button { border: 0; }
 .wallet-table__head,.wallet-table__row { display:grid; grid-template-columns:minmax(150px,1.4fr) 100px; align-items:center; gap:9px; padding-inline:19px; }
 .wallet-table--ledger .wallet-table__head,.wallet-table--ledger .wallet-table__row { grid-template-columns:minmax(150px,1.3fr) 90px 90px 100px 110px; }
 .wallet-table__head { min-height:39px; border-bottom:1px solid var(--line); color:var(--faint); background:rgba(227,219,207,.3); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
+.wallet-table__head span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .wallet-table__row { min-height:62px; border-bottom:1px solid rgba(100,75,55,.09); }
 .wallet-table__row > strong { font:400 14px var(--serif); }
 

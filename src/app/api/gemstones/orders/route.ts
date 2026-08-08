@@ -19,7 +19,11 @@ export async function POST(request: Request) {
   const razorpay = getRazorpay();
   if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
 
-  const throttle = await checkRateLimit("gemstone-order", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 10, 600);
+  // Tighter than most sibling limits on purpose: each successful call reserves stock (and coupon
+  // usage) for the pending-order TTL before any payment happens, so this caps how many
+  // simultaneous reservations one identity can hold against scarce inventory, not just how often
+  // they can hit the endpoint.
+  const throttle = await checkRateLimit("gemstone-order", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as CheckoutPayload;

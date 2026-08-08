@@ -62,7 +62,7 @@ export default async function DashboardPage() {
 
         <article className="glass-card muhurat-card">
           <div className="card-heading"><div><p>{nextBooking ? "Your calendar" : "Today’s guidance"}</p><h2>{nextBooking ? <>Upcoming<br /><em>Reading</em></> : <>Upcoming<br /><em>Muhurat</em></>}</h2></div><Star size={20} /></div>
-          <div className="muhurat-time"><Clock3 size={18} /><div><strong>{nextBooking ? new Date(nextBooking.scheduledAt).toLocaleDateString("en", { month: "short", day: "numeric" }) : "10:42 – 11:28 AM"}</strong><small>{nextBooking ? `${new Date(nextBooking.scheduledAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })} · ${nextBooking.status}` : "Abhijit Muhurat · 46 min"}</small></div></div>
+          <div className="muhurat-time"><Clock3 size={18} /><div><strong>{nextBooking ? new Date(nextBooking.scheduledAt).toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" }) : "10:42 – 11:28 AM"}</strong><small>{nextBooking ? `${new Date(nextBooking.scheduledAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })} · ${nextBooking.status}` : "Abhijit Muhurat · 46 min"}</small></div></div>
           <p>{nextBooking ? `${nextBooking.serviceTitle} with ${nextBooking.practitionerName ?? "your Jyotish guide"} is reserved. Your chart will be prepared before the call.` : "Favorable for an important conversation, a new agreement, or beginning focused work."}</p>
           <Link href="/book" className="button button--small">{nextBooking ? "Book another" : "Book guidance"} <ArrowUpRight size={14} /></Link>
           <span className="card-watermark">☼</span>

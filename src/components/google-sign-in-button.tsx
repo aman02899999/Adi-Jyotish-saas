@@ -3,11 +3,15 @@
 import { useEffect, useRef, useState } from "react";
 import { completeGoogleRedirectSignIn, isGoogleSignInAvailable, signInWithGoogle } from "@/lib/firebase-client";
 
-export function GoogleSignInButton({ endpoint, extraBody, onSuccess, onError }: {
+export function GoogleSignInButton({ endpoint, extraBody, onSuccess, onError, onRequiresTotp }: {
   endpoint: string;
   extraBody?: Record<string, unknown>;
   onSuccess: (data: Record<string, unknown>) => void;
   onError: (message: string) => void;
+  /** Called instead of onSuccess when the account has 2FA enabled — the caller is responsible for
+   * collecting the code and completing sign-in via the portal's verify-2fa endpoint. Google
+   * sign-ins that never check for this will otherwise appear to silently fail on such accounts. */
+  onRequiresTotp?: (challengeToken: string) => void;
 }) {
   const [submitting, setSubmitting] = useState(false);
   const finishing = useRef(false);
@@ -16,6 +20,7 @@ export function GoogleSignInButton({ endpoint, extraBody, onSuccess, onError }: 
     const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ idToken, ...extraBody }) });
     const data = await response.json();
     if (!response.ok) throw new Error(data.error || "Google sign-in failed.");
+    if (data.requiresTotp && onRequiresTotp) return onRequiresTotp(data.challengeToken);
     onSuccess(data);
   }
 

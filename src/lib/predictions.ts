@@ -67,24 +67,27 @@ export async function createPrediction({ memberId, memberName, practitionerId, p
 
   // Bounds how many predictions one booking can ever contribute — without this, a single completed
   // booking could be used to log an unlimited number of predictions and fabricate a practitioner's
-  // public accuracy stat.
-  const existing = await db.collection("predictions").where("bookingId", "==", bookingId).count().get();
-  if (existing.data().count >= MAX_PREDICTIONS_PER_BOOKING) {
-    throw new PredictionError(`You can log up to ${MAX_PREDICTIONS_PER_BOOKING} predictions per consultation.`);
-  }
-
-  const ref = await db.collection("predictions").add({
-    memberId,
-    memberName,
-    practitionerId,
-    practitionerName,
-    bookingId,
-    serviceTitle,
-    text: cleanText,
-    expectedByDate,
-    status: "pending" satisfies PredictionStatus,
-    createdAt: FieldValue.serverTimestamp(),
-    resolvedAt: null,
+  // public accuracy stat. Wrapped in a transaction so two concurrent submissions against the same
+  // booking can't both read a count under the cap and both write, exceeding it.
+  const ref = db.collection("predictions").doc();
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(db.collection("predictions").where("bookingId", "==", bookingId).count());
+    if (existing.data().count >= MAX_PREDICTIONS_PER_BOOKING) {
+      throw new PredictionError(`You can log up to ${MAX_PREDICTIONS_PER_BOOKING} predictions per consultation.`);
+    }
+    tx.set(ref, {
+      memberId,
+      memberName,
+      practitionerId,
+      practitionerName,
+      bookingId,
+      serviceTitle,
+      text: cleanText,
+      expectedByDate,
+      status: "pending" satisfies PredictionStatus,
+      createdAt: FieldValue.serverTimestamp(),
+      resolvedAt: null,
+    });
   });
   const saved = await ref.get();
   return fromDoc(saved);
@@ -100,16 +103,19 @@ export async function listMemberPredictions(memberId: string): Promise<Predictio
 
 export async function resolvePrediction({ memberId, predictionId, status }: { memberId: string; predictionId: string; status: Exclude<PredictionStatus, "pending"> }): Promise<Prediction> {
   const ref = db.collection("predictions").doc(predictionId);
-  const snap = await ref.get();
-  if (!snap.exists) throw new PredictionError("Prediction not found.");
-  const current = fromDoc(snap);
-  if (current.memberId !== memberId) throw new PredictionError("Prediction not found.");
-  if (current.status !== "pending") throw new PredictionError("This prediction has already been resolved.");
-  if (current.expectedByDate > new Date().toISOString().slice(0, 10)) {
-    throw new PredictionError("This prediction can only be marked resolved once its expected-by date has passed.");
-  }
-
-  await ref.update({ status, resolvedAt: FieldValue.serverTimestamp() });
+  // Transactional so two concurrent resolve calls on the same prediction can't both pass the
+  // "still pending" check and race to write different outcomes.
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new PredictionError("Prediction not found.");
+    const current = fromDoc(snap);
+    if (current.memberId !== memberId) throw new PredictionError("Prediction not found.");
+    if (current.status !== "pending") throw new PredictionError("This prediction has already been resolved.");
+    if (current.expectedByDate > new Date().toISOString().slice(0, 10)) {
+      throw new PredictionError("This prediction can only be marked resolved once its expected-by date has passed.");
+    }
+    tx.update(ref, { status, resolvedAt: FieldValue.serverTimestamp() });
+  });
   const updated = await ref.get();
   return fromDoc(updated);
 }

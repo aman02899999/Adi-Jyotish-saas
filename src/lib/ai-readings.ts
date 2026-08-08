@@ -1,12 +1,19 @@
 import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
-import { getAiReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { bucket, db } from "@/lib/firestore";
+import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
+import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 export const AI_READING_PRICE = 149;
 export const AI_KUNDLI_PRICE = 499;
+export const AI_PALM_READING_PRICE = 99;
+export const AI_PALM_READING_ORIGINAL_PRICE = 495;
+export const AI_TAROT_READING_PRICE = 149;
+export const AI_FACE_READING_PRICE = 129;
+export const AI_VASTU_READING_PRICE = 249;
+export const AI_LAL_KITAB_READING_PRICE = 179;
 export const AI_READING_CURRENCY = "INR";
 
 export type AiReading = {
@@ -18,6 +25,10 @@ export type AiReading = {
   birthTime: string;
   birthPlace: string;
   question: string | null;
+  leftPalmImagePath: string | null;
+  rightPalmImagePath: string | null;
+  tarotCards: TarotCardDraw[] | null;
+  faceImagePath: string | null;
   price: number;
   currency: string;
   status: string;
@@ -36,6 +47,10 @@ type AiReadingDoc = {
   birthTime: string;
   birthPlace: string;
   question: string | null;
+  leftPalmImagePath?: string | null;
+  rightPalmImagePath?: string | null;
+  tarotCards?: TarotCardDraw[] | null;
+  faceImagePath?: string | null;
   price: number;
   currency: string;
   status: string;
@@ -59,6 +74,10 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     birthTime: data.birthTime,
     birthPlace: data.birthPlace,
     question: data.question ?? null,
+    leftPalmImagePath: data.leftPalmImagePath ?? null,
+    rightPalmImagePath: data.rightPalmImagePath ?? null,
+    tarotCards: data.tarotCards ?? null,
+    faceImagePath: data.faceImagePath ?? null,
     price: data.price,
     currency: data.currency,
     status: data.status,
@@ -176,6 +195,196 @@ export async function createPendingKundliReport({ memberId, clientName, birthDat
   return toReading(await ref.get());
 }
 
+/** Palm images are uploaded to a private Storage bucket (never a public URL) and only ever read
+ * back server-side via the Admin SDK — see downloadPalmImage below — to hand to Gemini. Path is
+ * scoped under the member's own id so a leaked reading id alone can't be used to guess another
+ * member's image path. */
+export async function uploadPalmImage({ memberId, readingId, side, buffer, mimeType }: {
+  memberId: string;
+  readingId: string;
+  side: "left" | "right";
+  buffer: Buffer;
+  mimeType: string;
+}) {
+  const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+  const path = `palm-readings/${memberId}/${readingId}/${side}.${extension}`;
+  await bucket().file(path).save(buffer, { metadata: { contentType: mimeType } });
+  return path;
+}
+
+async function downloadPalmImage(path: string): Promise<{ base64: string; mimeType: string }> {
+  const file = bucket().file(path);
+  const [buffer] = await file.download();
+  const [metadata] = await file.getMetadata();
+  return { base64: buffer.toString("base64"), mimeType: metadata.contentType || "image/jpeg" };
+}
+
+/** Same private-bucket, server-only-read pattern as uploadPalmImage/downloadPalmImage above, for
+ * the single face photo the face-reading route uploads. */
+export async function uploadFaceImage({ memberId, readingId, buffer, mimeType }: {
+  memberId: string;
+  readingId: string;
+  buffer: Buffer;
+  mimeType: string;
+}) {
+  const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+  const path = `face-readings/${memberId}/${readingId}/face.${extension}`;
+  await bucket().file(path).save(buffer, { metadata: { contentType: mimeType } });
+  return path;
+}
+
+async function downloadFaceImage(path: string): Promise<{ base64: string; mimeType: string }> {
+  const file = bucket().file(path);
+  const [buffer] = await file.download();
+  const [metadata] = await file.getMetadata();
+  return { base64: buffer.toString("base64"), mimeType: metadata.contentType || "image/jpeg" };
+}
+
+/** Reserves a Firestore doc id before the doc is written — the palm/face-reading upload routes
+ * need a reading id to build the Storage path (e.g. palm-readings/{memberId}/{readingId}/...) for
+ * the image(s) they're about to upload, before there's a reading doc to attach those paths to. */
+export function reserveReadingId() {
+  return collection.doc().id;
+}
+
+export async function createPendingPalmReading({ readingId, memberId, clientName, leftPalmImagePath, rightPalmImagePath }: {
+  readingId: string;
+  memberId: string;
+  clientName: string;
+  leftPalmImagePath: string;
+  rightPalmImagePath: string;
+}) {
+  const ref = collection.doc(readingId);
+  await ref.set({
+    memberId,
+    readingType: "palm",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question: null,
+    leftPalmImagePath,
+    rightPalmImagePath,
+    price: AI_PALM_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingTarotReading({ memberId, clientName, question, cards }: {
+  memberId: string;
+  clientName: string;
+  question: string;
+  cards: TarotCardDraw[];
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "tarot",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question,
+    tarotCards: cards,
+    price: AI_TAROT_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingFaceReading({ readingId, memberId, clientName, faceImagePath }: {
+  readingId: string;
+  memberId: string;
+  clientName: string;
+  faceImagePath: string;
+}) {
+  const ref = collection.doc(readingId);
+  await ref.set({
+    memberId,
+    readingType: "face",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question: null,
+    faceImagePath,
+    price: AI_FACE_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingVastuReading({ memberId, clientName, question }: {
+  memberId: string;
+  clientName: string;
+  question: string;
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "vastu",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question,
+    price: AI_VASTU_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingLalKitabReading({ memberId, clientName, birthDate, birthTime, birthPlace, question }: {
+  memberId: string;
+  clientName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+  question: string;
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "lalkitab",
+    clientName,
+    birthDate,
+    birthTime,
+    birthPlace,
+    question,
+    price: AI_LAL_KITAB_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
 export async function attachRazorpayOrder(readingId: string, orderId: string) {
   await collection.doc(readingId).update({ razorpayOrderId: orderId });
 }
@@ -204,16 +413,42 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
 }
 
 /** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays "paid" so it can be retried.
- * The Kundli report is computed by the real chart engine (no AI); only the free-form question path calls Gemini. */
+ * The Kundli report is computed by the real chart engine (no AI); every other reading type calls
+ * Gemini (palm/face with an uploaded image, tarot with the drawn spread, vastu/lalkitab/question
+ * with free-form text). */
 export async function generateReadingAnswer(reading: AiReading): Promise<AiReading> {
   if (reading.status === "answered" && reading.answer) return reading;
 
-  const answer = reading.readingType === "kundli"
-    ? renderKundliReport(buildKundliChart({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace }))
-    : await (async () => {
-        if (!isGeminiConfigured()) throw new Error("Live readings are not configured yet. Please try again shortly.");
-        return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
-      })();
+  const answer = await (async () => {
+    if (reading.readingType === "kundli") {
+      return renderKundliReport(buildKundliChart({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace }));
+    }
+    if (!isGeminiConfigured()) throw new Error("Live readings are not configured yet. Please try again shortly.");
+    if (reading.readingType === "palm") {
+      if (!reading.leftPalmImagePath || !reading.rightPalmImagePath) throw new Error("Palm images are missing for this reading.");
+      const [leftPalmImage, rightPalmImage] = await Promise.all([
+        downloadPalmImage(reading.leftPalmImagePath),
+        downloadPalmImage(reading.rightPalmImagePath),
+      ]);
+      return getPalmReadingAnswer({ name: reading.clientName, leftPalmImage, rightPalmImage });
+    }
+    if (reading.readingType === "tarot") {
+      if (!reading.tarotCards || reading.tarotCards.length === 0) throw new Error("Tarot cards are missing for this reading.");
+      return getTarotReadingAnswer({ name: reading.clientName, question: reading.question ?? "", cards: reading.tarotCards });
+    }
+    if (reading.readingType === "face") {
+      if (!reading.faceImagePath) throw new Error("Face photo is missing for this reading.");
+      const faceImage = await downloadFaceImage(reading.faceImagePath);
+      return getFaceReadingAnswer({ name: reading.clientName, faceImage });
+    }
+    if (reading.readingType === "vastu") {
+      return getVastuReadingAnswer({ name: reading.clientName, question: reading.question ?? "" });
+    }
+    if (reading.readingType === "lalkitab") {
+      return getLalKitabReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
+    }
+    return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
+  })();
 
   const ref = collection.doc(reading.id);
   await ref.update({ status: "answered", answer, answeredAt: FieldValue.serverTimestamp() });

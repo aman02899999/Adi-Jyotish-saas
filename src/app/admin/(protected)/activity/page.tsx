@@ -6,7 +6,7 @@ import { requireAdminPage } from "@/lib/admin-page";
 export const dynamic = "force-dynamic";
 
 function formatAction(action: string) {
-  return action.split(".").map((part) => part.charAt(0).toUpperCase() + part.slice(1)).join(" ");
+  return action.split(/[._]/).map((word) => word.charAt(0).toUpperCase() + word.slice(1)).join(" ");
 }
 
 export default async function AdminActivityPage() {

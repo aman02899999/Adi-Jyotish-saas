@@ -53,7 +53,7 @@ export default async function AdminOverviewPage() {
 
       <section className="overview-card upcoming-overview">
         <header><div><p>Next on the calendar</p><h2>Upcoming readings</h2></div><Link href="/admin/bookings">View calendar <ArrowRight size={13}/></Link></header>
-        <div className="overview-appointments">{analytics.upcomingBookings.map((booking)=><article key={booking.id}><div><small>{booking.scheduledAt.toLocaleDateString("en",{month:"short"})}</small><strong>{booking.scheduledAt.getDate()}</strong></div><span><strong>{booking.clientName}</strong><small>{booking.serviceTitle}</small></span><time>{booking.scheduledAt.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit"})}</time></article>)}{!analytics.upcomingBookings.length&&<div className="overview-empty"><Clock3 size={21}/><span><strong>No upcoming readings</strong><small>The studio calendar is open.</small></span></div>}</div>
+        <div className="overview-appointments">{analytics.upcomingBookings.map((booking)=><article key={booking.id}><div><small>{booking.scheduledAt.toLocaleDateString("en",{month:"short",timeZone:"Asia/Kolkata"})}</small><strong>{booking.scheduledAt.toLocaleDateString("en",{day:"numeric",timeZone:"Asia/Kolkata"})}</strong></div><span><strong>{booking.clientName}</strong><small>{booking.serviceTitle}</small></span><time>{booking.scheduledAt.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",timeZone:"Asia/Kolkata"})}</time></article>)}{!analytics.upcomingBookings.length&&<div className="overview-empty"><Clock3 size={21}/><span><strong>No upcoming readings</strong><small>The studio calendar is open.</small></span></div>}</div>
       </section>
 
       <section className="overview-card services-overview">

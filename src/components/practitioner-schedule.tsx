@@ -68,7 +68,7 @@ export function PractitionerSchedule({ initialRules, initialTimeOff }: { initial
         <div style={{ padding: "18px 19px", display: "flex", flexDirection: "column", gap: 12 }}>
           {timeOff.map((block, index) => (
             <div key={index} style={{ display: "flex", alignItems: "center", justifyContent: "space-between", gap: 12, padding: "10px 14px", border: "1px solid var(--line)", borderRadius: 10 }}>
-              <span style={{ fontSize: 12 }}>{new Date(block.startsAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })} → {new Date(block.endsAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}{block.reason ? ` · ${block.reason}` : ""}</span>
+              <span style={{ fontSize: 12 }}>{new Date(block.startsAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })} → {new Date(block.endsAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}{block.reason ? ` · ${block.reason}` : ""}</span>
               <button type="button" className="danger" onClick={() => removeTimeOff(index)}><Trash2 size={14} /></button>
             </div>
           ))}

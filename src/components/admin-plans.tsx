@@ -116,7 +116,7 @@ export function AdminPlans({ initialPlans, razorpayConfigured, razorpayMode }: {
           <button className="button button--small" onClick={startCreate}><Plus size={16} /> Add plan</button>
         </div>
         <div className="service-table" role="table" aria-label="Membership plans">
-          <div className="service-table__head" role="row"><span>Plan</span><span>Monthly</span><span>Yearly</span><span>Status</span><span>Highlighted</span><span>Actions</span></div>
+          <div className="service-table__head" role="row"><span>Plan</span><span>Monthly</span><span>Yearly</span><span>Status</span><span>Featured</span><span>Actions</span></div>
           {items.map((plan) => (
             <div className="service-table__row" role="row" key={plan.id}>
               <div className="table-service"><span className="table-service__icon"><Sparkles size={17} /></span><div><strong>{plan.name}</strong><small>{plan.key} · {plan.razorpayPlanIdMonthly ? "Synced with Razorpay" : "Not synced"}</small></div></div>

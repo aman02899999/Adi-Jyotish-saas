@@ -74,8 +74,8 @@ export function MemberConsultations({ initialBookings, cancellationHours = 24 }:
       </section>
 
       {next && <section className="next-consultation glass-card">
-        <div className="next-consultation__date"><small>{new Date(next.scheduledAt).toLocaleDateString("en", { month: "short" })}</small><strong>{new Date(next.scheduledAt).getDate()}</strong><span>{new Date(next.scheduledAt).toLocaleDateString("en", { weekday: "short" })}</span></div>
-        <div className="next-consultation__copy"><p>Next consultation</p><h2>{next.serviceTitle}</h2><span><Clock3 size={13} /> {new Date(next.scheduledAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })} · Private video call</span></div>
+        <div className="next-consultation__date"><small>{new Date(next.scheduledAt).toLocaleDateString("en", { month: "short", timeZone: "Asia/Kolkata" })}</small><strong>{new Date(next.scheduledAt).toLocaleDateString("en", { day: "numeric", timeZone: "Asia/Kolkata" })}</strong><span>{new Date(next.scheduledAt).toLocaleDateString("en", { weekday: "short", timeZone: "Asia/Kolkata" })}</span></div>
+        <div className="next-consultation__copy"><p>Next consultation</p><h2>{next.serviceTitle}</h2><span><Clock3 size={13} /> {new Date(next.scheduledAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })} · Private video call</span></div>
         <div className="next-consultation__actions"><span className={`consultation-status consultation-status--${next.status}`}>{next.status}</span><button onClick={() => setCancelling(next)}>Manage</button></div>
         <Video className="next-consultation__watermark" size={120} strokeWidth={.5} />
       </section>}
@@ -88,7 +88,7 @@ export function MemberConsultations({ initialBookings, cancellationHours = 24 }:
             const canCancel = ["pending","confirmed"].includes(item.status) && date.getTime() - now.getTime() >= cancellationHours * 60 * 60 * 1000;
             return <article key={item.id}>
               <div className="consultation-list__icon"><FileText size={18} /></div>
-              <div className="consultation-list__name"><small>{item.reference}</small><h3>{item.serviceTitle}</h3><p>{item.practitionerName ?? "Jyotish Studio"} · {date.toLocaleDateString("en", { weekday: "short", month: "long", day: "numeric", year: "numeric" })} · {date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit" })}</p></div>
+              <div className="consultation-list__name"><small>{item.reference}</small><h3>{item.serviceTitle}</h3><p>{item.practitionerName ?? "Jyotish Studio"} · {date.toLocaleDateString("en", { weekday: "short", month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })} · {date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</p></div>
               <div className="consultation-list__meta"><span className={`consultation-status consultation-status--${item.status}`}>{item.status}</span><small>{item.paymentStatus} · ${item.servicePrice}</small></div>
               <div className="consultation-list__actions">{canCancel && <button onClick={() => setCancelling(item)}>Cancel</button>}<Link href={item.serviceId ? `/book?service=${item.serviceId}` : "/book"}>Book again <ArrowRight size={13} /></Link></div>
             </article>;
@@ -98,7 +98,7 @@ export function MemberConsultations({ initialBookings, cancellationHours = 24 }:
       </section>
 
       {notice && <div className="toast" role="status"><Check size={16} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
-      {cancelling && <div className="modal-backdrop" role="presentation" onMouseDown={() => setCancelling(null)}><section className="cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-title" onMouseDown={(event) => event.stopPropagation()}><div className="cancel-dialog__icon"><CalendarDays size={22} /></div><h2 id="cancel-title">Cancel this consultation?</h2><p>Your <strong>{cancelling.serviceTitle}</strong> is scheduled for {new Date(cancelling.scheduledAt).toLocaleDateString("en", { month: "long", day: "numeric" })}. Payment adjustments, when applicable, are reviewed by the studio.</p><div><button className="button button--ghost" onClick={() => setCancelling(null)}>Keep appointment</button><button className="button cancel-button" disabled={saving} onClick={cancelBooking}>{saving ? "Cancelling…" : "Yes, cancel"}</button></div></section></div>}
+      {cancelling && <div className="modal-backdrop" role="presentation" onMouseDown={() => setCancelling(null)}><section className="cancel-dialog" role="dialog" aria-modal="true" aria-labelledby="cancel-title" onMouseDown={(event) => event.stopPropagation()}><div className="cancel-dialog__icon"><CalendarDays size={22} /></div><h2 id="cancel-title">Cancel this consultation?</h2><p>Your <strong>{cancelling.serviceTitle}</strong> is scheduled for {new Date(cancelling.scheduledAt).toLocaleDateString("en", { month: "long", day: "numeric", timeZone: "Asia/Kolkata" })}. Payment adjustments, when applicable, are reviewed by the studio.</p><div><button className="button button--ghost" onClick={() => setCancelling(null)}>Keep appointment</button><button className="button cancel-button" disabled={saving} onClick={cancelBooking}>{saving ? "Cancelling…" : "Yes, cancel"}</button></div></section></div>}
     </>
   );
 }

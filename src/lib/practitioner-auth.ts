@@ -33,7 +33,7 @@ type PractitionerDoc = {
  * routing) rather than Firebase UID, because a practitioner record can exist — created by an
  * admin invite, or seeded demo data — before any Firebase Auth account is linked to it. The
  * `firebaseUid` field is the linkage, set once the practitioner actually signs in. */
-async function findPractitionerByUid(uid: string) {
+export async function findPractitionerByUid(uid: string) {
   const snap = await db.collection("practitioners").where("firebaseUid", "==", uid).limit(1).get();
   return snap.empty ? null : snap.docs[0];
 }

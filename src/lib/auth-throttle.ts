@@ -13,8 +13,10 @@ type ThrottleEntry = { failures: number; windowStartedAt: number; blockedUntil: 
 const entries = new Map<string, ThrottleEntry>();
 
 function throttleKey(scope: string, identifier: string, request: Request) {
-  const forwarded = request.headers.get("x-forwarded-for")?.split(",")[0]?.trim();
-  const address = forwarded || request.headers.get("x-real-ip") || "unknown";
+  // See the matching comment in rate-limit.ts: the rightmost X-Forwarded-For entry is the one our
+  // trusted edge appended, not something the client can spoof.
+  const forwarded = request.headers.get("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean);
+  const address = forwarded?.[forwarded.length - 1] || request.headers.get("x-real-ip") || "unknown";
   return createHash("sha256").update(`${scope}:${identifier.trim().toLowerCase()}:${address}`).digest("hex");
 }
 
