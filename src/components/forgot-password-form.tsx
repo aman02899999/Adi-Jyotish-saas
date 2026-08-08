@@ -2,8 +2,12 @@
 
 import { FormEvent, useState } from "react";
 import { ArrowRight, Mail } from "lucide-react";
+import { sendPasswordReset } from "@/lib/firebase-client";
 
-export function ForgotPasswordForm({ endpoint }: { endpoint: string }) {
+/** `portal` only steers the link a person lands on after resetting (member/practitioner/admin
+ * sign-in) — Firebase Auth is one shared user pool underneath all three, so the reset email
+ * itself works the same way regardless of which portal the person normally signs into. */
+export function ForgotPasswordForm({ portal }: { portal: "member" | "practitioner" | "admin" }) {
   const [email, setEmail] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [sent, setSent] = useState(false);
@@ -14,11 +18,14 @@ export function ForgotPasswordForm({ endpoint }: { endpoint: string }) {
     setError("");
     setSubmitting(true);
     try {
-      const response = await fetch(endpoint, { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ email }) });
-      if (!response.ok) throw new Error("Something went wrong. Please try again.");
+      const continueUrl = `${window.location.origin}/reset-password?portal=${portal}`;
+      await sendPasswordReset(email, continueUrl);
       setSent(true);
-    } catch (caught) {
-      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } catch {
+      // Firebase resolves successfully for both existing and non-existing accounts by design, so
+      // any thrown error here is a real problem (rate limit, malformed email) rather than "no
+      // such account" — safe to surface directly without leaking account existence either way.
+      setError("Something went wrong. Please try again.");
     } finally {
       setSubmitting(false);
     }

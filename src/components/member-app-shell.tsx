@@ -17,6 +17,7 @@ import {
   Menu,
   MessageSquareText,
   Search,
+  ShieldCheck,
   Sparkles,
   SunMedium,
   UserRound,
@@ -49,7 +50,7 @@ const navItems = [
   { label: "Invite & Earn", icon: Gift, href: "/dashboard/referrals" },
 ];
 
-type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family" | "Predictions";
+type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family" | "Predictions" | "Security";
 
 function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveSection }) {
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -64,6 +65,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
         })}
         <p className="app-nav__lower">Account</p>
         <Link href="/onboarding"><UserRound size={18} strokeWidth={1.5} /><span>Birth profile</span></Link>
+        <Link className={active === "Security" ? "active" : ""} href="/dashboard/security"><ShieldCheck size={18} strokeWidth={1.5} /><span>Security</span></Link>
       </nav>
       <div className="profile-chip">
         <span className="profile-avatar">{initials}</span>

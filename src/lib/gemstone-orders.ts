@@ -147,7 +147,11 @@ export async function priceCart(lines: CartLineInput[]): Promise<{ items: Priced
   return { items, subtotal };
 }
 
-const PENDING_ORDER_TTL_MS = 30 * 60 * 1000;
+// Shorter than a generous checkout window would be on its own — 30 minutes gave an abusive
+// caller (rotating IPs, or just staying under the per-identity rate limit) up to half an hour of
+// held stock per pending order on scarce/low-stock items. 15 minutes is still comfortably more
+// than a real Razorpay checkout takes, while roughly halving that exposure window.
+const PENDING_ORDER_TTL_MS = 15 * 60 * 1000;
 
 /** Self-healing cleanup for checkout abandonment: a pending order reserves stock (and coupon
  * usage) the moment it's created, before payment — if the customer never completes payment

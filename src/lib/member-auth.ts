@@ -20,6 +20,7 @@ export type MemberIdentity = {
   plan: string;
   onboardingComplete: boolean;
   emailVerified: boolean;
+  totpEnabled: boolean;
 };
 
 type MemberDoc = {
@@ -32,6 +33,7 @@ type MemberDoc = {
   plan: string;
   onboardingComplete: boolean;
   active: boolean;
+  totpEnabled?: boolean;
 };
 
 /** Verifies a client-obtained Firebase ID token, creates a long-lived session cookie, and
@@ -110,6 +112,7 @@ export async function getCurrentMember(): Promise<MemberIdentity | null> {
     plan: data.plan,
     onboardingComplete: data.onboardingComplete,
     emailVerified,
+    totpEnabled: data.totpEnabled === true,
   };
 }
 

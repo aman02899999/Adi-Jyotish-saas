@@ -4,6 +4,7 @@ import { AdminSettings } from "@/components/admin-settings";
 import { AdminDemoAccounts } from "@/components/admin-demo-accounts";
 import { AdminPromoBanner } from "@/components/admin-promo-banner";
 import { AdminShell } from "@/components/admin-shell";
+import { TwoFactorSettings } from "@/components/two-factor-settings";
 import { ALL_ADMIN_PERMISSIONS, getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { getAllRolesAdmin, getAssignableRoleSlugs } from "@/lib/admin-roles";
 import { listPendingAdminInvites } from "@/lib/admin-invites";
@@ -29,14 +30,16 @@ export default async function AdminSettingsPage() {
   // admins who can actually act on it, for the same reason the team roster above is gated.
   const canManageRoles = hasAdminPermission(admin, "roles");
 
-  const [settings, usersSnap, invites, roleOptions, initialRoles, promoBanner] = await Promise.all([
+  const [settings, usersSnap, invites, roleOptions, initialRoles, promoBanner, selfSnap] = await Promise.all([
     getStudioSettings(),
     canManageTeam ? db.collection("adminUsers").orderBy("name", "asc").get() : Promise.resolve(null),
     canManageTeam ? listPendingAdminInvites() : Promise.resolve([]),
     getAssignableRoleSlugs(),
     canManageRoles ? getAllRolesAdmin() : Promise.resolve([]),
     getPromoBanner(),
+    db.collection("adminUsers").doc(admin!.id).get(),
   ]);
+  const totpEnabled = selfSnap.data()?.totpEnabled === true;
   const users = usersSnap
     ? usersSnap.docs.map((doc) => {
         const data = doc.data() as Record<string, unknown>;
@@ -71,6 +74,7 @@ export default async function AdminSettingsPage() {
           canManageTeam={canManageTeam}
         />
         <AdminPromoBanner initial={{ enabled: promoBanner.enabled, message: promoBanner.message, ctaLabel: promoBanner.ctaLabel, ctaHref: promoBanner.ctaHref }} />
+        <TwoFactorSettings apiPrefix="/api/admin/2fa" initialEnabled={totpEnabled} description="Two-factor authentication is protecting your sign-in." />
         <AdminDemoAccounts />
       </div>
     </AdminShell>

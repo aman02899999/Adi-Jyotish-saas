@@ -1448,6 +1448,7 @@ button { border: 0; }
 .two-factor-card > .button { margin:0 19px 19px; }
 .two-factor-disable { padding:0 19px 4px; }
 .two-factor-disable .field { max-width:280px; margin-bottom:10px; }
+.two-factor-challenge-hint { display:flex; align-items:center; gap:10px; margin-bottom:19px; padding:13px; border:1px solid rgba(169,88,56,.18); border-radius:9px; color:var(--copper-dark); background:rgba(169,88,56,.06); font-size:13px; line-height:1.5; }
 .settings-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:20px; }
 .settings-fields label,.policy-settings label > div { display:flex; flex-direction:column; gap:7px; }
 .settings-fields label > span { font-size:12px; font-weight:700; }
@@ -1679,6 +1680,8 @@ button { border: 0; }
 .member-auth-forgot:hover { color:var(--copper); }
 .member-auth-sent { margin:0; padding:16px 17px; border-radius:10px; color:#3c7a56; background:rgba(60,122,86,.08); font-size:13.5px; line-height:1.7; }
 .member-auth-sent a { color:#3c7a56; text-decoration:underline; }
+.member-auth-forgot { display:block; margin:-8px 0 18px; color:var(--muted); font-size:12.5px; text-align:right; text-decoration:underline; text-underline-offset:2px; }
+.member-auth-forgot:hover { color:var(--copper-dark); }
 .member-auth-divider { display:flex; align-items:center; gap:12px; margin:16px 0; color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
 .member-auth-divider::before, .member-auth-divider::after { content:""; flex:1; height:1px; background:var(--line); }
 .member-auth-google { display:flex; align-items:center; justify-content:center; gap:10px; width:100%; height:43px; border:1px solid var(--line); border-radius:8px; color:var(--ink,#201c17); background:rgba(255,255,255,.6); font-size:13px; font-weight:700; transition:.2s; }

@@ -1,12 +1,12 @@
 "use client";
 
 import { getApps, initializeApp } from "firebase/app";
-import { GoogleAuthProvider, getAuth, getRedirectResult, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword, createUserWithEmailAndPassword as firebaseCreateUserWithEmailAndPassword } from "firebase/auth";
+import { GoogleAuthProvider, getAuth, getRedirectResult, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword, createUserWithEmailAndPassword as firebaseCreateUserWithEmailAndPassword, sendPasswordResetEmail as firebaseSendPasswordResetEmail, confirmPasswordReset as firebaseConfirmPasswordReset, verifyPasswordResetCode as firebaseVerifyPasswordResetCode } from "firebase/auth";
 
 // Password reset (sendPasswordResetEmail) and email verification (sendEmailVerification) are
-// now handled entirely by Firebase Auth's client SDK — see MDN-style usage at
+// handled entirely by Firebase Auth's client SDK — see MDN-style usage at
 // https://firebase.google.com/docs/auth/web/manage-users#send_a_password_reset_email — rather
-// than the old custom token-based recovery-tokens.ts flow, which has been removed.
+// than a custom token-based recovery flow of our own.
 
 const firebaseConfig = {
   apiKey: process.env.NEXT_PUBLIC_FIREBASE_API_KEY,
@@ -69,4 +69,31 @@ export async function createUserWithEmailAndPassword(email: string, password: st
   const auth = getAuth(getFirebaseApp());
   const result = await firebaseCreateUserWithEmailAndPassword(auth, email, password);
   return result.user.getIdToken();
+}
+
+/** Sends Firebase's own password-reset email. `continueUrl` is where the emailed link lands
+ * (with `?oobCode=...` appended by Firebase) — we point it at our own /reset-password page so the
+ * new-password form matches the rest of the app instead of Firebase's default hosted UI. Firebase
+ * always resolves successfully here regardless of whether the email exists, by design — that's
+ * what keeps this from leaking which addresses have accounts. */
+export async function sendPasswordReset(email: string, continueUrl: string) {
+  const auth = getAuth(getFirebaseApp());
+  // handleCodeInApp is required here — without it Firebase's own hosted page consumes the
+  // oobCode itself and only offers a plain "continue" link to `url` with no code attached, so
+  // our /reset-password page (which reads oobCode from the query string) would never see it.
+  await firebaseSendPasswordResetEmail(auth, email, { url: continueUrl, handleCodeInApp: true });
+}
+
+/** Looks up the email address behind a reset link's oobCode, so the reset-password page can show
+ * "Resetting the password for you@example.com" and fail fast with a clear error on an
+ * expired/already-used link, before the person types a new password. */
+export async function verifyPasswordResetCode(oobCode: string) {
+  const auth = getAuth(getFirebaseApp());
+  return firebaseVerifyPasswordResetCode(auth, oobCode);
+}
+
+/** Completes a password reset with the oobCode from the emailed link. */
+export async function confirmPasswordReset(oobCode: string, newPassword: string) {
+  const auth = getAuth(getFirebaseApp());
+  await firebaseConfirmPasswordReset(auth, oobCode, newPassword);
 }
