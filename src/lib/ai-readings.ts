@@ -2,7 +2,7 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
-import { getAiReadingAnswer, getPalmReadingAnswer, getTarotReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
 
@@ -11,6 +11,9 @@ export const AI_KUNDLI_PRICE = 499;
 export const AI_PALM_READING_PRICE = 99;
 export const AI_PALM_READING_ORIGINAL_PRICE = 495;
 export const AI_TAROT_READING_PRICE = 149;
+export const AI_FACE_READING_PRICE = 129;
+export const AI_VASTU_READING_PRICE = 249;
+export const AI_LAL_KITAB_READING_PRICE = 179;
 export const AI_READING_CURRENCY = "INR";
 
 export type AiReading = {
@@ -25,6 +28,7 @@ export type AiReading = {
   leftPalmImagePath: string | null;
   rightPalmImagePath: string | null;
   tarotCards: TarotCardDraw[] | null;
+  faceImagePath: string | null;
   price: number;
   currency: string;
   status: string;
@@ -46,6 +50,7 @@ type AiReadingDoc = {
   leftPalmImagePath?: string | null;
   rightPalmImagePath?: string | null;
   tarotCards?: TarotCardDraw[] | null;
+  faceImagePath?: string | null;
   price: number;
   currency: string;
   status: string;
@@ -72,6 +77,7 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     leftPalmImagePath: data.leftPalmImagePath ?? null,
     rightPalmImagePath: data.rightPalmImagePath ?? null,
     tarotCards: data.tarotCards ?? null,
+    faceImagePath: data.faceImagePath ?? null,
     price: data.price,
     currency: data.currency,
     status: data.status,
@@ -213,10 +219,31 @@ async function downloadPalmImage(path: string): Promise<{ base64: string; mimeTy
   return { base64: buffer.toString("base64"), mimeType: metadata.contentType || "image/jpeg" };
 }
 
-/** Reserves a Firestore doc id before the doc is written — the palm-reading upload route needs a
- * reading id to build the Storage path (palm-readings/{memberId}/{readingId}/...) for the two
- * images it's about to upload, before there's a reading doc to attach those paths to. */
-export function reservePalmReadingId() {
+/** Same private-bucket, server-only-read pattern as uploadPalmImage/downloadPalmImage above, for
+ * the single face photo the face-reading route uploads. */
+export async function uploadFaceImage({ memberId, readingId, buffer, mimeType }: {
+  memberId: string;
+  readingId: string;
+  buffer: Buffer;
+  mimeType: string;
+}) {
+  const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
+  const path = `face-readings/${memberId}/${readingId}/face.${extension}`;
+  await bucket().file(path).save(buffer, { metadata: { contentType: mimeType } });
+  return path;
+}
+
+async function downloadFaceImage(path: string): Promise<{ base64: string; mimeType: string }> {
+  const file = bucket().file(path);
+  const [buffer] = await file.download();
+  const [metadata] = await file.getMetadata();
+  return { base64: buffer.toString("base64"), mimeType: metadata.contentType || "image/jpeg" };
+}
+
+/** Reserves a Firestore doc id before the doc is written — the palm/face-reading upload routes
+ * need a reading id to build the Storage path (e.g. palm-readings/{memberId}/{readingId}/...) for
+ * the image(s) they're about to upload, before there's a reading doc to attach those paths to. */
+export function reserveReadingId() {
   return collection.doc().id;
 }
 
@@ -277,6 +304,87 @@ export async function createPendingTarotReading({ memberId, clientName, question
   return toReading(await ref.get());
 }
 
+export async function createPendingFaceReading({ readingId, memberId, clientName, faceImagePath }: {
+  readingId: string;
+  memberId: string;
+  clientName: string;
+  faceImagePath: string;
+}) {
+  const ref = collection.doc(readingId);
+  await ref.set({
+    memberId,
+    readingType: "face",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question: null,
+    faceImagePath,
+    price: AI_FACE_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingVastuReading({ memberId, clientName, question }: {
+  memberId: string;
+  clientName: string;
+  question: string;
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "vastu",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question,
+    price: AI_VASTU_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingLalKitabReading({ memberId, clientName, birthDate, birthTime, birthPlace, question }: {
+  memberId: string;
+  clientName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+  question: string;
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "lalkitab",
+    clientName,
+    birthDate,
+    birthTime,
+    birthPlace,
+    question,
+    price: AI_LAL_KITAB_READING_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
 export async function attachRazorpayOrder(readingId: string, orderId: string) {
   await collection.doc(readingId).update({ razorpayOrderId: orderId });
 }
@@ -305,8 +413,9 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
 }
 
 /** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays "paid" so it can be retried.
- * The Kundli report is computed by the real chart engine (no AI); the free-form question, palm,
- * and tarot paths call Gemini (palm with the two uploaded images, tarot with the drawn spread). */
+ * The Kundli report is computed by the real chart engine (no AI); every other reading type calls
+ * Gemini (palm/face with an uploaded image, tarot with the drawn spread, vastu/lalkitab/question
+ * with free-form text). */
 export async function generateReadingAnswer(reading: AiReading): Promise<AiReading> {
   if (reading.status === "answered" && reading.answer) return reading;
 
@@ -326,6 +435,17 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
     if (reading.readingType === "tarot") {
       if (!reading.tarotCards || reading.tarotCards.length === 0) throw new Error("Tarot cards are missing for this reading.");
       return getTarotReadingAnswer({ name: reading.clientName, question: reading.question ?? "", cards: reading.tarotCards });
+    }
+    if (reading.readingType === "face") {
+      if (!reading.faceImagePath) throw new Error("Face photo is missing for this reading.");
+      const faceImage = await downloadFaceImage(reading.faceImagePath);
+      return getFaceReadingAnswer({ name: reading.clientName, faceImage });
+    }
+    if (reading.readingType === "vastu") {
+      return getVastuReadingAnswer({ name: reading.clientName, question: reading.question ?? "" });
+    }
+    if (reading.readingType === "lalkitab") {
+      return getLalKitabReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
     }
     return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
   })();

@@ -9,9 +9,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Pandit Trilochan Shashtri · AI Hast Rekha (Palm Reading)",
+  title: "Pandit Trilochan Shashtri · Hast Rekha (Palm Reading)",
   description: "Upload photos of both palms and receive a full Hinglish hast rekha (palmistry) report from Pandit Trilochan Shashtri — career, love, health, and your future, read from your own hands.",
-  openGraph: { title: "Pandit Trilochan Shashtri · AI Palm Reading", description: "Upload both palms, pay once, get your personal Hinglish hast rekha report.", url: "/palm-reading" },
+  openGraph: { title: "Pandit Trilochan Shashtri · Palm Reading", description: "Upload both palms, pay once, get your personal Hinglish hast rekha report.", url: "/palm-reading" },
 };
 
 const discountPercent = Math.round((1 - AI_PALM_READING_PRICE / AI_PALM_READING_ORIGINAL_PRICE) * 100);
@@ -38,7 +38,7 @@ export default async function PalmReadingPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Hand size={26} /></div>
             <strong>Pandit Trilochan Shashtri</strong>
-            <span>Hast Rekha Shastri · AI-powered reading</span>
+            <span>Hast Rekha Shastri · Personal reading</span>
             <div className="palm-price-row">
               <span className="palm-price-original">{AI_READING_CURRENCY} {AI_PALM_READING_ORIGINAL_PRICE}</span>
               <span className="palm-price-badge">{discountPercent}% OFF</span>

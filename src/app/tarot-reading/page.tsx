@@ -9,9 +9,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Tarot Mystic Divya · AI Tarot Card Reading",
+  title: "Tarot Mystic Divya · Tarot Card Reading",
   description: "Ask your question, draw a three-card past-present-future tarot spread, and receive a full Hinglish tarot reading from Tarot Mystic Divya — Divine Light and Vision.",
-  openGraph: { title: "Tarot Mystic Divya · AI Tarot Reading", description: "Draw your cards, pay once, get your personal Hinglish tarot reading.", url: "/tarot-reading" },
+  openGraph: { title: "Tarot Mystic Divya · Tarot Reading", description: "Draw your cards, pay once, get your personal Hinglish tarot reading.", url: "/tarot-reading" },
 };
 
 export default async function TarotReadingPage() {
@@ -36,7 +36,7 @@ export default async function TarotReadingPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Layers size={26} /></div>
             <strong>Tarot Mystic Divya</strong>
-            <span>Divine Light and Vision · AI-powered reading</span>
+            <span>Divine Light and Vision · Personal reading</span>
             <div className="ask-persona-price">{AI_READING_CURRENCY} {AI_TAROT_READING_PRICE}<small>ek baar ka payment</small></div>
             <ul>
               <li><CheckCircle2 size={13} /> Aapke khud ke sawaal par based, teen-card spread</li>
