@@ -68,11 +68,6 @@ export async function addFamilyMember({ memberId, name, relationship, birthDate,
   if (!/^\d{2}:\d{2}$/.test(birthTime)) throw new FamilyMemberError("Please enter a valid birth time.");
   if (!birthPlace.trim()) throw new FamilyMemberError("Please share their birth place.");
 
-  const existing = await familyCollection(memberId).count().get();
-  if (existing.data().count >= MAX_FAMILY_MEMBERS) {
-    throw new FamilyMemberError(`You can link up to ${MAX_FAMILY_MEMBERS} family members.`);
-  }
-
   // Validates the birth place resolves to real coordinates before saving, the same way the Kundli
   // matching tool does — fail fast with a friendly error rather than storing a chart that can
   // never actually be computed.
@@ -83,14 +78,24 @@ export async function addFamilyMember({ memberId, name, relationship, birthDate,
     throw error;
   }
 
-  const ref = await familyCollection(memberId).add({
-    memberId,
-    name: name.trim().slice(0, 120),
-    relationship: relationship.trim().slice(0, 60),
-    birthDate,
-    birthTime,
-    birthPlace: birthPlace.trim().slice(0, 160),
-    createdAt: FieldValue.serverTimestamp(),
+  // A plain count-then-add here would let two concurrent requests both read a count under the cap
+  // and both add, letting a member exceed MAX_FAMILY_MEMBERS. A transaction serializes the
+  // check and the write against the same collection.
+  const ref = familyCollection(memberId).doc();
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(familyCollection(memberId).count());
+    if (existing.data().count >= MAX_FAMILY_MEMBERS) {
+      throw new FamilyMemberError(`You can link up to ${MAX_FAMILY_MEMBERS} family members.`);
+    }
+    tx.set(ref, {
+      memberId,
+      name: name.trim().slice(0, 120),
+      relationship: relationship.trim().slice(0, 60),
+      birthDate,
+      birthTime,
+      birthPlace: birthPlace.trim().slice(0, 160),
+      createdAt: FieldValue.serverTimestamp(),
+    });
   });
   const saved = await ref.get();
   return fromDoc(saved);

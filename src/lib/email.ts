@@ -26,13 +26,21 @@ export async function sendEmail({ to, subject, html }: { to: string; subject: st
   return { sent: true as const };
 }
 
+// These emails interpolate fields that can originate from user input (a booking's clientName,
+// gemstone order line items, notification bodies) into raw HTML. Escaping every interpolated
+// value prevents that input from breaking out into markup — defense in depth even where every
+// current call site happens to send the email back to the same person who supplied the text.
+function escapeHtml(value: string) {
+  return value.replace(/&/g, "&amp;").replace(/</g, "&lt;").replace(/>/g, "&gt;").replace(/"/g, "&quot;").replace(/'/g, "&#39;");
+}
+
 export function genericNotificationEmailHtml({ title, name, body, ctaLabel, ctaUrl }: { title: string; name: string; body: string; ctaLabel?: string; ctaUrl?: string }) {
   return `
   <div style="font-family:Georgia,serif;max-width:520px;margin:auto;color:#302822;">
-    <h2 style="color:#a95838;">${title}</h2>
-    <p>Hi ${name},</p>
-    <p>${body}</p>
-    ${ctaUrl ? `<p><a href="${ctaUrl}" style="display:inline-block;padding:12px 22px;background:#a95838;color:#fff;text-decoration:none;border-radius:8px;">${ctaLabel ?? "View details"}</a></p>` : ""}
+    <h2 style="color:#a95838;">${escapeHtml(title)}</h2>
+    <p>Hi ${escapeHtml(name)},</p>
+    <p>${escapeHtml(body)}</p>
+    ${ctaUrl ? `<p><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:12px 22px;background:#a95838;color:#fff;text-decoration:none;border-radius:8px;">${escapeHtml(ctaLabel ?? "View details")}</a></p>` : ""}
     <p style="margin-top:24px;font-size:12px;color:#aa9d90;">Jyotish Studio</p>
   </div>`;
 }
@@ -47,12 +55,12 @@ export function orderConfirmationEmailHtml({ orderNumber, customerName, items, s
   total: number;
   currency: string;
 }) {
-  const rows = items.map((item) => `<tr><td style="padding:8px 0;border-bottom:1px solid #eee;">${item.productName} — ${item.variantLabel} × ${item.quantity}</td><td style="padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${currency} ${item.lineTotal}</td></tr>`).join("");
+  const rows = items.map((item) => `<tr><td style="padding:8px 0;border-bottom:1px solid #eee;">${escapeHtml(item.productName)} — ${escapeHtml(item.variantLabel)} × ${item.quantity}</td><td style="padding:8px 0;border-bottom:1px solid #eee;text-align:right;">${currency} ${item.lineTotal}</td></tr>`).join("");
   return `
   <div style="font-family:Georgia,serif;max-width:520px;margin:auto;color:#302822;">
     <h2 style="color:#a95838;">Your order is confirmed</h2>
-    <p>Hi ${customerName}, thank you for your order. Here is your receipt.</p>
-    <p style="font-size:13px;color:#776b61;">Order ${orderNumber}</p>
+    <p>Hi ${escapeHtml(customerName)}, thank you for your order. Here is your receipt.</p>
+    <p style="font-size:13px;color:#776b61;">Order ${escapeHtml(orderNumber)}</p>
     <table style="width:100%;border-collapse:collapse;font-size:14px;">${rows}</table>
     <table style="width:100%;margin-top:12px;font-size:14px;">
       <tr><td>Subtotal</td><td style="text-align:right;">${currency} ${subtotal}</td></tr>

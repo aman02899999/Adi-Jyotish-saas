@@ -25,13 +25,16 @@ export default async function AdminSettingsPage() {
   // invites — a role can legitimately hold "settings" without "team" (e.g. a custom role built for
   // studio config only), so that data must only be fetched when the admin actually has "team".
   const canManageTeam = hasAdminPermission(admin, "team");
+  // Full role definitions include every permission each role grants — only send that down to
+  // admins who can actually act on it, for the same reason the team roster above is gated.
+  const canManageRoles = hasAdminPermission(admin, "roles");
 
   const [settings, usersSnap, invites, roleOptions, initialRoles, promoBanner] = await Promise.all([
     getStudioSettings(),
     canManageTeam ? db.collection("adminUsers").orderBy("name", "asc").get() : Promise.resolve(null),
     canManageTeam ? listPendingAdminInvites() : Promise.resolve([]),
     getAssignableRoleSlugs(),
-    getAllRolesAdmin(),
+    canManageRoles ? getAllRolesAdmin() : Promise.resolve([]),
     getPromoBanner(),
   ]);
   const users = usersSnap
@@ -64,7 +67,7 @@ export default async function AdminSettingsPage() {
           roleOptions={roleOptions}
           initialRoles={initialRoles}
           allPermissions={ALL_ADMIN_PERMISSIONS}
-          canManageRoles={hasAdminPermission(admin, "roles")}
+          canManageRoles={canManageRoles}
           canManageTeam={canManageTeam}
         />
         <AdminPromoBanner initial={{ enabled: promoBanner.enabled, message: promoBanner.message, ctaLabel: promoBanner.ctaLabel, ctaHref: promoBanner.ctaHref }} />
