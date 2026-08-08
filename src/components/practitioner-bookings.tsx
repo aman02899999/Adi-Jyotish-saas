@@ -46,11 +46,11 @@ export function PractitionerBookings({ initialBookings }: { initialBookings: Pra
         {bookings.map((booking) => {
           const open = openId === booking.id;
           return (
-            <article key={booking.id} className="practitioner-booking">
+            <div key={booking.id} className="practitioner-booking">
               <div className="practitioner-booking__row" onClick={() => setOpenId(open ? null : booking.id)}>
                 <div className="member-invoice-icon"><FileText size={16} /></div>
                 <div className="member-invoice-name">
-                  <small>{new Date(booking.scheduledAt).toLocaleString("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit" })}</small>
+                  <small>{new Date(booking.scheduledAt).toLocaleString("en", { month: "short", day: "numeric", year: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</small>
                   <h3>{booking.clientName}</h3>
                   <p>{booking.serviceTitle} · {booking.status} · {booking.paymentStatus}</p>
                 </div>
@@ -74,7 +74,7 @@ export function PractitionerBookings({ initialBookings }: { initialBookings: Pra
                   )}
                 </div>
               )}
-            </article>
+            </div>
           );
         })}
         {!bookings.length && <div className="consultation-empty"><FileText size={26} /><h3>No bookings yet</h3><p>Client sessions will appear here once scheduled.</p></div>}

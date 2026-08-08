@@ -232,7 +232,7 @@ export async function POST(request: Request) {
   getAdminIdsWithPermission("bookings").then((adminIds) => notifyAdmins(adminIds, {
     type: "booking.created",
     title: `New booking · ${created.serviceTitle}`,
-    body: `${created.clientName} with ${created.practitionerName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric" })}.`,
+    body: `${created.clientName} with ${created.practitionerName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}.`,
     link: "/admin/bookings",
   })).catch(() => {});
   if (created.practitionerId) {
@@ -241,11 +241,11 @@ export async function POST(request: Request) {
       recipientId: created.practitionerId,
       type: "booking.created",
       title: `New booking · ${created.serviceTitle}`,
-      body: `${created.clientName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric" })}.`,
+      body: `${created.clientName} on ${created.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}.`,
       link: "/practitioner/bookings",
     }).catch(() => {});
   }
-  const scheduledLabel = created.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short" });
+  const scheduledLabel = created.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Kolkata" });
   if (member) {
     await sendBookingNotification({
       memberEmail: member.email,

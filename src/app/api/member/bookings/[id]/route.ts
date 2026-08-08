@@ -39,7 +39,7 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
     memberEmail: member.email,
     bookingId: updated.id,
     subject: `${updated.serviceTitle} · ${updated.reference}`,
-    body: `Your consultation scheduled for ${updated.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short" })} has been cancelled. The studio will review any applicable payment adjustment.`,
+    body: `Your consultation scheduled for ${updated.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Kolkata" })} has been cancelled. The studio will review any applicable payment adjustment.`,
   });
   return Response.json(updated);
 }

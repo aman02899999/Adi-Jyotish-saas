@@ -67,7 +67,7 @@ export async function generateInvoicePdf(invoice: BillingInvoice, settings: Stud
   y -= 24;
   const meta: Array<[string, string]> = [
     ["Issued", invoice.createdAt.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" })],
-    ["Consultation", invoice.scheduledAt.toLocaleString("en", { dateStyle: "medium", timeStyle: "short" })],
+    ["Consultation", invoice.scheduledAt.toLocaleString("en", { dateStyle: "medium", timeStyle: "short", timeZone: "Asia/Kolkata" })],
     ["Astrologer", invoice.practitionerName ?? "Jyotish Studio"],
     ["Paid", invoice.paidAt ? invoice.paidAt.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric" }) : "Not yet paid"],
   ];

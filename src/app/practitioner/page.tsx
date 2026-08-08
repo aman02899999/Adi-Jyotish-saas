@@ -32,7 +32,7 @@ export default async function PractitionerOverviewPage() {
             <article key={booking.id}>
               <div className="member-invoice-icon"><CalendarDays size={16} /></div>
               <div className="member-invoice-name">
-                <small>{new Date(booking.scheduledAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</small>
+                <small>{new Date(booking.scheduledAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</small>
                 <h3>{booking.serviceTitle}</h3>
                 <p>{booking.clientName}</p>
               </div>
