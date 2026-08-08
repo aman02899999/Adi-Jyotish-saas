@@ -15,7 +15,7 @@ function getFirebaseAdminApp() {
   if (existing) return existing;
 
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (!raw) return initializeApp();
+  if (!raw) return initializeApp({ storageBucket: process.env.FIREBASE_STORAGE_BUCKET });
 
   const serviceAccount = JSON.parse(raw) as { project_id: string; client_email: string; private_key: string };
   return initializeApp({

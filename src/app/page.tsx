@@ -8,6 +8,7 @@ import {
   CheckCircle2,
   Gem,
   GraduationCap,
+  Hand,
   Hash,
   Heart,
   HeartHandshake,
@@ -58,6 +59,7 @@ const categories = [
 const freeTools = [
   { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by your sign", href: "/horoscope" },
   { icon: MessageCircle, label: "Ask Live a Question", note: "Instant answer, one question", href: "/ask" },
+  { icon: Hand, label: "Palm Reading", note: "Pandit Trilochan Shashtri · ₹99", href: "/palm-reading" },
   { icon: Gem, label: "Gemstone Match", note: "Free Live recommendation", href: "/gemstones/recommend" },
   { icon: HeartHandshake, label: "Kundli Matching", note: "Free compatibility reading", href: "/kundli-matching" },
   { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat", href: "/panchang" },

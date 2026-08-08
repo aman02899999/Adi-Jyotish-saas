@@ -42,7 +42,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
 
   return (
     <>
-      <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>Live Answers</h1><span>Every question and Kundli report you&apos;ve requested from our Live Jyotish guide.</span></div><div className="hero-actions"><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link><Link href="/kundli" className="button button--ghost button--small">Get full Kundli report</Link></div></div>
+      <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>Live Answers</h1><span>Every question, Kundli report, and palm reading you&apos;ve requested.</span></div><div className="hero-actions"><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link><Link href="/kundli" className="button button--ghost button--small">Get full Kundli report</Link><Link href="/palm-reading" className="button button--ghost button--small">Palm reading</Link></div></div>
       <section className="member-billing-summary">
         <article><span><Sparkles size={19} /></span><div><small>Readings answered</small><strong>{answered} of {readings.length}</strong></div></article>
       </section>
@@ -53,8 +53,8 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
             <article key={reading.id} className="ai-reading-item">
               <div className="member-invoice-icon"><Sparkles size={16} /></div>
               <div className="member-invoice-name ai-reading-item__body">
-                <small>{new Date(reading.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{reading.readingType === "kundli" && <> · Full Kundli report</>}</small>
-                <h3>{reading.question ?? "Full Kundli Report"}</h3>
+                <small>{new Date(reading.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{reading.readingType === "kundli" && <> · Full Kundli report</>}{reading.readingType === "palm" && <> · Palm reading (Pandit Trilochan Shashtri)</>}</small>
+                <h3>{reading.question ?? (reading.readingType === "palm" ? "Hast Rekha Palm Reading" : "Full Kundli Report")}</h3>
                 {reading.status === "answered" && reading.answer
                   ? <p className="ai-reading-item__answer">{reading.answer}</p>
                   : <p className="ai-reading-item__pending"><Clock3 size={13} /> Your payment is confirmed — the reading is still being prepared.</p>}
