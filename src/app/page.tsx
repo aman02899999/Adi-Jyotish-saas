@@ -311,7 +311,10 @@ export default async function HomePage() {
         </div>
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> Your daily horoscope</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Pick your sign,<br /><em>see today&rsquo;s sky.</em></h2></div>
-          <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>
+          <div className="section-heading__cta-block">
+            <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>
+            <Link href="/horoscope" className="button button--small">Check daily horoscope, click here <ArrowRight size={14} /></Link>
+          </div>
         </div>
         <HomeHoroscopeTeaser
           signs={ZODIAC_SIGNS.map((entry) => ({ key: entry.key, name: entry.name, symbol: entry.symbol }))}
