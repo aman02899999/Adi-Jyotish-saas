@@ -8,6 +8,8 @@ import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { splitGstInclusive } from "@/lib/gst";
+import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
+import { getSiteUrl } from "@/lib/site-url";
 
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
@@ -156,17 +158,56 @@ const PENDING_ORDER_TTL_MS = 15 * 60 * 1000;
 /** Self-healing cleanup for checkout abandonment: a pending order reserves stock (and coupon
  * usage) the moment it's created, before payment — if the customer never completes payment
  * (closed the tab, a failed Razorpay attempt with no retry), that reservation would otherwise
- * never be released. There's no scheduled job in this deployment, so this runs opportunistically
- * from a couple of natural trigger points (new checkout attempts, the admin orders list) instead
- * of on a timer. Reuses updateOrderStatus so stock/coupon release stays in one place. */
+ * never be released. Runs on the housekeeping cron (see .github/workflows/cron.yml) as well as
+ * opportunistically from a couple of natural trigger points (new checkout attempts, the admin
+ * orders list). Reuses updateOrderStatus so stock/coupon release stays in one place. Also fires a
+ * one-time "your cart is still here" recovery email — the 15-minute TTL is too short for a
+ * pre-expiry reminder to be worth the added complexity, so this nudges the customer back
+ * afterwards instead, which is when re-engagement email typically performs best anyway. */
 export async function expireStalePendingOrders() {
   const cutoff = Timestamp.fromMillis(Date.now() - PENDING_ORDER_TTL_MS);
   const snap = await ordersCol.where("status", "==", "pending").where("createdAt", "<", cutoff).limit(25).get();
   for (const doc of snap.docs) {
-    await updateOrderStatus(doc.id, "cancelled").catch((error) => {
-      console.error(`Failed to expire stale pending order ${doc.id}`, error);
-    });
+    const orderId = doc.id;
+    await updateOrderStatus(orderId, "cancelled")
+      .then(() => sendCartRecoveryEmail(fromOrderDoc(doc)))
+      .catch((error) => {
+        console.error(`Failed to expire stale pending order ${orderId}`, error);
+      });
   }
+}
+
+async function sendCartRecoveryEmail(order: GemstoneOrder) {
+  if (!isEmailConfigured()) return;
+
+  let name = order.guestName;
+  let email = order.guestEmail;
+  if (order.memberId) {
+    const memberSnap = await db.collection("members").doc(order.memberId).get();
+    const memberData = memberSnap.data() as { name?: string; email?: string } | undefined;
+    name = memberData?.name ?? name;
+    email = memberData?.email ?? email;
+  }
+  if (!email) return;
+
+  const items = await getOrderItems(order.id).catch(() => []);
+  const summary = items.length
+    ? items.map((item) => `${item.productName} (${item.variantLabel}) × ${item.quantity}`).join(", ")
+    : "the items in your cart";
+
+  await sendEmail({
+    to: email,
+    subject: "Your gemstone cart is still here",
+    html: genericNotificationEmailHtml({
+      title: "Your cart is still waiting for you",
+      name: name || "there",
+      body: `We released the stock hold on ${summary} since checkout wasn't completed — but everything is still in stock. Head back to the shop to finish your order.`,
+      ctaLabel: "Return to shop",
+      ctaUrl: new URL("/gemstones/shop", getSiteUrl()).toString(),
+    }),
+  }).catch((error) => {
+    console.error(`Failed to send cart-recovery email for order ${order.id}`, error);
+  });
 }
 
 export async function createPendingOrder({ memberId, guestName, guestEmail, guestPhone, shipping, lines, couponCode }: {

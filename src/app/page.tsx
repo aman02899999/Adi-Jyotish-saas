@@ -34,6 +34,7 @@ import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnlineNowCount, getSeniorAstrologers } from "@/lib/homepage";
 import { getPublishedServices } from "@/lib/services";
+import { REFERRAL_REFERRER_REWARD, REFERRAL_REFEREE_REWARD } from "@/lib/referrals";
 import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
 import { HeroVideo } from "@/components/hero-video";
@@ -373,6 +374,15 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      <section className="referral-promo shell reveal">
+        <div className="referral-promo__copy">
+          <p className="eyebrow"><span /> Invite &amp; earn</p>
+          <h2 style={{ fontSize: "clamp(30px,3.2vw,42px)" }}>Share the sky,<br /><em>earn wallet credit.</em></h2>
+          <p>Invite a friend to Adi Jyotish Guru. When they join and recharge their wallet, you get ₹{REFERRAL_REFERRER_REWARD} and they get ₹{REFERRAL_REFEREE_REWARD} — straight into your wallets.</p>
+        </div>
+        <Link href="/dashboard/referrals" className="button">Get my referral link <ArrowRight size={17} /></Link>
+      </section>
 
       <section className="cta shell reveal">
         <div className="cta-zodiac" aria-hidden="true">✦</div>

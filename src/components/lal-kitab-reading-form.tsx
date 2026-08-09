@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { BookOpen, CalendarDays, Check, Clock3, LoaderCircle, MapPin, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
@@ -121,6 +122,11 @@ export function LalKitabReadingForm({ member, price, currency, onlinePaymentsAva
             return <p key={index}>{line.replace(/\*\*/g, "")}</p>;
           })}
         </div>
+        <ReadingShareNudge
+          path="/lal-kitab-reading"
+          shareTitle="I just got a Lal Kitab reading from Pandit Girish Trivedi"
+          shareText="I just got a Lal Kitab reading from Pandit Girish Trivedi on Adi Jyotish Guru — try it:"
+        />
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">Dashboard mein dekhein</Link>
           <button type="button" className="button" onClick={() => { setAnswer(null); setQuestion(""); setReadingId(null); }}>Nayi reading lein</button>

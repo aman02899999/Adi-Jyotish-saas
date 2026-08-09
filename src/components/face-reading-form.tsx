@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { Check, LoaderCircle, Plus, ScanFace, Sparkles, UploadCloud, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
 type MemberPrefill = { name: string; email: string };
 type FacePhoto = { file: File; preview: string };
@@ -158,6 +159,11 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
             return <p key={index}>{line.replace(/\*\*/g, "")}</p>;
           })}
         </div>
+        <ReadingShareNudge
+          path="/face-reading"
+          shareTitle="I just got my face read by Acharya Devraj Bhardwaj"
+          shareText="I just got my face read by Acharya Devraj Bhardwaj on Adi Jyotish Guru — try it:"
+        />
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">Dashboard mein dekhein</Link>
           <button type="button" className="button" onClick={() => { setAnswer(null); setPhotos([]); setQuestion(""); setReadingId(null); }}>Nayi reading lein</button>

@@ -1,9 +1,11 @@
 import "server-only";
 
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
+import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
 import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
+import { getSiteUrl } from "@/lib/site-url";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 export const AI_READING_PRICE = 149;
@@ -36,6 +38,7 @@ export type AiReading = {
   razorpayPaymentId: string | null;
   answer: string | null;
   answeredAt: Date | null;
+  reminderSentAt: Date | null;
   createdAt: Date;
 };
 
@@ -58,6 +61,7 @@ type AiReadingDoc = {
   razorpayPaymentId: string | null;
   answer: string | null;
   answeredAt: FirebaseFirestore.Timestamp | null;
+  reminderSentAt?: FirebaseFirestore.Timestamp | null;
   createdAt: FirebaseFirestore.Timestamp;
 };
 
@@ -85,6 +89,7 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     razorpayPaymentId: data.razorpayPaymentId ?? null,
     answer: data.answer ?? null,
     answeredAt: data.answeredAt ? data.answeredAt.toDate() : null,
+    reminderSentAt: data.reminderSentAt ? data.reminderSentAt.toDate() : null,
     createdAt: data.createdAt?.toDate() ?? new Date(),
   };
 }
@@ -112,6 +117,7 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -163,6 +169,7 @@ export async function createFreeReading({ memberId, clientName, birthDate, birth
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -190,6 +197,7 @@ export async function createPendingKundliReport({ memberId, clientName, birthDat
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -276,6 +284,7 @@ export async function createPendingPalmReading({ readingId, memberId, clientName
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -303,6 +312,7 @@ export async function createPendingTarotReading({ memberId, clientName, question
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -332,6 +342,7 @@ export async function createPendingFaceReading({ readingId, memberId, clientName
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -357,6 +368,7 @@ export async function createPendingVastuReading({ memberId, clientName, question
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -385,6 +397,7 @@ export async function createPendingLalKitabReading({ memberId, clientName, birth
     razorpayPaymentId: null,
     answer: null,
     answeredAt: null,
+    reminderSentAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
   return toReading(await ref.get());
@@ -458,4 +471,66 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
   const ref = collection.doc(reading.id);
   await ref.update({ status: "answered", answer, answeredAt: FieldValue.serverTimestamp() });
   return toReading(await ref.get());
+}
+
+const READING_RESUME: Record<string, { label: string; path: string }> = {
+  question: { label: "your question reading", path: "/ask" },
+  kundli: { label: "your full Kundli report", path: "/kundli" },
+  palm: { label: "your Palm Reading", path: "/palm-reading" },
+  tarot: { label: "your Tarot Reading", path: "/tarot-reading" },
+  face: { label: "your Face Reading", path: "/face-reading" },
+  vastu: { label: "your Vastu Consultation", path: "/vastu-consultation" },
+  lalkitab: { label: "your Lal Kitab Reading", path: "/lal-kitab-reading" },
+};
+
+const PENDING_READING_REMINDER_DELAY_MS = 60 * 60 * 1000;
+const PENDING_READING_REMINDER_BATCH = 25;
+
+/** A reading left unpaid (client closed the Razorpay modal, or never opened it) otherwise sits in
+ * `pending_payment` forever with no follow-up. Run on a schedule (see the housekeeping cron) to
+ * nudge the client back once, an hour after they started — long enough to not feel like spam,
+ * short enough that the intent is still fresh. `reminderSentAt` is set unconditionally after an
+ * attempt (even on a missing/unconfigured email) so a bad record can't be retried every 15
+ * minutes forever. */
+export async function sendPendingReadingReminders() {
+  if (!isEmailConfigured()) return { sent: 0, skipped: true as const };
+
+  const cutoff = Timestamp.fromMillis(Date.now() - PENDING_READING_REMINDER_DELAY_MS);
+  const snap = await collection
+    .where("status", "==", "pending_payment")
+    .where("reminderSentAt", "==", null)
+    .where("createdAt", "<", cutoff)
+    .limit(PENDING_READING_REMINDER_BATCH)
+    .get();
+
+  let sent = 0;
+  for (const doc of snap.docs) {
+    const reading = toReading(doc);
+    const resume = READING_RESUME[reading.readingType];
+    try {
+      if (resume) {
+        const memberSnap = await db.collection("members").doc(reading.memberId).get();
+        const memberData = memberSnap.data() as { name?: string; email?: string } | undefined;
+        if (memberData?.email) {
+          const result = await sendEmail({
+            to: memberData.email,
+            subject: `${resume.label} is waiting for you`,
+            html: genericNotificationEmailHtml({
+              title: "Your reading is one step away",
+              name: memberData.name || "there",
+              body: `You started ${resume.label} on Adi Jyotish Guru but didn't finish payment. Complete it now to get your full report.`,
+              ctaLabel: "Complete my reading",
+              ctaUrl: new URL(resume.path, getSiteUrl()).toString(),
+            }),
+          });
+          if (result.sent) sent += 1;
+        }
+      }
+    } catch (error) {
+      console.error(`Failed to send pending-reading reminder for ${doc.id}`, error);
+    } finally {
+      await doc.ref.update({ reminderSentAt: FieldValue.serverTimestamp() });
+    }
+  }
+  return { sent, skipped: false as const };
 }

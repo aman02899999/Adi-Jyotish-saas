@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import Link from "next/link";
 import { Check, Hand, LoaderCircle, Sparkles, UploadCloud, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
 type MemberPrefill = { name: string; email: string };
 type PalmSlot = "left" | "right";
@@ -174,6 +175,11 @@ export function PalmReadingForm({ member, price, originalPrice, currency, online
             return <p key={index}>{line.replace(/\*\*/g, "")}</p>;
           })}
         </div>
+        <ReadingShareNudge
+          path="/palm-reading"
+          shareTitle="I just got my palm read by Pandit Trilochan Shashtri"
+          shareText="I just got my palm read by Pandit Trilochan Shashtri on Adi Jyotish Guru — try it:"
+        />
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">Dashboard mein dekhein</Link>
           <button type="button" className="button" onClick={() => { setAnswer(null); setLeftFile(null); setRightFile(null); setLeftPreview(null); setRightPreview(null); setReadingId(null); }}>Nayi reading lein</button>

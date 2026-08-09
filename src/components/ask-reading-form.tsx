@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { CalendarDays, Check, Clock3, LoaderCircle, MapPin, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
@@ -127,6 +128,11 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         <div className="ask-answer__badge"><Sparkles size={15} /> Your reading is ready</div>
         <h2>From Shree Santram Shashtri</h2>
         <div className="ask-answer__body">{answer.split("\n").filter((line) => line.trim()).map((line, index) => <p key={index}>{line}</p>)}</div>
+        <ReadingShareNudge
+          path="/ask"
+          shareTitle="I just got a live astrology answer from Shree Santram Shashtri"
+          shareText="I just got a live astrology answer from Shree Santram Shashtri on Adi Jyotish Guru — your first question is free, try it:"
+        />
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">View in your dashboard</Link>
           <button type="button" className="button" onClick={() => { setAnswer(null); setQuestion(""); setReadingId(null); }}>Ask another question</button>

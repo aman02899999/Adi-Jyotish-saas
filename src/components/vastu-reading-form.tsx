@@ -4,6 +4,7 @@ import { useState } from "react";
 import Link from "next/link";
 import { Check, Compass, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
 type MemberPrefill = { name: string; email: string };
 
@@ -118,6 +119,11 @@ export function VastuReadingForm({ member, price, currency, onlinePaymentsAvaila
             return <p key={index}>{line.replace(/\*\*/g, "")}</p>;
           })}
         </div>
+        <ReadingShareNudge
+          path="/vastu-consultation"
+          shareTitle="I just got a Vastu consultation from Vastu Shastri Ramesh Chaturvedi"
+          shareText="I just got a Vastu consultation from Vastu Shastri Ramesh Chaturvedi on Adi Jyotish Guru — try it:"
+        />
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">Dashboard mein dekhein</Link>
           <button type="button" className="button" onClick={() => { setAnswer(null); setQuestion(""); setReadingId(null); }}>Nayi consultation lein</button>
