@@ -732,20 +732,21 @@ button { border: 0; }
 .card-heading button { padding:2px; background:transparent; color:var(--muted); }
 .mini-tag { margin-left:5px; padding:3px 7px; border-radius:999px; color:var(--copper-dark); background:rgba(190,136,100,.15); font:12px var(--sans); vertical-align:middle; }
 .mini-tag--copper { color:white; background:var(--copper); }
-.kundli-card { grid-column:span 8; min-height:487px; padding:20px 22px; }
-.kundli-art { width:min(450px,75%); height:330px; position:absolute; top:59px; left:50%; transform:translateX(-50%); }
-.kundli-art img { object-fit:contain; mix-blend-mode:multiply; filter:saturate(.82) contrast(.95); }
-.chart-constellation { position:absolute; color:#a4774e; font:13px/1.7 var(--serif); opacity:.7; }
-.chart-constellation--one { left:-43px; top:27px; transform:rotate(14deg); }
-.chart-constellation--two { right:-28px; bottom:43px; }
-.chart-progress { position:absolute; left:22px; right:22px; bottom:18px; display:flex; align-items:center; gap:13px; padding-top:13px; border-top:1px solid var(--line); }
-.progress-ring { --progress:73%; flex:0 0 auto; width:56px; height:56px; display:grid; place-items:center; position:relative; border-radius:50%; background:conic-gradient(var(--copper) var(--progress),rgba(139,102,76,.12) 0); }
-.progress-ring::before { content:""; position:absolute; inset:7px; border-radius:50%; background:#eee9e0; }
-.progress-ring span { z-index:1; font:14px var(--serif); }
-.chart-progress > div:last-child { display:flex; flex-direction:column; gap:2px; }
+.kundli-card { grid-column:span 8; min-height:487px; padding:20px 22px; display:flex; flex-direction:column; }
+.kundli-art { width:min(300px,70%); margin:10px auto 0; }
+.kundli-chart-svg { display:block; width:100%; height:auto; }
+.kundli-chart-house { fill:rgba(255,255,255,.4); stroke:rgba(106,81,62,.28); stroke-width:1.5; }
+.kundli-chart-house--lagna { fill:rgba(190,136,100,.22); }
+.kundli-chart-rashi { fill:var(--muted); font:10px var(--sans); }
+.kundli-chart-planets { fill:var(--ink); font:600 12px var(--sans); }
+.kundli-chart-lagna-tag { fill:var(--copper-dark); font:8px var(--sans); letter-spacing:.06em; text-transform:uppercase; }
+.chart-progress { display:flex; align-items:center; gap:13px; margin-top:auto; padding-top:13px; border-top:1px solid var(--line); }
+.chart-progress > div { display:flex; flex-direction:column; gap:2px; }
 .chart-progress small { color:var(--muted); font-size:12px; text-transform:uppercase; letter-spacing:.1em; }
 .chart-progress strong { font:400 15px var(--serif); }
 .chart-progress p { margin:2px 0 0; color:var(--muted); font-size:12px; }
+.kundli-empty { display:flex; flex-direction:column; align-items:start; gap:11px; margin-top:auto; padding-top:13px; }
+.kundli-empty p { margin:0; max-width:420px; color:var(--muted); font-size:13px; line-height:1.6; }
 .muhurat-card { grid-column:span 4; min-height:237px; padding:20px; }
 .muhurat-card .card-heading > svg { color:var(--copper); }
 .muhurat-time { display:flex; gap:9px; align-items:center; margin:20px 0 12px; padding:10px; border-radius:9px; background:rgba(255,255,255,.45); color:var(--copper); }
@@ -1855,7 +1856,7 @@ button { border: 0; }
   .cosmic-grid { display:block; }
   .glass-card { margin-bottom:10px; }
   .kundli-card { min-height:485px; }
-  .kundli-art { width:100%; height:315px; }
+  .kundli-art { width:min(260px,80%); }
   .muhurat-card,.lucky-card,.weather-card,.insight-card { min-height:220px; }
   .weather-transits { grid-template-columns:1fr; gap:9px; }
   .reading-list { grid-template-columns:1fr; }

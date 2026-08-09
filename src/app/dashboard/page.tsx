@@ -1,4 +1,3 @@
-import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
@@ -10,16 +9,30 @@ import {
   SunMedium,
 } from "lucide-react";
 import { MemberAppShell } from "@/components/member-app-shell";
+import { KundliChartDiagram, rashiName } from "@/components/kundli-chart-diagram";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { bookingFromDoc } from "@/app/api/bookings/route";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPublishedServices } from "@/lib/services";
 import { getCosmicWeather } from "@/lib/transit-alerts";
+import { buildHouseGrid, buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
+import { formatDegree, NAKSHATRAS } from "@/lib/astro-engine";
 
 export const dynamic = "force-dynamic";
 
 const SADE_SATI_LABEL = { rising: "Rising phase", peak: "Peak phase", setting: "Setting phase" } as const;
 const GRAHA_LABEL = { jupiter: "Jupiter", saturn: "Saturn" } as const;
+
+function buildDashboardKundli(member: { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null }) {
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) return null;
+  try {
+    const chart = buildKundliChart({ name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace });
+    return { chart, houses: buildHouseGrid(chart) };
+  } catch (error) {
+    if (error instanceof KundliEngineError) return null;
+    throw error;
+  }
+}
 
 export default async function DashboardPage() {
   const member = await getCurrentMember();
@@ -38,6 +51,8 @@ export default async function DashboardPage() {
   const location = member.birthPlace?.split(",")[0] || "Your location";
   const today = new Date().toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric" });
   const nextBooking = upcomingSnap.docs[0] ? bookingFromDoc(upcomingSnap.docs[0]) : undefined;
+  const kundli = buildDashboardKundli(member);
+  const moon = kundli?.chart.positions.find((position) => position.graha === "moon");
 
   return (
     <MemberAppShell member={member} active="Dashboard">
@@ -48,16 +63,22 @@ export default async function DashboardPage() {
 
       <div className="cosmic-grid">
         <article className="glass-card kundli-card">
-          <div className="card-heading"><div><p>Birth chart <span className="mini-tag">Raman</span></p><h2>Kundli</h2></div><button aria-label="More options"><MoreHorizontal size={19} /></button></div>
-          <div className="kundli-art">
-            <Image src="/images/orbital-system.jpg" alt="Your Vedic planetary chart" fill priority sizes="(max-width: 900px) 90vw, 48vw" />
-            <div className="chart-constellation chart-constellation--one">✦ · ─ · ✦</div>
-            <div className="chart-constellation chart-constellation--two">· ✦<br />╲ · ✦</div>
-          </div>
-          <div className="chart-progress">
-            <div className="progress-ring"><span>73%</span></div>
-            <div><small>Cosmic alignment</small><strong>A season of expansion</strong><p>Your Jupiter cycle invites visible, meaningful growth.</p></div>
-          </div>
+          <div className="card-heading"><div><p>Birth chart <span className="mini-tag">Lahiri</span></p><h2>Kundli</h2></div><button aria-label="More options"><MoreHorizontal size={19} /></button></div>
+          {kundli ? (
+            <>
+              <div className="kundli-art">
+                <KundliChartDiagram houses={kundli.houses} />
+              </div>
+              <div className="chart-progress">
+                <div><small>Lagna (Ascendant)</small><strong>{rashiName(kundli.chart.ascendantRashiIndex)} · {formatDegree(kundli.chart.ascendantDegree)}</strong>{moon && <p>Moon in {rashiName(moon.rashiIndex)}, {NAKSHATRAS[moon.nakshatraIndex]} nakshatra.</p>}</div>
+              </div>
+            </>
+          ) : (
+            <div className="kundli-empty">
+              <p>Add your exact birth date, time, and place to generate your real Vedic birth chart — computed from actual planetary positions, not a template.</p>
+              <Link href="/onboarding" className="button button--small">Complete birth profile <ArrowUpRight size={14} /></Link>
+            </div>
+          )}
         </article>
 
         <article className="glass-card muhurat-card">

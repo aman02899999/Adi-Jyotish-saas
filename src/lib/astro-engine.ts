@@ -41,6 +41,11 @@ export const GRAHA_LABELS: Record<GrahaKey, string> = {
   jupiter: "Guru (Jupiter)", venus: "Shukra (Venus)", saturn: "Shani (Saturn)", rahu: "Rahu", ketu: "Ketu",
 };
 
+/** Two-letter symbols for the compact house cells of a chart diagram. */
+export const GRAHA_SHORT: Record<GrahaKey, string> = {
+  sun: "Su", moon: "Mo", mars: "Ma", mercury: "Me", jupiter: "Ju", venus: "Ve", saturn: "Sa", rahu: "Ra", ketu: "Ke",
+};
+
 const BODY_BY_GRAHA: Partial<Record<GrahaKey, Astronomy.Body>> = {
   sun: Astronomy.Body.Sun, moon: Astronomy.Body.Moon, mars: Astronomy.Body.Mars, mercury: Astronomy.Body.Mercury,
   jupiter: Astronomy.Body.Jupiter, venus: Astronomy.Body.Venus, saturn: Astronomy.Body.Saturn,

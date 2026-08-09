@@ -61,6 +61,16 @@ function occupantsOfHouse(chart: KundliChart, house: number) {
   return chart.positions.filter((position) => position.rashiIndex === houseRashiIndex);
 }
 
+export type KundliHouse = { house: number; rashiIndex: number; occupants: GrahaKey[] };
+
+/** The 12 houses (Lagna first) with the rashi and planets occupying each — the plain-data shape a chart diagram renders. */
+export function buildHouseGrid(chart: KundliChart): KundliHouse[] {
+  return Array.from({ length: 12 }, (_, index) => {
+    const house = index + 1;
+    return { house, rashiIndex: (chart.ascendantRashiIndex + index) % 12, occupants: occupantsOfHouse(chart, house).map((position) => position.graha) };
+  });
+}
+
 function joinWithAnd(items: string[]) {
   if (items.length <= 1) return items.join("");
   if (items.length === 2) return `${items[0]} and ${items[1]}`;
