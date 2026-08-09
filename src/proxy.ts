@@ -3,7 +3,11 @@ import { NextResponse, type NextRequest } from "next/server";
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
 
 export function proxy(request: NextRequest) {
-  if (!unsafeMethods.has(request.method) || request.nextUrl.pathname === "/api/webhooks/razorpay") {
+  // Both exemptions authenticate themselves independently of cookies (HMAC signature for the
+  // webhook, a bearer secret for the cron route), so there's no ambient browser credential for
+  // CSRF to forge in the first place — the Origin/sec-fetch-site check below only makes sense for
+  // routes that trust the session cookie.
+  if (!unsafeMethods.has(request.method) || request.nextUrl.pathname === "/api/webhooks/razorpay" || request.nextUrl.pathname === "/api/cron/housekeeping") {
     return NextResponse.next();
   }
 

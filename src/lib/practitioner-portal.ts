@@ -199,6 +199,15 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
   return { id: updated.id, ...updated.data() };
 }
 
+/** Lets a practitioner toggle their own live instant-chat availability — previously only an
+ * admin could flip this, which made the "self-service portal" unusable for the one status that
+ * genuinely needs to change minute-to-minute (going online/offline for chat). */
+export async function setPractitionerOnline(practitionerId: string, online: boolean) {
+  const ref = db.collection("practitioners").doc(practitionerId);
+  await ref.update({ online, updatedAt: FieldValue.serverTimestamp() });
+  return { id: practitionerId, online };
+}
+
 // --- practitionerPayouts -------------------------------------------------------------------
 
 export async function getPractitionerPayouts(practitionerId: string): Promise<PractitionerPayout[]> {

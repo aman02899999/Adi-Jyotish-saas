@@ -1,0 +1,27 @@
+name: Scheduled housekeeping
+
+on:
+  schedule:
+    # Every 15 minutes. Expires stale instant-chat wallet holds and abandoned gemstone pending
+    # orders — previously these only ran lazily when a user happened to hit a related endpoint.
+    - cron: "*/15 * * * *"
+  workflow_dispatch: {}
+
+jobs:
+  housekeeping:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Call housekeeping endpoint
+        run: |
+          if [ -z "${{ secrets.CRON_SECRET }}" ] || [ -z "${{ secrets.SITE_URL }}" ]; then
+            echo "CRON_SECRET or SITE_URL repo secret not set — skipping (nothing to call yet)."
+            exit 0
+          fi
+          status=$(curl -sS -o response.json -w "%{http_code}" -X POST \
+            -H "Authorization: Bearer ${{ secrets.CRON_SECRET }}" \
+            "${{ secrets.SITE_URL }}/api/cron/housekeeping")
+          cat response.json
+          if [ "$status" -ge 300 ]; then
+            echo "Housekeeping call failed with status $status"
+            exit 1
+          fi

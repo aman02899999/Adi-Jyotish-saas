@@ -701,6 +701,8 @@ button { border: 0; }
 .topbar-tools input { width:100%; border:0; outline:0; background:transparent; font-size:13px; }
 .topbar-tools button { width:35px; height:35px; display:grid; place-items:center; position:relative; border:1px solid rgba(92,70,55,.1); border-radius:50%; background:rgba(255,255,255,.4); }
 .topbar-tools button span { width:5px; height:5px; position:absolute; right:7px; top:7px; border:1px solid var(--paper); border-radius:50%; background:var(--copper); }
+.topbar-tools .online-toggle { width:max-content; height:35px; padding:0 12px; border-radius:999px; background:rgba(255,255,255,.47); font-weight:500; white-space:nowrap; }
+.topbar-tools .online-toggle:disabled { opacity:.6; cursor:wait; }
 .dashboard-scroll { height:calc(100% - 66px); overflow:auto; padding:24px 27px 35px; scrollbar-width:thin; scrollbar-color:rgba(112,88,70,.25) transparent; }
 .dashboard-welcome { display:flex; align-items:end; justify-content:space-between; margin-bottom:17px; }
 .dashboard-welcome p { margin:0 0 3px; color:var(--copper); font-size:12px; letter-spacing:.08em; text-transform:uppercase; }

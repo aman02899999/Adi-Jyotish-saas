@@ -17,6 +17,7 @@ export type PractitionerIdentity = {
   email: string;
   title: string;
   photoUrl: string | null;
+  online: boolean;
 };
 
 type PractitionerDoc = {
@@ -27,6 +28,7 @@ type PractitionerDoc = {
   photoUrl: string | null;
   active: boolean;
   firebaseUid: string | null;
+  online: boolean;
 };
 
 /** Practitioner docs are keyed by slug (stable, human-readable, used in /astrologers/[slug]
@@ -82,6 +84,7 @@ export async function getCurrentPractitioner(): Promise<PractitionerIdentity | n
     email: data.email,
     title: data.title,
     photoUrl: data.photoUrl,
+    online: data.online ?? false,
   };
 }
 
