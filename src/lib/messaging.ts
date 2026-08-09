@@ -109,23 +109,37 @@ export async function getMemberInbox(memberId: string): Promise<InboxThread[]> {
 }
 
 export async function getAdminUnreadCount() {
-  // collectionGroup query across every thread's messages subcollection.
-  const snap = await db.collectionGroup("messages").where("senderType", "==", "member").where("readByAdmin", "==", false).count().get();
-  return snap.data().count;
+  // collectionGroup query across every thread's messages subcollection — needs the composite
+  // index in firestore.indexes.json deployed (firebase deploy --only firestore:indexes), which
+  // is easy to forget. AdminShell calls this on every single admin page load to show the unread
+  // badge, so a missing index here (FAILED_PRECONDITION) used to crash the entire admin panel
+  // for a purely decorative count. Never worth taking the whole workspace down for a badge.
+  try {
+    const snap = await db.collectionGroup("messages").where("senderType", "==", "member").where("readByAdmin", "==", false).count().get();
+    return snap.data().count;
+  } catch (error) {
+    console.error("getAdminUnreadCount failed (likely a missing Firestore index)", error);
+    return 0;
+  }
 }
 
 export async function getMemberUnreadCount(memberId: string) {
-  const threadsSnap = await threadsCollection.where("memberId", "==", memberId).select().get();
-  if (threadsSnap.empty) return 0;
-  const counts = await Promise.all(threadsSnap.docs.map(async (threadDoc) => {
-    const snap = await messagesCollection(threadDoc.id)
-      .where("readByMember", "==", false)
-      .where("senderType", "in", ["admin", "system"])
-      .count()
-      .get();
-    return snap.data().count;
-  }));
-  return counts.reduce((sum, value) => sum + value, 0);
+  try {
+    const threadsSnap = await threadsCollection.where("memberId", "==", memberId).select().get();
+    if (threadsSnap.empty) return 0;
+    const counts = await Promise.all(threadsSnap.docs.map(async (threadDoc) => {
+      const snap = await messagesCollection(threadDoc.id)
+        .where("readByMember", "==", false)
+        .where("senderType", "in", ["admin", "system"])
+        .count()
+        .get();
+      return snap.data().count;
+    }));
+    return counts.reduce((sum, value) => sum + value, 0);
+  } catch (error) {
+    console.error("getMemberUnreadCount failed (likely a missing Firestore index)", error);
+    return 0;
+  }
 }
 
 export async function sendBookingNotification({

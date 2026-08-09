@@ -162,6 +162,22 @@
       ]
     },
     {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "senderType", "order": "ASCENDING" },
+        { "fieldPath": "readByAdmin", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "messages",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "readByMember", "order": "ASCENDING" },
+        { "fieldPath": "senderType", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "services",
       "queryScope": "COLLECTION",
       "fields": [
