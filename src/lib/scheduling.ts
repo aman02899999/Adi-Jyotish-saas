@@ -469,7 +469,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     experienceYears: 22,
     verified: true,
     verificationLevel: "senior-panel",
-    photoUrl: null,
+    photoUrl: "/images/practitioners/vinod-chaubey.jpg",
     chatRatePerMinute: 24,
     active: true,
     featured: false,
