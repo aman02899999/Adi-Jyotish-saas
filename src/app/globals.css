@@ -1849,13 +1849,12 @@ button { border: 0; }
   .app-content { height:calc(100dvh - 63px); }
   .admin-shell { display:block; }
   .admin-sidebar { display:none; }
-  .admin-topbar { padding:0 20px; }
+  .admin-topbar { position:relative; z-index:30; padding:0 20px; }
   .admin-mobile-brand { display:flex !important; align-items:center; gap:14px; }
-  .admin-mobile-nav { position:relative; z-index:30; }
   .admin-mobile-nav summary { display:flex; list-style:none; cursor:pointer; }
   .admin-mobile-nav summary::-webkit-details-marker { display:none; }
-  .admin-mobile-nav .admin-mobile-drawer { top:38px; }
-  .admin-mobile-nav .admin-mobile-drawer .admin-sidebar__bottom { margin-top:auto; }
+  .admin-mobile-drawer { top:100%; }
+  .admin-mobile-drawer .admin-sidebar__bottom { margin-top:auto; }
   .admin-topbar > label { display:none; }
   .admin-content { padding-inline:20px; }
 }
