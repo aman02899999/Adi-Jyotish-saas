@@ -63,7 +63,7 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
           <span>Want guidance on your own chart?</span>
           <Link href="/ask" className="button button--small">Ask a personal question <ArrowRight size={14} /></Link>
         </div>
-        <ShareButtons url={new URL(`/horoscope?sign=${sign}`, getSiteUrl()).toString()} title={`${definition.name} Horoscope Today`} text={`Today's ${definition.name} horoscope on Adi Jyotish Gurus:`} />
+        <ShareButtons url={new URL(`/horoscope?sign=${sign}`, getSiteUrl()).toString()} title={`${definition.name} Horoscope Today`} text={`Today's ${definition.name} horoscope on Adi Jyotish Guru:`} />
         <p className="legal-note">This horoscope offers guidance and reflection, not a guarantee of any outcome.</p>
       </section>
     <SiteFooter />

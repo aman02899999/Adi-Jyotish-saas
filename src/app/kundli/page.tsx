@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { CheckCircle2, Clock3, ScrollText, ShieldCheck } from "lucide-react";
 import { KundliReportForm } from "@/components/kundli-report-form";
 import { SiteHeader } from "@/components/site-header";
@@ -45,6 +46,10 @@ export default async function KundliPage() {
           </div>
         </div>
       </section>
+
+      <div className="page-hero-banner shell">
+        <Image src="/images/kundli-hero.jpg" alt="A diamond-shaped Vedic birth chart with astrology books" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+      </div>
 
       <section className="ask-form-section shell" id="kundli-form">
         <KundliReportForm

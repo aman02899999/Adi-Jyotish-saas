@@ -78,7 +78,7 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
         amount: data.amount,
         currency: data.currency,
         order_id: data.razorpayOrderId,
-        name: "Adi Jyotish Gurus",
+        name: "Adi Jyotish Guru",
         description: `Gemstone order · ${data.orderNumber}`,
         prefill: { name: form.name, email: member.email, contact: form.phone },
         theme: { color: "#a95838" },

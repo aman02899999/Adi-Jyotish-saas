@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { CheckCircle2, Clock3, Layers, ShieldCheck } from "lucide-react";
 import { TarotReadingForm } from "@/components/tarot-reading-form";
 import { SiteHeader } from "@/components/site-header";
@@ -45,6 +46,10 @@ export default async function TarotReadingPage() {
           </div>
         </div>
       </section>
+
+      <div className="page-hero-banner shell">
+        <Image src="/images/tarot-reading-hero.jpg" alt="A hand placing a tarot card face-up during a reading" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+      </div>
 
       <section className="ask-form-section shell" id="tarot-form">
         <TarotReadingForm

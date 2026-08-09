@@ -50,7 +50,7 @@ export function MemberReferrals() {
           <code>{link}</code>
           <button type="button" onClick={copyLink}>{copied ? <Check size={15} /> : <Copy size={15} />} {copied ? "Copied" : "Copy"}</button>
         </div>
-        <ShareButtons url={link} title="Join me on Adi Jyotish Gurus" text={`I'm using Adi Jyotish Gurus for real Vedic astrology guidance — join with my link and we both get wallet credit.`} />
+        <ShareButtons url={link} title="Join me on Adi Jyotish Guru" text={`I'm using Adi Jyotish Guru for real Vedic astrology guidance — join with my link and we both get wallet credit.`} />
       </section>
       <div className="cosmic-grid">
         <section className="glass-card referral-stat">

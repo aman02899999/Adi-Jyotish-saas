@@ -11,7 +11,7 @@ const siteUrl = getSiteUrl();
 const websiteJsonLd = {
   "@context": "https://schema.org",
   "@type": "WebSite",
-  name: "Adi Jyotish Gurus",
+  name: "Adi Jyotish Guru",
   url: siteUrl.toString(),
   potentialAction: {
     "@type": "SearchAction",
@@ -22,20 +22,20 @@ const websiteJsonLd = {
 
 export const metadata: Metadata = {
   metadataBase: siteUrl,
-  applicationName: "Adi Jyotish Gurus",
-  title: { default: "Adi Jyotish Gurus — Ancient clarity for modern life", template: "%s · Adi Jyotish Gurus" },
+  applicationName: "Adi Jyotish Guru",
+  title: { default: "Adi Jyotish Guru — Ancient clarity for modern life", template: "%s · Adi Jyotish Guru" },
   description: "Personal Vedic astrology readings, cosmic insights, and auspicious timing for modern life.",
   openGraph: {
     type: "website",
-    title: "Adi Jyotish Gurus — Ancient clarity for modern life",
+    title: "Adi Jyotish Guru — Ancient clarity for modern life",
     description: "Personal Vedic astrology readings and thoughtful cosmic guidance.",
     url: "/",
-    siteName: "Adi Jyotish Gurus",
-    images: [{ url: "/images/vedic-hero.jpg", width: 1200, height: 675, alt: "Adi Jyotish Gurus Vedic astrology experience" }],
+    siteName: "Adi Jyotish Guru",
+    images: [{ url: "/images/vedic-hero.jpg", width: 1200, height: 675, alt: "Adi Jyotish Guru Vedic astrology experience" }],
   },
   twitter: {
     card: "summary_large_image",
-    title: "Adi Jyotish Gurus — Ancient clarity for modern life",
+    title: "Adi Jyotish Guru — Ancient clarity for modern life",
     description: "Personal Vedic astrology readings and thoughtful cosmic guidance.",
     images: ["/images/vedic-hero.jpg"],
   },

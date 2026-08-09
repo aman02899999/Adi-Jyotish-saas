@@ -532,6 +532,13 @@ button { border: 0; }
 .horoscope-banner::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,rgba(23,16,9,.4),transparent 45%); }
 @media (max-width:640px) { .horoscope-banner { aspect-ratio:4/3; border-radius:18px; margin-bottom:24px; } }
 .horoscope-teaser { display:grid; grid-template-columns:220px 1fr; gap:24px; align-items:start; }
+
+/* reusable hero-image banner for reading-tool pages (palm, tarot, kundli, numerology, panchang, …) —
+   same responsive aspect-ratio + object-fit:cover approach as .horoscope-banner above, generalized
+   so any page can drop one in without its own bespoke CSS. */
+.page-hero-banner { position:relative; width:100%; aspect-ratio:1408/620; margin:28px 0 40px; border-radius:26px; overflow:hidden; box-shadow:0 25px 60px rgba(78,58,43,.16); }
+.page-hero-banner::after { content:""; position:absolute; inset:0; background:linear-gradient(0deg,rgba(23,16,9,.4),transparent 45%); }
+@media (max-width:640px) { .page-hero-banner { aspect-ratio:4/3; border-radius:18px; margin:20px 0 28px; } }
 .horoscope-teaser__signs { display:grid; grid-template-columns:repeat(3,1fr); gap:8px; }
 .horoscope-teaser__signs button { display:flex; flex-direction:column; align-items:center; gap:4px; padding:12px 6px; border:1px solid var(--line); border-radius:14px; background:rgba(255,255,255,.35); cursor:pointer; transition:transform .2s ease, box-shadow .2s ease, border-color .2s ease; }
 .horoscope-teaser__signs button:hover { transform:translateY(-2px); }

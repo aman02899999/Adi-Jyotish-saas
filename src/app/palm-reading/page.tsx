@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { CheckCircle2, Clock3, Hand, ShieldCheck } from "lucide-react";
 import { PalmReadingForm } from "@/components/palm-reading-form";
 import { SiteHeader } from "@/components/site-header";
@@ -51,6 +52,10 @@ export default async function PalmReadingPage() {
           </div>
         </div>
       </section>
+
+      <div className="page-hero-banner shell">
+        <Image src="/images/palm-reading-hero.jpg" alt="A magnifying glass examining the golden-traced life and heart lines of an open palm" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+      </div>
 
       <section className="ask-form-section shell" id="palm-form">
         <PalmReadingForm

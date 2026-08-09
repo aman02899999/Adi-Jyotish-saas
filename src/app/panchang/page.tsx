@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import Link from "next/link";
 import { ArrowRight, Moon, Sparkles, Sunrise, Sunset } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
@@ -44,6 +45,10 @@ export default async function PanchangPage() {
         <h1>The day&rsquo;s<br /><em>almanac.</em></h1>
         <p className="zodiac-hero__lead">Real tithi, nakshatra, yoga, and muhurat — computed live from actual planetary positions for {REFERENCE_LOCATION_LABEL}.</p>
       </section>
+
+      <div className="page-hero-banner shell">
+        <Image src="/images/panchang-hero.jpg" alt="A traditional Panchangam almanac book" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+      </div>
 
       <section className="horoscope-panel shell">
         <div className="horoscope-panel__head">
