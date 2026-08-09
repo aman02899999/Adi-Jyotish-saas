@@ -54,7 +54,7 @@ export async function PractitionerShell({ practitioner, active, children }: { pr
             <nav>{navItems.map(({ label, href, tab }) => <Link key={label} className={active === tab ? "active" : ""} href={href}>{label}</Link>)}</nav>
             <div className="topbar-tools">
               <NotificationBell apiBase="/api/practitioner/notifications" />
-              <ProfileMenu initials={initials} name={practitioner.name} subtitle={practitioner.title} logoutAction="/api/auth/practitioner-logout" />
+              <ProfileMenu initials={initials} name={practitioner.name} subtitle={practitioner.title} logoutAction="/api/auth/practitioner-logout" redirectTo="/practitioner/login" />
             </div>
           </header>
           <div className="dashboard-scroll">{children}</div>

@@ -17,6 +17,8 @@ export function SiteFooter() {
         <Link href="/terms">Terms of Service</Link>
         <Link href="/privacy">Privacy Policy</Link>
         <Link href="/refund-policy">Refund &amp; Cancellation</Link>
+        <Link href="/practitioner/login">Practitioner sign in</Link>
+        <Link href="/admin/login">Studio admin</Link>
         <span>Readings are offered for guidance and self-reflection. They are not a substitute for medical, legal, or financial advice, and no specific outcome is guaranteed.</span>
       </div>
     </footer>

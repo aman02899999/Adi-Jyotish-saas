@@ -76,7 +76,7 @@ export async function AdminShell({ active, children }: { active: "Overview" | "S
           <header className="admin-topbar">
             <div className="admin-mobile-brand"><BrandMark compact /><Menu size={21} /></div>
             <label><Search size={16} /><input placeholder="Search anything…" aria-label="Search admin" /><kbd>⌘ K</kbd></label>
-            <div><Link href="/dashboard">Preview site <ExternalLink size={14} /></Link><Link className="notification-button" href="/admin/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <i />}</Link><NotificationBell apiBase="/api/admin/notifications" /><ProfileMenu initials={initials} name={admin?.name ?? "Administrator"} subtitle={admin?.email ?? admin?.role ?? "admin"} logoutAction="/api/auth/logout" /></div>
+            <div><Link href="/dashboard">Preview site <ExternalLink size={14} /></Link><Link className="notification-button" href="/admin/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <i />}</Link><NotificationBell apiBase="/api/admin/notifications" /><ProfileMenu initials={initials} name={admin?.name ?? "Administrator"} subtitle={admin?.email ?? admin?.role ?? "admin"} logoutAction="/api/auth/logout" redirectTo="/admin/login" /></div>
           </header>
           {children}
         </section>

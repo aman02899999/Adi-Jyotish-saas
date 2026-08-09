@@ -1365,8 +1365,9 @@ button { border: 0; }
 .profile-menu__identity > span:last-child { min-width:0; display:flex; flex-direction:column; gap:2px; }
 .profile-menu__identity strong { overflow:hidden; font-size:13px; text-overflow:ellipsis; white-space:nowrap; }
 .profile-menu__identity small { overflow:hidden; color:var(--muted); font-size:12px; text-overflow:ellipsis; white-space:nowrap; }
-.profile-menu__panel form button { width:100%; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; color:#9b4d40; background:transparent; font-size:13px; font-weight:600; cursor:pointer; transition:.2s; }
-.profile-menu__panel form button:hover { background:rgba(155,77,64,.08); }
+.profile-menu__panel > button { width:100%; display:flex; align-items:center; gap:8px; padding:8px 10px; border:1px solid var(--line); border-radius:9px; color:#9b4d40; background:transparent; font-size:13px; font-weight:600; cursor:pointer; transition:.2s; }
+.profile-menu__panel > button:hover { background:rgba(155,77,64,.08); }
+.profile-menu__panel > button:disabled { opacity:.6; cursor:default; }
 .notification-panel__head { display:flex; align-items:center; justify-content:space-between; padding:13px 16px; border-bottom:1px solid var(--line); }
 .notification-panel__head strong { font:400 15px var(--serif); }
 .notification-panel__head button { display:flex; align-items:center; gap:5px; color:var(--copper-dark); font-size:13px; font-weight:700; }
@@ -2151,6 +2152,7 @@ button { border: 0; }
 .pricing-card li svg { flex:0 0 auto; margin-top:2px; color:var(--copper); }
 .pricing-cta { width:100%; }
 .pricing-cta:disabled { opacity:.5; cursor:not-allowed; }
+.pricing-cta-note { display:block; margin-top:-8px; color:var(--muted); font-size:12px; text-align:center; }
 @media (max-width: 900px) {
   .pricing-grid { grid-template-columns:1fr; }
 }
