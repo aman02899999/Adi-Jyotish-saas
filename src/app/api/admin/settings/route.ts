@@ -7,6 +7,7 @@ const currencies = ["USD", "EUR", "GBP", "INR", "AUD", "CAD"];
 export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
+  if (!hasAdminPermission(admin, "settings")) return Response.json({ error: "Owner access required." }, { status: 403 });
   return Response.json(await getStudioSettings());
 }
 

@@ -207,6 +207,22 @@ export type VariantInput = {
   active?: boolean;
 };
 
+/** Called before any product doc is written. Without this, a variant/image missing its required
+ * string field only throws once replaceProductVariants/replaceProductImages runs *after* the
+ * product doc's own ref.set()/ref.update() already committed - leaving an orphaned or
+ * half-updated product in Firestore behind a generic "could not be created/updated" error. */
+function validateVariants(variants: VariantInput[]) {
+  for (const variant of variants) {
+    if (typeof variant.label !== "string") throw new GemstoneError("Every variant needs a label.");
+    if (typeof variant.sku !== "string") throw new GemstoneError("Every variant needs a SKU.");
+  }
+}
+function validateImages(images: ImageInput[]) {
+  for (const image of images) {
+    if (typeof image.url !== "string") throw new GemstoneError("Every image needs a URL.");
+  }
+}
+
 async function replaceProductImages(productId: string, images: ImageInput[]) {
   const col = imagesCol(productId);
   const existingSnap = await col.get();
@@ -329,6 +345,8 @@ export async function createProduct(payload: ProductPayload) {
   const sku = payload.sku?.trim();
   if (!sku) throw new GemstoneError("SKU is required.");
   const slug = payload.slug?.trim() ? toSlug(payload.slug) : toSlug(name);
+  validateVariants(payload.variants ?? []);
+  if (payload.images?.length) validateImages(payload.images);
 
   const ref = productsCol.doc();
   await ref.set({
@@ -369,6 +387,8 @@ export async function updateProduct(id: string, payload: ProductPayload) {
   const snap = await ref.get();
   if (!snap.exists) throw new GemstoneError("Product not found.");
   const existing = fromProductDoc(snap);
+  if (payload.variants) validateVariants(payload.variants);
+  if (payload.images) validateImages(payload.images);
 
   await ref.update({
     categoryId: payload.categoryId ?? existing.categoryId,
@@ -434,7 +454,15 @@ export async function duplicateProduct(id: string) {
 
 export async function deleteProduct(id: string) {
   // Collection-group lookup — requires a Firestore collection-group index on "items.productId" (see firestore.indexes.json).
-  const referenced = await db.collectionGroup("items").where("productId", "==", id).limit(1).get();
+  // This check gates a destructive action, so a missing/still-building index must fail closed
+  // (block the delete) rather than silently treating the lookup as "no orders reference it".
+  let referenced;
+  try {
+    referenced = await db.collectionGroup("items").where("productId", "==", id).limit(1).get();
+  } catch (error) {
+    console.error("deleteProduct order-reference check failed (likely a missing Firestore index)", error);
+    throw new GemstoneError("Could not verify this product has no existing orders. Try again shortly.");
+  }
   if (!referenced.empty) throw new GemstoneError("This product has existing orders and cannot be deleted. Archive it instead.");
 
   const [imagesSnap, variantsSnap] = await Promise.all([imagesCol(id).get(), variantsCol(id).get()]);

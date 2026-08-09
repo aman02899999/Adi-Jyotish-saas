@@ -1,11 +1,11 @@
-import { redirect } from "next/navigation";
 import { db } from "@/lib/firestore";
 import { AdminSettings } from "@/components/admin-settings";
 import { AdminDemoAccounts } from "@/components/admin-demo-accounts";
 import { AdminPromoBanner } from "@/components/admin-promo-banner";
 import { AdminShell } from "@/components/admin-shell";
 import { TwoFactorSettings } from "@/components/two-factor-settings";
-import { ALL_ADMIN_PERMISSIONS, getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
+import { ALL_ADMIN_PERMISSIONS, hasAdminPermission } from "@/lib/admin-auth";
+import { requireAdminPage } from "@/lib/admin-page";
 import { getAllRolesAdmin, getAssignableRoleSlugs } from "@/lib/admin-roles";
 import { listPendingAdminInvites } from "@/lib/admin-invites";
 import { getPromoBanner } from "@/lib/promo-banner";
@@ -19,8 +19,7 @@ function toDate(value: FirebaseFirestore.Timestamp | Date | undefined | null): D
 }
 
 export default async function AdminSettingsPage() {
-  const admin = await getCurrentAdmin();
-  if (!hasAdminPermission(admin, "settings")) redirect("/admin/unauthorized");
+  const admin = await requireAdminPage("settings");
 
   // The "team" tab exposes the full admin roster (names, emails, roles, last login) and pending
   // invites — a role can legitimately hold "settings" without "team" (e.g. a custom role built for

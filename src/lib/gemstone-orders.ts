@@ -489,20 +489,35 @@ export async function getGemstoneAdminStats() {
   const statusCountSnaps = await Promise.all(statuses.map((status) => ordersCol.where("status", "==", status).count().get()));
   const statusCounts = Object.fromEntries(statuses.map((status, index) => [status, statusCountSnaps[index].data().count]));
 
-  // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see firestore.indexes.json.
-  const lowStockSnap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", 5).count().get();
+  // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see
+  // firestore.indexes.json. Same failure mode already hit (and fixed) in wallet.ts/messaging.ts:
+  // a missing/still-building index throws FAILED_PRECONDITION in real Firestore and would take
+  // down the whole admin Gemstones page, so this degrades to 0 instead of crashing.
+  let lowStockVariantCount = 0;
+  try {
+    const lowStockSnap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", 5).count().get();
+    lowStockVariantCount = lowStockSnap.data().count;
+  } catch (error) {
+    console.error("getGemstoneAdminStats low-stock count failed (likely a missing Firestore index)", error);
+  }
 
   return {
     revenue: Number(revenueData.revenue ?? 0),
     paidOrderCount: revenueData.paidCount ?? 0,
     statusCounts,
-    lowStockVariantCount: lowStockSnap.data().count,
+    lowStockVariantCount,
   };
 }
 
 export async function getLowStockVariants(threshold = 5) {
   // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see firestore.indexes.json.
-  const snap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", threshold).orderBy("stockQuantity", "asc").get();
+  let snap;
+  try {
+    snap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", threshold).orderBy("stockQuantity", "asc").get();
+  } catch (error) {
+    console.error("getLowStockVariants failed (likely a missing Firestore index)", error);
+    return [];
+  }
   if (snap.empty) return [];
 
   const productIds = [...new Set(snap.docs.map((doc) => (doc.data() as { productId: string }).productId))];
