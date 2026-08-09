@@ -964,6 +964,20 @@ button { border: 0; }
 .modal-actions .button { min-height:39px; }
 .modal-actions .button:disabled { opacity:1; cursor:wait; background:var(--muted); border-color:var(--muted); color:var(--ivory); box-shadow:none; }
 
+/* start-here picker */
+.start-here-card { width:min(560px,100%); max-height:calc(100dvh - 40px); overflow:auto; border:1px solid rgba(255,255,255,.5); border-radius:20px; background:#f6f1e7; box-shadow:0 30px 80px rgba(40,30,24,.24); animation:modalIn .3s ease both; }
+.start-here-grid { display:grid; gap:10px; padding:2px 24px 8px; }
+.start-here-option { display:flex; align-items:center; gap:14px; padding:14px 16px; border:1px solid var(--line); border-radius:13px; background:rgba(255,255,255,.5); transition:transform .2s ease, border-color .2s ease, background .2s ease; }
+.start-here-option:hover { transform:translateX(3px); border-color:var(--copper-pale); background:#fff; }
+.start-here-option__icon { display:grid; place-items:center; flex-shrink:0; width:38px; height:38px; border-radius:50%; background:rgba(169,88,56,.1); color:var(--copper); }
+.start-here-option strong { display:block; font:600 14.5px var(--sans); color:var(--ink); }
+.start-here-option small { display:block; margin-top:2px; color:var(--muted); font-size:12.5px; }
+.start-here-skip { display:block; width:calc(100% - 48px); margin:6px 24px 22px; padding:11px; border:0; border-radius:11px; background:transparent; color:var(--muted); font:13px var(--sans); text-decoration:underline; text-underline-offset:3px; cursor:pointer; }
+@media (max-width:520px) {
+  .start-here-grid { padding:2px 18px 6px; }
+  .start-here-skip { width:calc(100% - 36px); margin:6px 18px 18px; }
+}
+
 /* booking journey */
 .booking-page { min-height:100dvh; overflow:hidden; background-color:#eee8de; background-image:radial-gradient(circle at 82% 20%,rgba(255,255,255,.72),transparent 28%),linear-gradient(rgba(130,94,62,.075) 1px,transparent 1px),linear-gradient(90deg,rgba(130,94,62,.075) 1px,transparent 1px); background-size:auto,120px 120px,120px 120px; }
 .booking-page__intro { display:flex; justify-content:space-between; align-items:center; width:min(1160px,calc(100% - 48px)); margin:24px auto 15px; }

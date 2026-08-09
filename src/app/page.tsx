@@ -37,6 +37,7 @@ import { getPublishedServices } from "@/lib/services";
 import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
 import { HeroVideo } from "@/components/hero-video";
+import { StartHerePicker } from "@/components/start-here-picker";
 import { TiltCard } from "@/components/tilt-card";
 import { StatCounter } from "@/components/stat-counter";
 
@@ -93,6 +94,7 @@ export default async function HomePage() {
         description: "Authentic Vedic astrology readings, cosmic insights, and auspicious timing.",
         aggregateRating: stats.averageRating ? { "@type": "AggregateRating", ratingValue: stats.averageRating, reviewCount: Math.max(1, stats.consultationsDelivered) } : undefined,
       }} />
+      <StartHerePicker />
       <SiteHeader />
 
       <section className="hero-cosmic">
@@ -288,7 +290,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="tools-strip shell" aria-label="Free astrology tools">
+      <section className="tools-strip shell" id="tools" aria-label="Free astrology tools">
         <div className="tools-grid">
           {freeTools.map(({ icon: Icon, label, note, href }) => (
             <Link href={href} className="tool-card reveal" key={label}>
