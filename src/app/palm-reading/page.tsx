@@ -37,7 +37,7 @@ export default async function PalmReadingPage() {
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">
-            <div className="ask-persona-avatar"><Hand size={26} /></div>
+            <div className="ask-persona-avatar"><Image src="/images/trilochan-shashtri.jpg" alt="Pandit Trilochan Shashtri" fill sizes="64px" /></div>
             <strong>Pandit Trilochan Shashtri</strong>
             <span>Hast Rekha Shastri · Personal reading</span>
             <div className="palm-price-row">

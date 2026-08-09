@@ -30,7 +30,7 @@ export default function NumerologyPage() {
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">
-            <div className="ask-persona-avatar"><Hash size={26} /></div>
+            <div className="ask-persona-avatar"><Image src="/images/santram-shashtri.jpg" alt="Shree Santram Shashtri" fill sizes="64px" /></div>
             <strong>Shree Santram Shashtri</strong>
             <span>Live Jyotish Guide · Free tool</span>
             <ul>

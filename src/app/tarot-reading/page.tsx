@@ -35,7 +35,7 @@ export default async function TarotReadingPage() {
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">
-            <div className="ask-persona-avatar"><Layers size={26} /></div>
+            <div className="ask-persona-avatar"><Image src="/images/tarot-mystic-divya.jpg" alt="Tarot Mystic Divya" fill sizes="64px" /></div>
             <strong>Tarot Mystic Divya</strong>
             <span>Divine Light and Vision · Personal reading</span>
             <div className="ask-persona-price">{AI_READING_CURRENCY} {AI_TAROT_READING_PRICE}<small>ek baar ka payment</small></div>
