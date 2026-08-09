@@ -116,7 +116,12 @@ export default async function HomePage() {
           </div>
 
           <div className="reveal reveal--delay">
-            <HeroVideo />
+            <HeroVideo
+              posterSrc="/images/homepage-hero-poster.jpg"
+              mp4Src="/videos/homepage-hero.mp4"
+              webmSrc="/videos/homepage-hero.webm"
+              label="brand video"
+            />
           </div>
         </div>
       </section>
@@ -296,7 +301,13 @@ export default async function HomePage() {
 
       <section className="horoscope-strip shell" aria-label="Your daily horoscope">
         <div className="horoscope-banner reveal">
-          <Image src="/images/horoscope-hero.jpg" alt="A journal page reading Your Transits Today beside a phone showing today's transit times" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+          <HeroVideo
+            posterSrc="/images/horoscope-hero.jpg"
+            mp4Src="/videos/horoscope-hero.mp4"
+            webmSrc="/videos/horoscope-hero.webm"
+            label="daily horoscope video"
+            fill
+          />
         </div>
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> Your daily horoscope</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Pick your sign,<br /><em>see today&rsquo;s sky.</em></h2></div>
