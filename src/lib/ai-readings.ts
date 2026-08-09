@@ -28,7 +28,7 @@ export type AiReading = {
   leftPalmImagePath: string | null;
   rightPalmImagePath: string | null;
   tarotCards: TarotCardDraw[] | null;
-  faceImagePath: string | null;
+  faceImagePaths: string[] | null;
   price: number;
   currency: string;
   status: string;
@@ -50,7 +50,7 @@ type AiReadingDoc = {
   leftPalmImagePath?: string | null;
   rightPalmImagePath?: string | null;
   tarotCards?: TarotCardDraw[] | null;
-  faceImagePath?: string | null;
+  faceImagePaths?: string[] | null;
   price: number;
   currency: string;
   status: string;
@@ -77,7 +77,7 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     leftPalmImagePath: data.leftPalmImagePath ?? null,
     rightPalmImagePath: data.rightPalmImagePath ?? null,
     tarotCards: data.tarotCards ?? null,
-    faceImagePath: data.faceImagePath ?? null,
+    faceImagePaths: data.faceImagePaths ?? null,
     price: data.price,
     currency: data.currency,
     status: data.status,
@@ -220,24 +220,28 @@ async function downloadPalmImage(path: string): Promise<{ base64: string; mimeTy
 }
 
 /** Same private-bucket, server-only-read pattern as uploadPalmImage/downloadPalmImage above, for
- * the single face photo the face-reading route uploads. */
-export async function uploadFaceImage({ memberId, readingId, buffer, mimeType }: {
+ * the 1-5 face photos the face-reading route uploads (different angles/expressions of the same
+ * person) — index keeps each photo's path unique within the reading. */
+export async function uploadFaceImage({ memberId, readingId, index, buffer, mimeType }: {
   memberId: string;
   readingId: string;
+  index: number;
   buffer: Buffer;
   mimeType: string;
 }) {
   const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
-  const path = `face-readings/${memberId}/${readingId}/face.${extension}`;
+  const path = `face-readings/${memberId}/${readingId}/face-${index}.${extension}`;
   await bucket().file(path).save(buffer, { metadata: { contentType: mimeType } });
   return path;
 }
 
-async function downloadFaceImage(path: string): Promise<{ base64: string; mimeType: string }> {
-  const file = bucket().file(path);
-  const [buffer] = await file.download();
-  const [metadata] = await file.getMetadata();
-  return { base64: buffer.toString("base64"), mimeType: metadata.contentType || "image/jpeg" };
+async function downloadFaceImages(paths: string[]): Promise<{ base64: string; mimeType: string }[]> {
+  return Promise.all(paths.map(async (path) => {
+    const file = bucket().file(path);
+    const [buffer] = await file.download();
+    const [metadata] = await file.getMetadata();
+    return { base64: buffer.toString("base64"), mimeType: metadata.contentType || "image/jpeg" };
+  }));
 }
 
 /** Reserves a Firestore doc id before the doc is written — the palm/face-reading upload routes
@@ -304,11 +308,12 @@ export async function createPendingTarotReading({ memberId, clientName, question
   return toReading(await ref.get());
 }
 
-export async function createPendingFaceReading({ readingId, memberId, clientName, faceImagePath }: {
+export async function createPendingFaceReading({ readingId, memberId, clientName, faceImagePaths, question }: {
   readingId: string;
   memberId: string;
   clientName: string;
-  faceImagePath: string;
+  faceImagePaths: string[];
+  question: string;
 }) {
   const ref = collection.doc(readingId);
   await ref.set({
@@ -318,8 +323,8 @@ export async function createPendingFaceReading({ readingId, memberId, clientName
     birthDate: "",
     birthTime: "",
     birthPlace: "",
-    question: null,
-    faceImagePath,
+    question: question || null,
+    faceImagePaths,
     price: AI_FACE_READING_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
@@ -437,9 +442,9 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
       return getTarotReadingAnswer({ name: reading.clientName, question: reading.question ?? "", cards: reading.tarotCards });
     }
     if (reading.readingType === "face") {
-      if (!reading.faceImagePath) throw new Error("Face photo is missing for this reading.");
-      const faceImage = await downloadFaceImage(reading.faceImagePath);
-      return getFaceReadingAnswer({ name: reading.clientName, faceImage });
+      if (!reading.faceImagePaths || reading.faceImagePaths.length === 0) throw new Error("Face photo is missing for this reading.");
+      const faceImages = await downloadFaceImages(reading.faceImagePaths);
+      return getFaceReadingAnswer({ name: reading.clientName, question: reading.question ?? "", faceImages });
     }
     if (reading.readingType === "vastu") {
       return getVastuReadingAnswer({ name: reading.clientName, question: reading.question ?? "" });

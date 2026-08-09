@@ -7,14 +7,13 @@ export const dynamic = "force-dynamic";
 
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
+const MAX_IMAGES = 5;
 
-async function readImageField(form: FormData, field: string): Promise<{ buffer: Buffer; mimeType: string } | { error: string }> {
-  const file = form.get(field);
+function readImageFile(file: FormDataEntryValue | null): { buffer: Promise<Buffer>; mimeType: string } | { error: string } {
   if (!(file instanceof File)) return { error: "Please upload a clear photo of your face." };
-  if (!ALLOWED_MIME_TYPES.has(file.type)) return { error: "Your photo must be JPEG, PNG, or WebP." };
-  if (file.size > MAX_IMAGE_BYTES) return { error: "Your photo must be under 6MB." };
-  const buffer = Buffer.from(await file.arrayBuffer());
-  return { buffer, mimeType: file.type };
+  if (!ALLOWED_MIME_TYPES.has(file.type)) return { error: "Your photos must be JPEG, PNG, or WebP." };
+  if (file.size > MAX_IMAGE_BYTES) return { error: "Each photo must be under 6MB." };
+  return { buffer: file.arrayBuffer().then(Buffer.from), mimeType: file.type };
 }
 
 export async function POST(request: Request) {
@@ -37,13 +36,25 @@ export async function POST(request: Request) {
   const clientName = String(form.get("clientName") ?? "").trim().slice(0, 120);
   if (!clientName) return Response.json({ error: "Please share your name." }, { status: 400 });
 
-  const image = await readImageField(form, "faceImage");
-  if ("error" in image) return Response.json({ error: image.error }, { status: 400 });
+  const question = String(form.get("question") ?? "").trim().slice(0, 600);
+
+  const files = form.getAll("faceImages");
+  if (files.length === 0) return Response.json({ error: "Please upload at least one photo of your face." }, { status: 400 });
+  if (files.length > MAX_IMAGES) return Response.json({ error: `Please upload at most ${MAX_IMAGES} photos.` }, { status: 400 });
+
+  const images: { buffer: Promise<Buffer>; mimeType: string }[] = [];
+  for (const file of files) {
+    const image = readImageFile(file);
+    if ("error" in image) return Response.json({ error: image.error }, { status: 400 });
+    images.push(image);
+  }
 
   const readingId = reserveReadingId();
-  const faceImagePath = await uploadFaceImage({ memberId: member.id, readingId, buffer: image.buffer, mimeType: image.mimeType });
+  const faceImagePaths = await Promise.all(images.map(async (image, index) =>
+    uploadFaceImage({ memberId: member.id, readingId, index, buffer: await image.buffer, mimeType: image.mimeType }),
+  ));
 
-  const reading = await createPendingFaceReading({ readingId, memberId: member.id, clientName, faceImagePath });
+  const reading = await createPendingFaceReading({ readingId, memberId: member.id, clientName, faceImagePaths, question });
 
   const order = await razorpay.orders.create({
     amount: AI_FACE_READING_PRICE * 100,

@@ -2,10 +2,13 @@
 
 import { useRef, useState } from "react";
 import Link from "next/link";
-import { Check, LoaderCircle, ScanFace, Sparkles, UploadCloud, UserRound, X } from "lucide-react";
+import { Check, LoaderCircle, Plus, ScanFace, Sparkles, UploadCloud, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 type MemberPrefill = { name: string; email: string };
+type FacePhoto = { file: File; preview: string };
+
+const MAX_PHOTOS = 5;
 
 /** Same client-side compression rationale as the palm-reading form — phone camera photos easily
  * run 4-8MB, and serverless request-body limits (as well as plain upload speed) make that worth
@@ -33,8 +36,8 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
   onlinePaymentsAvailable: boolean;
 }) {
   const [clientName, setClientName] = useState(member?.name ?? "");
-  const [file, setFile] = useState<File | null>(null);
-  const [preview, setPreview] = useState<string | null>(null);
+  const [question, setQuestion] = useState("");
+  const [photos, setPhotos] = useState<FacePhoto[]>([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [waiting, setWaiting] = useState(false);
@@ -47,7 +50,7 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
       <div className="ask-signin">
         <ScanFace size={26} />
         <h2>Face reading ke liye sign in karein</h2>
-        <p>Ek free account banayein taaki aap apni tasveer bhej saken aur apni report seedhe apne dashboard mein pa saken.</p>
+        <p>Ek free account banayein taaki aap apni tasveerein bhej saken aur apni report seedhe apne dashboard mein pa saken.</p>
         <div className="ask-signin__actions">
           <Link href="/account?mode=register" className="button">Account banayein</Link>
           <Link href="/account" className="button button--ghost">Sign in</Link>
@@ -59,11 +62,20 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
 
   const memberEmail = member.email;
 
-  async function pickFile(picked: File) {
+  async function pickFiles(picked: FileList) {
     setError("");
-    const compressed = await compressImage(picked);
-    setFile(compressed);
-    setPreview(URL.createObjectURL(compressed));
+    const remaining = MAX_PHOTOS - photos.length;
+    if (remaining <= 0) { setError(`Aap zyada se zyada ${MAX_PHOTOS} tasveerein bhej sakte hain.`); return; }
+    const toAdd = Array.from(picked).slice(0, remaining);
+    const compressed = await Promise.all(toAdd.map(async (file) => {
+      const compressedFile = await compressImage(file);
+      return { file: compressedFile, preview: URL.createObjectURL(compressedFile) };
+    }));
+    setPhotos((current) => [...current, ...compressed]);
+  }
+
+  function removePhoto(index: number) {
+    setPhotos((current) => current.filter((_, i) => i !== index));
   }
 
   async function pollForAnswer(id: string, attemptsLeft: number) {
@@ -92,13 +104,14 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
   async function submit() {
     setError("");
     if (!clientName.trim()) { setError("Please apna naam likhein."); return; }
-    if (!file) { setError("Apni chehre ki tasveer upload karna zaroori hai."); return; }
+    if (photos.length === 0) { setError("Kam se kam ek chehre ki tasveer upload karna zaroori hai."); return; }
 
     setLoading(true);
     try {
       const form = new FormData();
       form.set("clientName", clientName);
-      form.set("faceImage", file);
+      form.set("question", question);
+      for (const photo of photos) form.append("faceImages", photo.file);
       const response = await fetch("/api/ai-readings/face", { method: "POST", body: form });
       const data = await response.json();
       if (!response.ok || !data.orderId) throw new Error(data.error || "Aapki report shuru nahi ho saki.");
@@ -147,7 +160,7 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
         </div>
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">Dashboard mein dekhein</Link>
-          <button type="button" className="button" onClick={() => { setAnswer(null); setFile(null); setPreview(null); setReadingId(null); }}>Nayi reading lein</button>
+          <button type="button" className="button" onClick={() => { setAnswer(null); setPhotos([]); setQuestion(""); setReadingId(null); }}>Nayi reading lein</button>
         </div>
       </div>
     );
@@ -166,22 +179,31 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
 
   return (
     <div className="ask-form-card">
-      <header><div><p>{currency} {price} · poori Mukh Samudrik report</p><h2>Apni chehre ki tasveer bhejein</h2></div></header>
+      <header><div><p>{currency} {price} · poori Mukh Samudrik report</p><h2>Apni chehre ki tasveerein bhejein</h2></div></header>
       <div className="booking-fields">
         <label className="wide"><span>Aapka naam</span><div><UserRound size={16} /><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Poora naam" /></div></label>
       </div>
-      <div className="palm-upload-slot" onClick={() => inputRef.current?.click()}>
-        <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" hidden onChange={(event) => { const picked = event.target.files?.[0]; if (picked) pickFile(picked); }} />
-        {preview ? (
-          // eslint-disable-next-line @next/next/no-img-element -- a local object: URL preview, not a next/image-eligible remote asset
-          <img src={preview} alt="Face preview" className="palm-upload-slot__preview" />
-        ) : (
-          <UploadCloud size={26} />
+
+      <div className="face-upload-grid">
+        {photos.map((photo, index) => (
+          <div className="face-upload-tile face-upload-tile--filled" key={photo.preview}>
+            {/* eslint-disable-next-line @next/next/no-img-element -- a local object: URL preview, not a next/image-eligible remote asset */}
+            <img src={photo.preview} alt={`Chehra tasveer ${index + 1}`} className="face-upload-tile__preview" />
+            <button type="button" className="face-upload-tile__remove" aria-label="Tasveer hataayein" onClick={() => removePhoto(index)}><X size={13} /></button>
+          </div>
+        ))}
+        {photos.length < MAX_PHOTOS && (
+          <div className="face-upload-tile face-upload-tile--empty" onClick={() => inputRef.current?.click()}>
+            <input ref={inputRef} type="file" accept="image/jpeg,image/png,image/webp" multiple hidden onChange={(event) => { if (event.target.files?.length) pickFiles(event.target.files); event.target.value = ""; }} />
+            {photos.length === 0 ? <UploadCloud size={22} /> : <Plus size={22} />}
+            <span>{photos.length === 0 ? "Photo chunein" : "Aur jodein"}</span>
+          </div>
         )}
-        <strong>Chehre ki tasveer</strong>
-        <span>{file ? file.name : "Yahan click karke photo chunein"}</span>
       </div>
-      <p className="palm-upload-tip">Tip: acchi roshni mein, seedhe camera ki taraf dekhkar, bina chashme/topi ke photo lein — jitni saaf tasveer, utni behtar reading.</p>
+      <p className="palm-upload-tip">Tip: 1 se {MAX_PHOTOS} tak tasveerein bhej sakte hain (alag angles jitna behtar) — acchi roshni mein, seedhe camera ki taraf dekhkar, bina chashme/topi ke photo lein.</p>
+
+      <label className="wide" style={{ marginTop: 16 }}><span>Aapka sawaal (agar koi ho)</span><textarea rows={3} maxLength={600} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Jaise: Mera career kaisa rahega? Ya koi khaas sawaal jo aap Acharya ji se poochna chahte hain." /><small>{question.length}/600</small></label>
+
       <button type="button" className="button ask-form-card__submit" disabled={loading || !onlinePaymentsAvailable} onClick={submit}>
         {loading ? "Taiyaar ho raha hai…" : `Pay ${currency} ${price} & meri report paayein`}
       </button>

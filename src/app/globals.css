@@ -416,6 +416,16 @@ button { border: 0; }
 .palm-upload-slot__preview { width:100%; height:110px; border-radius:10px; object-fit:cover; }
 .palm-upload-tip { margin:12px 0 0; color:var(--faint); font-size:12.5px; line-height:1.6; }
 
+.face-upload-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(96px,1fr)); gap:12px; margin-top:20px; }
+.face-upload-tile { position:relative; display:flex; flex-direction:column; align-items:center; justify-content:center; gap:6px; aspect-ratio:1; border-radius:14px; overflow:hidden; }
+.face-upload-tile--empty { border:1.5px dashed var(--line); cursor:pointer; color:var(--muted); background:rgba(255,255,255,.35); transition:.2s; }
+.face-upload-tile--empty:hover { border-color:var(--copper); color:var(--copper-dark); }
+.face-upload-tile--empty svg { color:var(--copper); }
+.face-upload-tile--empty span { font-size:11px; text-align:center; }
+.face-upload-tile__preview { width:100%; height:100%; object-fit:cover; }
+.face-upload-tile__remove { position:absolute; top:5px; right:5px; display:grid; place-items:center; width:22px; height:22px; border-radius:50%; color:#fff; background:rgba(30,20,14,.62); backdrop-filter:blur(2px); }
+.face-upload-tile__remove:hover { background:rgba(30,20,14,.85); }
+
 .tarot-card-grid { display:grid; grid-template-columns:repeat(3,1fr); gap:14px; margin:22px 0; }
 .tarot-card { display:flex; flex-direction:column; align-items:center; gap:8px; padding:24px 12px 20px; border:1.5px solid var(--line); border-radius:16px; text-align:center; background:linear-gradient(160deg,rgba(169,88,56,.08),rgba(255,255,255,.5)); animation:tarot-reveal .5s ease both; }
 .tarot-card:nth-child(2) { animation-delay:.12s; }
