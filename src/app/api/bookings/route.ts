@@ -11,7 +11,7 @@ import { ensureInvoiceForBooking } from "@/lib/billing";
 import { validateAvailableSlot } from "@/lib/scheduling";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
-import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
@@ -22,8 +22,6 @@ type BookingPayload = {
   serviceId?: string;
   practitionerId?: string;
   bookingDate?: string;
-  clientName?: string;
-  clientEmail?: string;
   clientPhone?: string;
   birthDate?: string;
   birthTime?: string;
@@ -101,14 +99,15 @@ export async function GET() {
 export async function POST(request: Request) {
   const body = (await request.json()) as BookingPayload;
   const [member, settings] = await Promise.all([getCurrentMember(), getStudioSettings()]);
+  if (!member) return Response.json({ error: "Sign in to book a consultation." }, { status: 401 });
 
-  const throttle = await checkRateLimit("booking-create", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 8, 600);
+  const throttle = await checkRateLimit("booking-create", `member:${member.id}`, 8, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
   const serviceId = body.serviceId?.trim() ?? "";
   const practitionerId = body.practitionerId?.trim() ?? "";
   const bookingDate = body.bookingDate?.trim() ?? "";
-  const clientName = member?.name ?? clean(body.clientName, 120);
-  const clientEmail = member?.email ?? clean(body.clientEmail, 180).toLowerCase();
+  const clientName = member.name;
+  const clientEmail = member.email;
   const clientPhone = clean(body.clientPhone, 40);
   const birthDate = clean(body.birthDate, 10);
   const birthTime = clean(body.birthTime, 8);
@@ -144,7 +143,7 @@ export async function POST(request: Request) {
   const available = await validateAvailableSlot({ date: bookingDate, duration: service.duration, practitionerId, startsAt: scheduledAt });
   if (!available) return Response.json({ error: "This time is no longer available. Choose another open slot." }, { status: 409 });
 
-  const discountPercent = member ? await getMemberDiscountPercent(member.id) : 0;
+  const discountPercent = await getMemberDiscountPercent(member.id);
   const servicePrice = applyDiscount(service.price, discountPercent);
 
   const dateCode = new Date().toISOString().slice(2, 10).replaceAll("-", "");
@@ -228,7 +227,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Booking could not be completed." }, { status: 500 });
   }
 
-  await ensureInvoiceForBooking(created, member?.id);
+  await ensureInvoiceForBooking(created, member.id);
   getAdminIdsWithPermission("bookings").then((adminIds) => notifyAdmins(adminIds, {
     type: "booking.created",
     title: `New booking · ${created.serviceTitle}`,
@@ -246,14 +245,12 @@ export async function POST(request: Request) {
     }).catch(() => {});
   }
   const scheduledLabel = created.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Kolkata" });
-  if (member) {
-    await sendBookingNotification({
-      memberEmail: member.email,
-      bookingId: created.id,
-      subject: `${created.serviceTitle} · ${created.reference}`,
-      body: `Your consultation with ${created.practitionerName} is reserved for ${scheduledLabel}. We will keep booking and payment updates together in this conversation.`,
-    });
-  }
+  await sendBookingNotification({
+    memberEmail: member.email,
+    bookingId: created.id,
+    subject: `${created.serviceTitle} · ${created.reference}`,
+    body: `Your consultation with ${created.practitionerName} is reserved for ${scheduledLabel}. We will keep booking and payment updates together in this conversation.`,
+  });
   await sendEmail({
     to: clientEmail,
     subject: `Booking confirmed · ${created.reference}`,
@@ -262,7 +259,7 @@ export async function POST(request: Request) {
       name: clientName,
       body: `Your ${created.serviceTitle} with ${created.practitionerName} is reserved for ${scheduledLabel}. Reference: ${created.reference}.`,
       ctaLabel: "View your booking",
-      ctaUrl: new URL(member ? "/dashboard/consultations" : "/", getSiteUrl()).toString(),
+      ctaUrl: new URL("/dashboard/consultations", getSiteUrl()).toString(),
     }),
   }).catch(() => {});
   return Response.json(created, { status: 201 });
