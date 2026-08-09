@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { HeroVideo } from "@/components/hero-video";
 import { ShareButtons } from "@/components/share-buttons";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -29,6 +30,18 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
         <p className="eyebrow"><span /> Live daily horoscope</p>
         <h1>Today&rsquo;s sky,<br /><em>sign by sign.</em></h1>
         <p className="zodiac-hero__lead">Shree Santram Shashtri reads the day&rsquo;s planetary transits for every sign — choose yours below.</p>
+      </section>
+
+      <section className="shell">
+        <div className="horoscope-banner">
+          <HeroVideo
+            posterSrc="/images/horoscope-hero.jpg"
+            mp4Src="/videos/horoscope-hero.mp4"
+            webmSrc="/videos/horoscope-hero.webm"
+            label="daily horoscope video"
+            fill
+          />
+        </div>
       </section>
 
       <section className="zodiac-grid shell">
