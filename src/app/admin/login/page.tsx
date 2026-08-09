@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -7,6 +8,10 @@ import { BrandMark } from "@/components/brand-mark";
 import { getAdminCount, getCurrentAdmin } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Studio Admin Sign In",
+  robots: { index: false, follow: false },
+};
 
 export default async function AdminLoginPage() {
   if (await getCurrentAdmin()) redirect("/admin");
