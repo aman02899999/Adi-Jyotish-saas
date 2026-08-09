@@ -1,10 +1,14 @@
 "use client";
 
 import { useEffect } from "react";
-import { AlertTriangle, ArrowRight, RotateCw } from "lucide-react";
+import { AlertTriangle, ArrowLeft, RotateCw } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 
-export default function Error({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
+// A plain error.tsx at the app root exists too, but its only recovery link is "Return home" to
+// the public marketing site ("/") — dropping an admin mid-task out of the workspace entirely.
+// This segment-scoped boundary catches errors from any page under /admin instead and sends
+// "go back" to the actual admin overview, not the storefront.
+export default function AdminError({ error, reset }: { error: Error & { digest?: string }; reset: () => void }) {
   useEffect(() => {
     import("@sentry/nextjs").then(({ captureException }) => captureException(error)).catch(() => {});
   }, [error]);
@@ -21,16 +25,15 @@ export default function Error({ error, reset }: { error: Error & { digest?: stri
   return (
     <main className="error-page">
       <div className="error-page__seal"><AlertTriangle size={26} /></div>
-      <p className="error-page__code">Something went wrong</p>
-      <h1>The sky glitched<br /><em>for a moment.</em></h1>
-      <p>We&rsquo;ve been notified. Please try again, or head back home if the trouble continues.</p>
+      <p className="error-page__code">Workspace error</p>
+      <h1>This screen hit<br /><em>a snag.</em></h1>
+      <p>We&rsquo;ve been notified. Try again, or head back to the admin overview if the trouble continues.</p>
       <div className="error-page__actions">
         <button type="button" className="button" onClick={tryAgain}>Try again <RotateCw size={15} /></button>
         {/* A plain <a>, not next/link — Next's client-side router can get stuck on the errored
             segment it's leaving, so a soft navigation away from an error boundary is unreliable.
             A hard navigation always works since it discards the broken router state entirely. */}
-        {/* eslint-disable-next-line @next/next/no-html-link-for-pages -- intentional hard navigation, see comment above */}
-        <a href="/" className="button button--ghost">Return home <ArrowRight size={16} /></a>
+        <a href="/admin" className="button button--ghost"><ArrowLeft size={16} /> Back to admin overview</a>
       </div>
       {error.digest && <code className="error-page__detail">Reference: {error.digest}</code>}
       <BrandMark compact />
