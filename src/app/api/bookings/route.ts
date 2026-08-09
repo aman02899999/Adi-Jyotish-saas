@@ -70,7 +70,9 @@ export function bookingFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fi
     serviceDuration: data.serviceDuration as number,
     practitionerId: (data.practitionerId as string | null) ?? null,
     practitionerName: (data.practitionerName as string | null) ?? null,
-    clientName: data.clientName as string,
+    // Same class of gap as scheduledAt above: admin Overview and admin Bookings both call
+    // .split(" ") on this directly to build initials, so a booking missing it crashed both pages.
+    clientName: (data.clientName as string | undefined) ?? "Guest",
     clientEmail: data.clientEmail as string,
     clientPhone: (data.clientPhone as string | null) ?? null,
     birthDate: data.birthDate as string,

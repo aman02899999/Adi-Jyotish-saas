@@ -193,8 +193,8 @@ export async function backfillInvoices(): Promise<void> {
       const existing = await ref.get();
       if (existing.exists) return;
       const data = doc.data() as Record<string, unknown>;
-      const servicePrice = data.servicePrice as number;
-      const clientEmail = data.clientEmail as string;
+      const servicePrice = (data.servicePrice as number | undefined) ?? 0;
+      const clientEmail = (data.clientEmail as string | undefined) ?? "";
       const paymentStatus = data.paymentStatus as string;
       const createdAt = toDate(data.createdAt as FirebaseFirestore.Timestamp);
       const scheduledAt = toDate(data.scheduledAt as FirebaseFirestore.Timestamp);
@@ -209,9 +209,13 @@ export async function backfillInvoices(): Promise<void> {
           number: invoiceNumber(doc.id, createdAt),
           bookingId: doc.id,
           memberId,
-          customerName: data.clientName as string,
+          // Firestore .create() rejects undefined field values outright, so a single legacy
+          // booking missing any of these strings used to throw here and take down the whole
+          // batch - crashing both admin Billing (getAdminBilling) and every member's Billing
+          // page (getMemberBilling), since both call backfillInvoices() unconditionally.
+          customerName: (data.clientName as string | undefined) ?? "Guest",
           customerEmail: clientEmail,
-          description: data.serviceTitle as string,
+          description: (data.serviceTitle as string | undefined) ?? "Consultation",
           subtotal,
           taxRate: settings.gstRate,
           taxAmount,
