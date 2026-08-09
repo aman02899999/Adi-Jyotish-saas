@@ -742,7 +742,8 @@ export async function getPractitionerDirectory(activeOnly = false): Promise<Prac
         rules: rulesSnap.docs.map((r) => ({ id: r.id, practitionerId: doc.id, ...(r.data() as Omit<AvailabilityRule, "id" | "practitionerId">) })),
         timeOff: timeOffSnap.docs.map((t) => {
           const data = t.data();
-          return { id: t.id, practitionerId: doc.id, reason: data.reason ?? null, startsAt: (data.startsAt as FirebaseFirestore.Timestamp).toDate(), endsAt: (data.endsAt as FirebaseFirestore.Timestamp).toDate() };
+          // Only endsAt is guaranteed present here (it's the query's own range filter) — startsAt isn't.
+          return { id: t.id, practitionerId: doc.id, reason: data.reason ?? null, startsAt: (data.startsAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? data.endsAt.toDate(), endsAt: (data.endsAt as FirebaseFirestore.Timestamp).toDate() };
         }),
       };
     }),

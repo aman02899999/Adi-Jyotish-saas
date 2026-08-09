@@ -57,6 +57,10 @@ export type BookingRecord = {
 
 export function bookingFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): BookingRecord {
   const data = doc.data() as Record<string, unknown>;
+  // scheduledAt was previously read unguarded — getAnalytics() queries bookings ordered by
+  // createdAt (not scheduledAt), so unlike GET below it isn't protected by Firestore's implicit
+  // orderBy-field-must-exist filtering. A single legacy/corrupt booking missing scheduledAt
+  // crashed the entire admin Overview page (which calls getAnalytics on every booking).
   return {
     id: doc.id,
     reference: data.reference as string,
@@ -72,7 +76,7 @@ export function bookingFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fi
     birthDate: data.birthDate as string,
     birthTime: data.birthTime as string,
     birthPlace: data.birthPlace as string,
-    scheduledAt: (data.scheduledAt as FirebaseFirestore.Timestamp).toDate(),
+    scheduledAt: (data.scheduledAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? new Date(),
     notes: (data.notes as string | null) ?? null,
     status: data.status as string,
     paymentStatus: data.paymentStatus as string,
