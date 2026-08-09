@@ -17,7 +17,7 @@ export default async function AdminChatPage() {
 
         <section className="admin-table-card">
           <div className="admin-table-header"><div><h2>Active sessions</h2><p>Instant chats currently metering against a member&apos;s wallet.</p></div></div>
-          <div className="wallet-table wallet-table--ledger">
+          <div className="wallet-table wallet-table--chat">
             <div className="wallet-table__head"><span>Member</span><span>Practitioner</span><span>Rate</span><span>Started</span><span /></div>
             {sessions.map((session) => (
               <div className="wallet-table__row" key={session.id}>

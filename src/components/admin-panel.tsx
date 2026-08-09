@@ -150,9 +150,9 @@ export function AdminPanel({ initialServices }: { initialServices: AdminService[
   return (
     <>
       <section className="admin-stats" aria-label="Service summary">
-        <article><span><Sparkles size={20} /></span><div><small>All services</small><strong>{items.length}</strong><p><b>+2</b> this month</p></div></article>
+        <article><span><Sparkles size={20} /></span><div><small>All services</small><strong>{items.length}</strong><p>Full catalogue size</p></div></article>
         <article><span><Eye size={20} /></span><div><small>Published</small><strong>{stats.active}</strong><p>{items.length - stats.active} drafts hidden</p></div></article>
-        <article><span><CircleDollarSign size={20} /></span><div><small>Est. revenue</small><strong>₹{stats.revenue.toLocaleString()}</strong><p><b>+12.4%</b> vs last month</p></div></article>
+        <article><span><CircleDollarSign size={20} /></span><div><small>Est. monthly potential</small><strong>₹{stats.revenue.toLocaleString()}</strong><p>Catalogue-based projection, not billed revenue</p></div></article>
         <article><span><Star size={20} /></span><div><small>Average price</small><strong>₹{stats.average}</strong><p>Across the catalogue</p></div></article>
       </section>
 

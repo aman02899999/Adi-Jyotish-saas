@@ -2203,7 +2203,8 @@ button { border: 0; }
 
 /* admin wallets */
 .wallet-table__head,.wallet-table__row { display:grid; grid-template-columns:minmax(150px,1.4fr) 100px; align-items:center; gap:9px; padding-inline:19px; }
-.wallet-table--ledger .wallet-table__head,.wallet-table--ledger .wallet-table__row { grid-template-columns:minmax(150px,1.3fr) 90px 90px 100px 110px; }
+.wallet-table--ledger .wallet-table__head,.wallet-table--ledger .wallet-table__row { grid-template-columns:minmax(150px,1.3fr) 90px 90px 132px 110px; }
+.wallet-table--chat .wallet-table__head,.wallet-table--chat .wallet-table__row { grid-template-columns:minmax(150px,1.2fr) 150px 80px 100px 100px; }
 .wallet-table__head { min-height:39px; border-bottom:1px solid var(--line); color:var(--faint); background:rgba(227,219,207,.3); font-size:12px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
 .wallet-table__head span { overflow:hidden; text-overflow:ellipsis; white-space:nowrap; }
 .wallet-table__row { min-height:62px; border-bottom:1px solid rgba(100,75,55,.09); }

@@ -95,7 +95,7 @@ export function AdminGemstoneCategories({ initialCategories }: { initialCategori
               <label className="field field--full"><span>Category name</span><input required maxLength={80} value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} placeholder="e.g. Ruby" /></label>
               <label className="field"><span>Slug (optional)</span><input maxLength={100} value={form.slug} onChange={(event) => setForm({ ...form, slug: event.target.value })} placeholder="auto-generated from name" /></label>
               <label className="field"><span>Sort order</span><input min="0" type="number" value={form.sortOrder} onChange={(event) => setForm({ ...form, sortOrder: event.target.value })} /></label>
-              <label className="field field--full"><span>Image URL (optional)</span><input type="url" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} placeholder="https://…" /></label>
+              <label className="field field--full"><span>Image URL (optional)</span><input type="text" value={form.imageUrl} onChange={(event) => setForm({ ...form, imageUrl: event.target.value })} placeholder="https://…" /></label>
               <label className="field field--full"><span>Description</span><textarea rows={3} maxLength={400} value={form.description} onChange={(event) => setForm({ ...form, description: event.target.value })} /></label>
               <div className="form-options field--full">
                 <label><button type="button" className={`switch ${form.active ? "on" : ""}`} onClick={() => setForm({ ...form, active: !form.active })}><i /></button><span><strong>Visible on storefront</strong><small>Shown in category browsing</small></span></label>
