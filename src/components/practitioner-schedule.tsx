@@ -16,6 +16,7 @@ export function PractitionerSchedule({ initialRules, initialTimeOff }: { initial
   const [timeOff, setTimeOff] = useState<TimeOff[]>(initialTimeOff);
   const [newOff, setNewOff] = useState({ startsAt: "", endsAt: "", reason: "" });
   const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
 
   function updateRule(weekday: number, patch: Partial<Rule>) {
@@ -34,14 +35,22 @@ export function PractitionerSchedule({ initialRules, initialTimeOff }: { initial
 
   async function save() {
     setSaving(true);
-    const response = await fetch("/api/practitioner/schedule", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ rules: rules.filter((rule) => rule.active), timeOff }),
-    });
-    if (response.ok) setNotice("Schedule saved.");
-    else setNotice("Schedule could not be saved.");
-    setSaving(false);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/practitioner/schedule", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ rules: rules.filter((rule) => rule.active), timeOff }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Schedule could not be saved.");
+      setNotice("Schedule saved.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -85,6 +94,7 @@ export function PractitionerSchedule({ initialRules, initialTimeOff }: { initial
         <button className="button" disabled={saving} onClick={save}><Save size={15} />{saving ? "Saving…" : "Save schedule"}</button>
       </div>
 
+      {error && <p className="admin-auth-error" role="alert">{error}</p>}
       {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
     </>
   );

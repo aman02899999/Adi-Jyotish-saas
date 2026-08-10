@@ -19,22 +19,24 @@ export function PractitionerEarnings({ initialStats, initialPayouts }: { initial
     event.preventDefault();
     setError("");
     setSaving(true);
-    const response = await fetch("/api/practitioner/payouts", {
-      method: "POST",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify({ amount: Number(amount), notes }),
-    });
-    const data = await response.json();
-    if (response.ok) {
+    try {
+      const response = await fetch("/api/practitioner/payouts", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ amount: Number(amount), notes }),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Payout could not be requested.");
       setPayouts((current) => [data, ...current]);
       setStats((current) => ({ ...current, pendingOut: current.pendingOut + data.amount, availableBalance: current.availableBalance - data.amount }));
       setAmount("");
       setNotes("");
       setNotice("Payout requested.");
-    } else {
-      setError(data.error || "Payout could not be requested.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } finally {
+      setSaving(false);
     }
-    setSaving(false);
   }
 
   return (
@@ -51,7 +53,7 @@ export function PractitionerEarnings({ initialStats, initialPayouts }: { initial
         <form className="settings-fields" style={{ padding: "18px 19px" }} onSubmit={requestPayout}>
           <label><span>Amount (₹)</span><input type="number" min="100" max={stats.availableBalance} required value={amount} onChange={(event) => setAmount(event.target.value)} placeholder={`Up to ₹${stats.availableBalance}`} /></label>
           <label className="field--full"><span>Note (optional)</span><input value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="Bank details or a note for the finance team" /></label>
-          {error && <p className="admin-auth-error">{error}</p>}
+          {error && <p className="admin-auth-error" role="alert">{error}</p>}
           <button className="button button--small" disabled={saving || stats.availableBalance < 100}>{saving ? "Requesting…" : "Request payout"}</button>
         </form>
       </section>

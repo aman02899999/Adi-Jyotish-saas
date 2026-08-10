@@ -8,6 +8,7 @@ import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
 
 export class PayoutError extends Error {}
 export class KundliSummaryError extends Error {}
+export class ScheduleError extends Error {}
 
 export type PractitionerPayout = {
   id: string;
@@ -69,14 +70,26 @@ async function payoutTotalsForPractitioner(practitionerId: string) {
   return { paidOut, pendingOut };
 }
 
+/** Instant-chat revenue is a completely separate path from bookings: a member's wallet hold is
+ * captured straight onto the chatSessions doc (see chat.ts's endChatSession), with no write-back
+ * to `bookings` or any shared earnings ledger. Without summing this too, a practitioner who does
+ * paid chat work sees $0 of it reflected here and can never request a payout against it. */
+async function chatEarningsForPractitioner(practitionerId: string) {
+  const snap = await db.collection("chatSessions").where("practitionerId", "==", practitionerId).where("status", "==", "ended").get();
+  let earned = 0;
+  for (const doc of snap.docs) earned += (doc.data() as { capturedAmount: number | null }).capturedAmount ?? 0;
+  return earned;
+}
+
 export async function getPractitionerStats(practitionerId: string) {
-  const [bookingsSnap, reviewsSnap, { paidOut, pendingOut }] = await Promise.all([
+  const [bookingsSnap, reviewsSnap, chatEarned, { paidOut, pendingOut }] = await Promise.all([
     db.collection("bookings").where("practitionerId", "==", practitionerId).get(),
     db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published").get(),
+    chatEarningsForPractitioner(practitionerId),
     payoutTotalsForPractitioner(practitionerId),
   ]);
 
-  let totalEarned = 0;
+  let totalEarned = chatEarned;
   let completedCount = 0;
   let upcomingCount = 0;
   const now = Date.now();
@@ -158,29 +171,60 @@ export async function getPractitionerSchedule(practitionerId: string) {
   return { rules, timeOff };
 }
 
+const SCHEDULE_TIME_RE = /^([01]\d|2[0-3]):[0-5]\d$/;
+
 export async function updatePractitionerSchedule(practitionerId: string, input: {
   rules: Array<{ weekday: number; startTime: string; endTime: string; active?: boolean }>;
   timeOff: Array<{ startsAt: string; endsAt: string; reason?: string }>;
 }) {
-  const rules = input.rules.filter((rule) =>
-    Number.isInteger(rule.weekday) && rule.weekday >= 0 && rule.weekday <= 6 &&
-    /^\d{2}:\d{2}$/.test(rule.startTime) && /^\d{2}:\d{2}$/.test(rule.endTime) && rule.startTime < rule.endTime);
-  const timeOff = input.timeOff
-    .map((item) => ({ startsAt: new Date(item.startsAt), endsAt: new Date(item.endsAt), reason: item.reason?.trim().slice(0, 180) || null }))
-    .filter((item) => !Number.isNaN(item.startsAt.getTime()) && !Number.isNaN(item.endsAt.getTime()) && item.startsAt < item.endsAt);
+  // Previously these invalid entries were silently filter()-dropped rather than rejected — a
+  // malformed client payload (or a real bug in the caller) could wipe a practitioner's entire
+  // existing schedule while the request still returned 200 "success" with no error surfaced. The
+  // old regex (`\d{2}:\d{2}`) also matched nonsense like "99:99" since it never checked the actual
+  // hour/minute ranges.
+  const rules = input.rules.map((rule) => {
+    if (!Number.isInteger(rule.weekday) || rule.weekday < 0 || rule.weekday > 6) throw new ScheduleError("Each availability rule needs a valid day of the week.");
+    if (!SCHEDULE_TIME_RE.test(rule.startTime) || !SCHEDULE_TIME_RE.test(rule.endTime)) throw new ScheduleError("Enter valid start and end times.");
+    if (rule.startTime >= rule.endTime) throw new ScheduleError("Start time must be before end time.");
+    return { weekday: rule.weekday, startTime: rule.startTime, endTime: rule.endTime, active: rule.active ?? true };
+  });
+  // Two active blocks on the same weekday that overlap would mean the practitioner is
+  // simultaneously "available" in two places at once — reject rather than silently accept both.
+  const activeByWeekday = new Map<number, Array<{ startTime: string; endTime: string }>>();
+  for (const rule of rules) {
+    if (!rule.active) continue;
+    const sameDay = activeByWeekday.get(rule.weekday) ?? [];
+    if (sameDay.some((other) => rule.startTime < other.endTime && other.startTime < rule.endTime)) {
+      throw new ScheduleError("Two active time blocks on the same day cannot overlap.");
+    }
+    sameDay.push(rule);
+    activeByWeekday.set(rule.weekday, sameDay);
+  }
+
+  const timeOff = input.timeOff.map((item) => {
+    const startsAt = new Date(item.startsAt);
+    const endsAt = new Date(item.endsAt);
+    if (Number.isNaN(startsAt.getTime()) || Number.isNaN(endsAt.getTime())) throw new ScheduleError("Enter valid time-off dates.");
+    if (startsAt >= endsAt) throw new ScheduleError("Time off must end after it starts.");
+    return { startsAt, endsAt, reason: item.reason?.trim().slice(0, 180) || null };
+  });
 
   const practitionerRef = db.collection("practitioners").doc(practitionerId);
   const rulesCol = practitionerRef.collection("availabilityRules");
   const timeOffCol = practitionerRef.collection("timeOff");
 
-  const [existingRules, existingTimeOff] = await Promise.all([rulesCol.get(), timeOffCol.get()]);
-
-  const batch = db.batch();
-  for (const doc of existingRules.docs) batch.delete(doc.ref);
-  for (const doc of existingTimeOff.docs) batch.delete(doc.ref);
-  for (const rule of rules) batch.set(rulesCol.doc(), { ...rule, active: rule.active ?? true });
-  for (const item of timeOff) batch.set(timeOffCol.doc(), item);
-  await batch.commit();
+  // Transactional (not a plain read-then-batch): two concurrent saves - a double-click, or the
+  // schedule page open in two tabs - would otherwise both read the same existing docs before
+  // either commits, so the second call's batch deletes only the (already-gone) docs it read and
+  // never touches the first call's newly-created ones, leaving duplicate/conflicting rules and
+  // time-off blocks instead of the second save cleanly replacing the first.
+  await db.runTransaction(async (tx) => {
+    const [existingRules, existingTimeOff] = await Promise.all([tx.get(rulesCol), tx.get(timeOffCol)]);
+    for (const doc of existingRules.docs) tx.delete(doc.ref);
+    for (const doc of existingTimeOff.docs) tx.delete(doc.ref);
+    for (const rule of rules) tx.set(rulesCol.doc(), { ...rule, active: rule.active ?? true });
+    for (const item of timeOff) tx.set(timeOffCol.doc(), item);
+  });
 }
 
 export async function updatePractitionerProfile(practitionerId: string, input: {
@@ -223,13 +267,16 @@ export async function requestPayout(practitionerId: string, amount: number, note
     throw new PayoutError("Demo accounts can't request payouts.");
   }
 
-  // totalEarned only grows via paid bookings, not this action, so it's safe to read outside the
-  // transaction — but paidOut/pendingOut come from the payouts collection this function itself
-  // writes to, so that read-check-write needs to be atomic or two concurrent requests (double
-  // click, two tabs) could both pass the balance check against the same stale total and together
-  // request more than the practitioner has actually earned.
-  const bookingsSnap = await db.collection("bookings").where("practitionerId", "==", practitionerId).get();
-  let totalEarned = 0;
+  // totalEarned only grows via paid bookings and ended chat sessions, not this action, so it's
+  // safe to read outside the transaction — but paidOut/pendingOut come from the payouts
+  // collection this function itself writes to, so that read-check-write needs to be atomic or
+  // two concurrent requests (double click, two tabs) could both pass the balance check against
+  // the same stale total and together request more than the practitioner has actually earned.
+  const [bookingsSnap, chatEarned] = await Promise.all([
+    db.collection("bookings").where("practitionerId", "==", practitionerId).get(),
+    chatEarningsForPractitioner(practitionerId),
+  ]);
+  let totalEarned = chatEarned;
   for (const doc of bookingsSnap.docs) {
     const row = bookingFromDoc(doc);
     if (row.paymentStatus === "paid" && row.status !== "cancelled") totalEarned += row.servicePrice;

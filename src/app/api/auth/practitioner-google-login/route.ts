@@ -25,7 +25,15 @@ export async function POST(request: Request) {
   let practitionerRef = byUid.empty ? null : byUid.docs[0].ref;
   if (byUid.empty) {
     // Practitioners are onboarded by invite, not self-registration — Google can only link an
-    // email an admin already added, never create a new practitioner.
+    // email an admin already added, never create a new practitioner. That only holds if this
+    // really was a Google-verified sign-in: verifyIdToken proves the token is genuine, not which
+    // provider issued it or that the email was ever confirmed. Before this check, anyone could
+    // self-register the same email via password auth (email_verified defaults false there) in the
+    // window before the real practitioner accepts their invite, then hit this route to hijack the
+    // still-unlinked practitioner record.
+    if (!decoded.email_verified || decoded.firebase?.sign_in_provider !== "google.com") {
+      return Response.json({ error: "No practitioner account was found for this Google email. Ask your studio admin for an invite first." }, { status: 404 });
+    }
     const byEmail = await db.collection("practitioners").where("email", "==", (decoded.email ?? "").toLowerCase()).limit(1).get();
     if (byEmail.empty) return Response.json({ error: "No practitioner account was found for this Google email. Ask your studio admin for an invite first." }, { status: 404 });
     const doc = byEmail.docs[0];

@@ -9,17 +9,27 @@ export function PractitionerProfileForm({ initialProfile }: { initialProfile: Pr
   const [form, setForm] = useState(initialProfile);
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
+  const [error, setError] = useState("");
 
   async function submit(event: FormEvent) {
     event.preventDefault();
     setSaving(true);
-    const response = await fetch("/api/practitioner/profile", {
-      method: "PUT",
-      headers: { "Content-Type": "application/json" },
-      body: JSON.stringify(form),
-    });
-    setNotice(response.ok ? "Profile updated." : "Profile could not be updated.");
-    setSaving(false);
+    setError("");
+    setNotice("");
+    try {
+      const response = await fetch("/api/practitioner/profile", {
+        method: "PUT",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify(form),
+      });
+      const data = await response.json().catch(() => ({}));
+      if (!response.ok) throw new Error(data.error || "Profile could not be updated.");
+      setNotice("Profile updated.");
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "Something went wrong.");
+    } finally {
+      setSaving(false);
+    }
   }
 
   return (
@@ -37,6 +47,7 @@ export function PractitionerProfileForm({ initialProfile }: { initialProfile: Pr
       <div className="settings-save">
         <button className="button" disabled={saving}><Save size={15} />{saving ? "Saving…" : "Save profile"}</button>
       </div>
+      {error && <p className="admin-auth-error" role="alert">{error}</p>}
       {notice && <div className="toast"><Check size={15} />{notice}<button type="button" onClick={() => setNotice("")}><X size={14} /></button></div>}
     </form>
   );

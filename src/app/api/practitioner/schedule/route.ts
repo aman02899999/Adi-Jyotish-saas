@@ -1,5 +1,5 @@
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
-import { getPractitionerSchedule, updatePractitionerSchedule } from "@/lib/practitioner-portal";
+import { getPractitionerSchedule, ScheduleError, updatePractitionerSchedule } from "@/lib/practitioner-portal";
 
 export const dynamic = "force-dynamic";
 
@@ -17,6 +17,11 @@ export async function PUT(request: Request) {
     rules?: Array<{ weekday: number; startTime: string; endTime: string; active?: boolean }>;
     timeOff?: Array<{ startsAt: string; endsAt: string; reason?: string }>;
   };
-  await updatePractitionerSchedule(practitioner.id, { rules: body.rules ?? [], timeOff: body.timeOff ?? [] });
+  try {
+    await updatePractitionerSchedule(practitioner.id, { rules: body.rules ?? [], timeOff: body.timeOff ?? [] });
+  } catch (error) {
+    if (error instanceof ScheduleError) return Response.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
   return Response.json(await getPractitionerSchedule(practitioner.id));
 }
