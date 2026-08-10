@@ -9,7 +9,10 @@ export async function POST() {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
 
   const secret = generateTotpSecret();
-  await db.collection("adminUsers").doc(admin.id).update({ totpSecret: secret, totpEnabled: false });
+  // Stored separately from totpSecret/totpEnabled - if 2FA is already on, a hijacked session must
+  // not be able to disable or replace the active factor just by starting a re-enrollment. Only
+  // /confirm (which requires a valid code for THIS secret) promotes it to the active one.
+  await db.collection("adminUsers").doc(admin.id).update({ totpPendingSecret: secret });
   const qrDataUrl = await getTotpQrDataUrl(secret, admin.email);
   return Response.json({ secret, qrDataUrl });
 }

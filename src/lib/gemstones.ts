@@ -7,6 +7,21 @@ import { seedGemstoneCatalog } from "@/lib/gemstones-seed";
 
 export class GemstoneError extends Error {}
 
+/** `Number(x) || 0` neutralizes NaN but not Infinity/-Infinity (both truthy), so a client sending
+ * the JSON string "Infinity" for a price/stock field would otherwise pass straight through into
+ * Firestore and corrupt price sorting/filtering on the storefront. */
+function finiteOrZero(value: unknown): number {
+  const n = Number(value);
+  return Number.isFinite(n) ? n : 0;
+}
+
+/** Every other free-text field written by this codebase caps length before storing (promo-banner,
+ * notifications) - these gemstone category/product fields didn't, so an arbitrarily large string
+ * could push a single product doc past Firestore's 1MB limit and fail the whole write. */
+function capText(value: string | undefined, max: number): string {
+  return (value ?? "").trim().slice(0, max);
+}
+
 /* ---------------------------------- collection refs ---------------------------------- */
 
 const categoriesCol = db.collection("gemstoneCategories");
@@ -145,7 +160,7 @@ export async function getCategoryBySlug(slug: string) {
 export type CategoryPayload = { name?: string; slug?: string; description?: string; imageUrl?: string | null; sortOrder?: number; active?: boolean };
 
 export async function createCategory(payload: CategoryPayload) {
-  const name = payload.name?.trim();
+  const name = payload.name?.trim().slice(0, 200);
   if (!name) throw new GemstoneError("Category name is required.");
   const slug = payload.slug?.trim() ? toSlug(payload.slug) : toSlug(name);
 
@@ -156,9 +171,9 @@ export async function createCategory(payload: CategoryPayload) {
   await ref.set({
     name,
     slug,
-    description: payload.description?.trim() ?? "",
+    description: capText(payload.description, 2000),
     imageUrl: payload.imageUrl || null,
-    sortOrder: Math.max(0, Number(payload.sortOrder) || 0),
+    sortOrder: Math.max(0, finiteOrZero(payload.sortOrder)),
     active: payload.active ?? true,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
@@ -173,11 +188,16 @@ export async function updateCategory(id: string, payload: CategoryPayload) {
   if (!snap.exists) throw new GemstoneError("Category not found.");
 
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
-  if (payload.name?.trim()) update.name = payload.name.trim();
-  if (payload.slug?.trim()) update.slug = toSlug(payload.slug);
-  if (payload.description !== undefined) update.description = payload.description;
+  if (payload.name?.trim()) update.name = payload.name.trim().slice(0, 200);
+  if (payload.slug?.trim()) {
+    const slug = toSlug(payload.slug);
+    const existingSlug = await categoriesCol.where("slug", "==", slug).limit(1).get();
+    if (!existingSlug.empty && existingSlug.docs[0].id !== id) throw new GemstoneError("A category with this slug already exists.");
+    update.slug = slug;
+  }
+  if (payload.description !== undefined) update.description = capText(payload.description, 2000);
   if (payload.imageUrl !== undefined) update.imageUrl = payload.imageUrl || null;
-  if (payload.sortOrder != null) update.sortOrder = Math.max(0, Number(payload.sortOrder) || 0);
+  if (payload.sortOrder != null) update.sortOrder = Math.max(0, finiteOrZero(payload.sortOrder));
   if (payload.active !== undefined) update.active = payload.active;
 
   await ref.update(update);
@@ -259,9 +279,9 @@ async function replaceProductVariants(productId: string, variants: VariantInput[
       weightCarat: variant.weightCarat?.trim() ?? "",
       weightRatti: variant.weightRatti?.trim() ?? "",
       certificationLevel: variant.certificationLevel?.trim() ?? "",
-      price: Math.max(0, Math.round(Number(variant.price) || 0)),
-      compareAtPrice: variant.compareAtPrice != null && Number(variant.compareAtPrice) > 0 ? Math.round(Number(variant.compareAtPrice)) : null,
-      stockQuantity: Math.max(0, Math.round(Number(variant.stockQuantity) || 0)),
+      price: Math.max(0, Math.round(finiteOrZero(variant.price))),
+      compareAtPrice: variant.compareAtPrice != null && finiteOrZero(variant.compareAtPrice) > 0 ? Math.round(finiteOrZero(variant.compareAtPrice)) : null,
+      stockQuantity: Math.max(0, Math.round(finiteOrZero(variant.stockQuantity))),
       sku: variant.sku.trim(),
       active: variant.active ?? true,
     };
@@ -339,12 +359,14 @@ export async function getProductAdminById(id: string): Promise<{ product: Gemsto
 }
 
 export async function createProduct(payload: ProductPayload) {
-  const name = payload.name?.trim();
+  const name = payload.name?.trim().slice(0, 200);
   if (!name) throw new GemstoneError("Product name is required.");
   if (!payload.categoryId) throw new GemstoneError("Choose a category.");
   const sku = payload.sku?.trim();
   if (!sku) throw new GemstoneError("SKU is required.");
   const slug = payload.slug?.trim() ? toSlug(payload.slug) : toSlug(name);
+  const existingSlug = await productsCol.where("slug", "==", slug).limit(1).get();
+  if (!existingSlug.empty) throw new GemstoneError("A product with this slug already exists.");
   validateVariants(payload.variants ?? []);
   if (payload.images?.length) validateImages(payload.images);
 
@@ -353,24 +375,24 @@ export async function createProduct(payload: ProductPayload) {
     categoryId: payload.categoryId,
     name,
     slug,
-    shortDescription: payload.shortDescription?.trim() ?? "",
-    description: payload.description?.trim() ?? "",
-    benefits: payload.benefits?.trim() ?? "",
-    whoShouldWear: payload.whoShouldWear?.trim() ?? "",
-    recommendedZodiac: payload.recommendedZodiac?.trim() ?? "",
-    recommendedPlanets: payload.recommendedPlanets?.trim() ?? "",
-    origin: payload.origin?.trim() ?? "",
-    color: payload.color?.trim() ?? "",
-    treatment: payload.treatment?.trim() ?? "",
-    certification: payload.certification?.trim() ?? "",
+    shortDescription: capText(payload.shortDescription, 300),
+    description: capText(payload.description, 4000),
+    benefits: capText(payload.benefits, 2000),
+    whoShouldWear: capText(payload.whoShouldWear, 1000),
+    recommendedZodiac: capText(payload.recommendedZodiac, 200),
+    recommendedPlanets: capText(payload.recommendedPlanets, 200),
+    origin: capText(payload.origin, 200),
+    color: capText(payload.color, 100),
+    treatment: capText(payload.treatment, 200),
+    certification: capText(payload.certification, 200),
     currency: "INR",
     sku,
     featured: payload.featured ?? false,
     trending: payload.trending ?? false,
     bestseller: payload.bestseller ?? false,
     active: payload.active ?? true,
-    metaTitle: payload.metaTitle?.trim() ?? "",
-    metaDescription: payload.metaDescription?.trim() ?? "",
+    metaTitle: capText(payload.metaTitle, 200),
+    metaDescription: capText(payload.metaDescription, 300),
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
   });
@@ -390,27 +412,34 @@ export async function updateProduct(id: string, payload: ProductPayload) {
   if (payload.variants) validateVariants(payload.variants);
   if (payload.images) validateImages(payload.images);
 
+  let slug = existing.slug;
+  if (payload.slug?.trim()) {
+    slug = toSlug(payload.slug);
+    const existingSlug = await productsCol.where("slug", "==", slug).limit(1).get();
+    if (!existingSlug.empty && existingSlug.docs[0].id !== id) throw new GemstoneError("A product with this slug already exists.");
+  }
+
   await ref.update({
     categoryId: payload.categoryId ?? existing.categoryId,
-    name: payload.name?.trim() || existing.name,
-    slug: payload.slug?.trim() ? toSlug(payload.slug) : existing.slug,
-    shortDescription: payload.shortDescription ?? existing.shortDescription,
-    description: payload.description ?? existing.description,
-    benefits: payload.benefits ?? existing.benefits,
-    whoShouldWear: payload.whoShouldWear ?? existing.whoShouldWear,
-    recommendedZodiac: payload.recommendedZodiac ?? existing.recommendedZodiac,
-    recommendedPlanets: payload.recommendedPlanets ?? existing.recommendedPlanets,
-    origin: payload.origin ?? existing.origin,
-    color: payload.color ?? existing.color,
-    treatment: payload.treatment ?? existing.treatment,
-    certification: payload.certification ?? existing.certification,
+    name: payload.name?.trim().slice(0, 200) || existing.name,
+    slug,
+    shortDescription: payload.shortDescription !== undefined ? capText(payload.shortDescription, 300) : existing.shortDescription,
+    description: payload.description !== undefined ? capText(payload.description, 4000) : existing.description,
+    benefits: payload.benefits !== undefined ? capText(payload.benefits, 2000) : existing.benefits,
+    whoShouldWear: payload.whoShouldWear !== undefined ? capText(payload.whoShouldWear, 1000) : existing.whoShouldWear,
+    recommendedZodiac: payload.recommendedZodiac !== undefined ? capText(payload.recommendedZodiac, 200) : existing.recommendedZodiac,
+    recommendedPlanets: payload.recommendedPlanets !== undefined ? capText(payload.recommendedPlanets, 200) : existing.recommendedPlanets,
+    origin: payload.origin !== undefined ? capText(payload.origin, 200) : existing.origin,
+    color: payload.color !== undefined ? capText(payload.color, 100) : existing.color,
+    treatment: payload.treatment !== undefined ? capText(payload.treatment, 200) : existing.treatment,
+    certification: payload.certification !== undefined ? capText(payload.certification, 200) : existing.certification,
     sku: payload.sku?.trim() || existing.sku,
     featured: payload.featured ?? existing.featured,
     trending: payload.trending ?? existing.trending,
     bestseller: payload.bestseller ?? existing.bestseller,
     active: payload.active ?? existing.active,
-    metaTitle: payload.metaTitle ?? existing.metaTitle,
-    metaDescription: payload.metaDescription ?? existing.metaDescription,
+    metaTitle: payload.metaTitle !== undefined ? capText(payload.metaTitle, 200) : existing.metaTitle,
+    metaDescription: payload.metaDescription !== undefined ? capText(payload.metaDescription, 300) : existing.metaDescription,
     updatedAt: FieldValue.serverTimestamp(),
   });
 

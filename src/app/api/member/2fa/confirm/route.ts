@@ -1,3 +1,4 @@
+import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { generateBackupCodes, verifyTotpCode } from "@/lib/two-factor";
@@ -10,7 +11,7 @@ export async function POST(request: Request) {
 
   const ref = db.collection("members").doc(member.id);
   const snap = await ref.get();
-  const secret = snap.data()?.totpSecret as string | undefined;
+  const secret = snap.data()?.totpPendingSecret as string | undefined;
   if (!secret) return Response.json({ error: "Start enrollment before confirming a code." }, { status: 409 });
 
   const body = (await request.json()) as { code?: string };
@@ -19,6 +20,6 @@ export async function POST(request: Request) {
   }
 
   const { codes, hashed } = generateBackupCodes();
-  await ref.update({ totpEnabled: true, totpBackupCodes: hashed });
+  await ref.update({ totpSecret: secret, totpPendingSecret: FieldValue.delete(), totpEnabled: true, totpBackupCodes: hashed });
   return Response.json({ ok: true, backupCodes: codes });
 }

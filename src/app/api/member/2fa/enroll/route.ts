@@ -9,7 +9,10 @@ export async function POST() {
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
 
   const secret = generateTotpSecret();
-  await db.collection("members").doc(member.id).update({ totpSecret: secret, totpEnabled: false });
+  // Stored separately from totpSecret/totpEnabled - if 2FA is already on, a hijacked session must
+  // not be able to disable or replace the active factor just by starting a re-enrollment. Only
+  // /confirm (which requires a valid code for THIS secret) promotes it to the active one.
+  await db.collection("members").doc(member.id).update({ totpPendingSecret: secret });
   const qrDataUrl = await getTotpQrDataUrl(secret, member.email);
   return Response.json({ secret, qrDataUrl });
 }

@@ -434,6 +434,10 @@ export async function updateOrderStatus(orderId: string, status: string) {
     const willRestoreStock = (status === "cancelled" || status === "refunded") && existing.status !== "cancelled" && existing.status !== "refunded";
     if (willRestoreStock) {
       if (status === "cancelled" && !CANCELLABLE_STATUSES.has(existing.status)) throw new CartValidationError("This order can no longer be cancelled.");
+      // Can't refund money that was never collected - without this, an admin could mark a
+      // still-pending/unpaid order "refunded", which flips paymentStatus to "refunded" and implies
+      // money moved when it never did.
+      if (status === "refunded" && existing.paymentStatus !== "paid") throw new CartValidationError("Only paid orders can be refunded.");
       const itemsSnap = await tx.get(itemsCol(orderId));
       itemDocs = itemsSnap.docs;
       variantSnaps = await Promise.all(itemDocs.map((doc) => {

@@ -321,22 +321,31 @@ const ALLOWED_PAYOUT_TRANSITIONS: Record<string, ReadonlySet<string>> = {
 export async function updatePayoutStatus(id: string, status: "approved" | "paid" | "rejected", adminId: string, adminNotes?: string, transactionRef?: string): Promise<PractitionerPayout> {
   if (status === "paid" && !transactionRef?.trim()) throw new PayoutError("Enter a bank transaction reference before marking this payout paid.");
   const ref = payoutsCollection().doc(id);
-  const existing = await ref.get();
-  if (!existing.exists) throw new PayoutError("Payout request not found.");
+  // Transactional read-check-write: a plain get()-then-update() lets two concurrent requests (a
+  // double-click, or two admins acting on the same payout) both read the same currentStatus and
+  // both pass the transition check, so the second silently overwrites the first's
+  // adminNotes/transactionRef and re-sends the practitioner-facing email/notification below.
+  await db.runTransaction(async (tx) => {
+    const existing = await tx.get(ref);
+    if (!existing.exists) throw new PayoutError("Payout request not found.");
 
-  const currentStatus = (existing.data() as { status: string }).status;
-  if (currentStatus !== status && !ALLOWED_PAYOUT_TRANSITIONS[currentStatus]?.has(status)) {
-    throw new PayoutError(`A ${currentStatus} payout can't be changed to ${status}.`);
-  }
+    const currentStatus = (existing.data() as { status: string }).status;
+    // No same-status exception: "paid" is deliberately terminal - its allowed-set is empty - so
+    // this also blocks ever re-processing an already-paid payout.
+    if (!ALLOWED_PAYOUT_TRANSITIONS[currentStatus]?.has(status)) {
+      throw new PayoutError(`A ${currentStatus} payout can't be changed to ${status}.`);
+    }
 
-  await ref.update({
-    status,
-    adminNotes: adminNotes?.trim().slice(0, 500) || null,
-    transactionRef: transactionRef?.trim().slice(0, 120) || null,
-    processedBy: adminId,
-    processedAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
+    tx.update(ref, {
+      status,
+      adminNotes: adminNotes?.trim().slice(0, 500) || null,
+      transactionRef: transactionRef?.trim().slice(0, 120) || null,
+      processedBy: adminId,
+      processedAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
   });
+
   return payoutFromSnap(await ref.get());
 }
 
