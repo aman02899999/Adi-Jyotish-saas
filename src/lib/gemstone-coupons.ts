@@ -143,11 +143,19 @@ export async function updateCoupon(id: string, payload: CouponPayload) {
 
   if (nextCode !== existing.code) {
     // The doc ID is the code, so a code change means migrating to a new doc — keep usageCount/createdAt.
+    // Transactional (not two plain calls): a checkout redeeming this coupon under its old code
+    // between a separate set()+delete() could increment usageCount on the doc that's about to be
+    // deleted, silently losing that redemption's count. Running both writes in one transaction
+    // means Firestore serializes against the redemption's own transaction on the same doc instead.
     const nextRef = couponsCol.doc(nextCode);
-    const conflict = await nextRef.get();
-    if (conflict.exists) throw new CouponError("A coupon with this code already exists.");
-    await nextRef.set({ ...fields, usageCount: existing.usageCount, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-    await ref.delete();
+    await db.runTransaction(async (tx) => {
+      const [currentSnap, conflictSnap] = await Promise.all([tx.get(ref), tx.get(nextRef)]);
+      if (!currentSnap.exists) throw new CouponError("Coupon not found.");
+      if (conflictSnap.exists) throw new CouponError("A coupon with this code already exists.");
+      const currentUsage = (currentSnap.data() as { usageCount: number }).usageCount;
+      tx.set(nextRef, { ...fields, usageCount: currentUsage, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+      tx.delete(ref);
+    });
     const created = await nextRef.get();
     return fromDoc(created);
   }

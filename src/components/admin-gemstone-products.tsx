@@ -153,10 +153,9 @@ export function AdminGemstoneProducts({ initialProducts, categories }: { initial
 
   async function toggleFlag(row: AdminProductRow, field: "active" | "featured" | "trending" | "bestseller") {
     const response = await fetch(`/api/admin/gemstones/products/${row.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [field]: !row[field] }) });
-    if (response.ok) {
-      const data = await response.json();
-      setItems((current) => current.map((item) => item.id === row.id ? { ...item, [field]: data[field] } : item));
-    }
+    const data = await response.json();
+    if (response.ok) setItems((current) => current.map((item) => item.id === row.id ? { ...item, [field]: data[field] } : item));
+    else setNotice(data.error || "Could not update product.");
   }
 
   async function duplicate(row: AdminProductRow) {

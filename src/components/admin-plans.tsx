@@ -99,10 +99,12 @@ export function AdminPlans({ initialPlans, razorpayConfigured, razorpayMode }: {
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify({ ...plan, [field]: !plan[field] }),
     });
+    const data = await response.json();
     if (response.ok) {
-      const data = await response.json();
       setItems((current) => current.map((item) => item.id === plan.id ? data : item));
       setNotice(field === "active" ? `Plan ${data.active ? "published" : "hidden"}.` : "Highlight updated.");
+    } else {
+      setNotice(data.error || "Could not update plan.");
     }
   }
 

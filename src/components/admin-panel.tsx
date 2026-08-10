@@ -140,10 +140,12 @@ export function AdminPanel({ initialServices }: { initialServices: AdminService[
       headers: { "Content-Type": "application/json" },
       body: JSON.stringify(payload),
     });
+    const data = await response.json();
     if (response.ok) {
-      const data = await response.json();
       setItems((current) => current.map((entry) => entry.id === item.id ? data : entry));
       setNotice(field === "active" ? `Service ${data.active ? "published" : "hidden"}.` : "Featured status updated.");
+    } else {
+      setNotice(data.error || "Could not update service.");
     }
   }
 

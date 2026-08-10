@@ -49,10 +49,9 @@ export function AdminGemstoneCategories({ initialCategories }: { initialCategori
 
   async function toggleActive(category: CategoryRow) {
     const response = await fetch(`/api/admin/gemstones/categories/${category.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !category.active }) });
-    if (response.ok) {
-      const data = await response.json();
-      setItems((current) => current.map((item) => item.id === category.id ? { ...item, ...data } : item));
-    }
+    const data = await response.json();
+    if (response.ok) setItems((current) => current.map((item) => item.id === category.id ? { ...item, ...data } : item));
+    else setNotice(data.error || "Could not update category.");
   }
 
   async function remove(category: CategoryRow) {

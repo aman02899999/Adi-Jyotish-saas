@@ -63,8 +63,14 @@ export function AdminGemstoneCoupons({ initialCoupons }: { initialCoupons: Gemst
   }
 
   async function toggleActive(coupon: GemstoneCoupon) {
-    const response = await fetch(`/api/admin/gemstones/coupons/${coupon.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !coupon.active }) });
-    if (response.ok) { const data = await response.json(); setItems((current) => current.map((item) => item.id === coupon.id ? data : item)); }
+    try {
+      const response = await fetch(`/api/admin/gemstones/coupons/${coupon.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ active: !coupon.active }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Could not update coupon.");
+      setItems((current) => current.map((item) => item.id === coupon.id ? data : item));
+    } catch (error) {
+      setNotice(error instanceof Error ? error.message : "Something went wrong.");
+    }
   }
 
   return (
