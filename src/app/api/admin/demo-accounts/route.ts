@@ -1,31 +1,39 @@
 import { randomBytes } from "node:crypto";
 import { getAuth } from "firebase-admin/auth";
-import { FieldValue } from "firebase-admin/firestore";
+import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { rechargeWallet } from "@/lib/wallet";
+import { getAllPlans } from "@/lib/plans";
 
 export const dynamic = "force-dynamic";
 
-const MEMBER_EMAIL = "demo.member@adijyotishgurus.com";
-const PRACTITIONER_EMAIL = "demo.astrologer@adijyotishgurus.com";
-const PRACTITIONER_SLUG = "demo-astrologer";
+const ADMIN_SEEDS = [1, 2, 3].map((n) => ({ email: `demo.admin${n}@adijyotishgurus.com`, name: `Demo Admin ${n}` }));
+const PRACTITIONER_SEEDS = [1, 2, 3].map((n) => ({
+  email: `demo.astrologer${n}@adijyotishgurus.com`,
+  name: `Demo Astrologer ${n}`,
+  slug: `demo-astrologer-${n}`,
+}));
+const MEMBER_SEEDS = [1, 2, 3].map((n) => ({ email: `demo.member${n}@adijyotishgurus.com`, name: `Demo Member ${n}` }));
 
-/** Creates (or resets) two demo accounts an admin can hand out for a walkthrough: a member with a
- * funded wallet, and an online practitioner ready for instant chat. Safe to call repeatedly —
- * every step is create-or-update, so re-running just issues a fresh password and tops up the
- * wallet again rather than erroring or duplicating anything. The password is randomly generated
- * on every call (not a fixed constant) so a previously-shared demo login stops working the moment
- * someone regenerates it, and both accounts are flagged `isDemoAccount` so real money can't leave
- * the system through them (checked in requestPayout — see practitioner-portal.ts). Direct Firebase
- * Admin SDK calls (not the public self-serve/invite HTTP routes) since this is an admin-privileged
- * shortcut that intentionally skips the normal invite-link flow. */
+/** Creates (or resets) 9 full-access demo accounts an admin can hand out for a walkthrough — 3
+ * admins (Owner role, every permission), 3 practitioners (verified, featured, online, unlimited
+ * availability), and 3 members (active Pro subscription + a funded wallet). Safe to call
+ * repeatedly — every step is create-or-update, so re-running just issues a fresh shared password
+ * and re-tops everything up rather than erroring or duplicating anything. The password is
+ * randomly generated on every call (not a fixed constant) so a previously-shared demo login stops
+ * working the moment someone regenerates it, and every account is flagged `isDemoAccount` so real
+ * money can't leave the system through them (checked in requestPayout — see
+ * practitioner-portal.ts). Direct Firebase Admin SDK calls (not the public self-serve/invite HTTP
+ * routes) since this is an admin-privileged shortcut that intentionally skips the normal
+ * invite-link flow. */
 export async function POST() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "settings")) return Response.json({ error: "Settings permission required." }, { status: 403 });
 
   const password = `Demo${randomBytes(9).toString("base64url")}!1`;
+  const now = FieldValue.serverTimestamp();
 
   async function upsertAuthUser(email: string, displayName: string) {
     try {
@@ -38,74 +46,116 @@ export async function POST() {
     }
   }
 
-  // --- Demo member -------------------------------------------------------------------------
-  const memberUid = await upsertAuthUser(MEMBER_EMAIL, "Demo Member");
-  const memberRef = db.collection("members").doc(memberUid);
-  const memberSnap = await memberRef.get();
-  const now = FieldValue.serverTimestamp();
-  if (memberSnap.exists) {
-    await memberRef.update({ name: "Demo Member", email: MEMBER_EMAIL, active: true, isDemoAccount: true, updatedAt: now });
-  } else {
-    await memberRef.set({
-      name: "Demo Member",
-      email: MEMBER_EMAIL,
-      phone: null,
-      birthDate: "1994-06-15",
-      birthTime: "07:45",
-      birthPlace: "Jaipur, India",
-      plan: "member",
+  // --- Demo admins (Owner role — every permission) --------------------------------------------
+  const admins = await Promise.all(ADMIN_SEEDS.map(async (seed) => {
+    const uid = await upsertAuthUser(seed.email, seed.name);
+    await db.collection("adminUsers").doc(uid).set({
+      name: seed.name,
+      email: seed.email,
+      role: "owner",
       active: true,
       isDemoAccount: true,
-      onboardingComplete: true,
       createdAt: now,
       updatedAt: now,
       lastLoginAt: null,
-    });
-  }
-  // Idempotent per razorpayPaymentId — reruns won't keep stacking balance.
-  await rechargeWallet({ memberId: memberUid, amount: 1000, razorpayPaymentId: "demo-seed-topup" });
+    }, { merge: true });
+    return { email: seed.email, url: "/admin/login" };
+  }));
 
-  // --- Demo practitioner ---------------------------------------------------------------------
-  const practitionerUid = await upsertAuthUser(PRACTITIONER_EMAIL, "Demo Astrologer");
-  const practitionerRef = db.collection("practitioners").doc(PRACTITIONER_SLUG);
-  const practitionerSnap = await practitionerRef.get();
-  if (practitionerSnap.exists) {
-    await practitionerRef.update({ firebaseUid: practitionerUid, online: true, active: true, isDemoAccount: true, updatedAt: now });
-  } else {
-    await practitionerRef.set({
-      name: "Demo Astrologer",
-      slug: PRACTITIONER_SLUG,
-      email: PRACTITIONER_EMAIL,
-      title: "Vedic Astrologer",
-      bio: "A demo practitioner profile for walkthroughs — bookings and chat behave exactly like a real profile (payouts are disabled for this account).",
-      specialties: "Birth charts, Career, Relationships",
-      languages: "English, Hindi",
-      consultationModes: "Video, Audio, Chat",
-      experienceYears: 5,
-      verified: true,
-      verificationLevel: "reviewed",
-      photoUrl: null,
-      online: true,
-      chatRatePerMinute: 10,
-      active: true,
-      featured: false,
-      isDemoAccount: true,
-      firebaseUid: practitionerUid,
-      createdAt: now,
-      updatedAt: now,
-    });
-    const batch = db.batch();
-    for (const weekday of [1, 2, 3, 4, 5]) {
-      batch.set(practitionerRef.collection("availabilityRules").doc(), { weekday, startTime: "09:30", endTime: "17:30", active: true });
+  // --- Demo practitioners (verified, featured, online, always available) ----------------------
+  const practitioners = await Promise.all(PRACTITIONER_SEEDS.map(async (seed) => {
+    const uid = await upsertAuthUser(seed.email, seed.name);
+    const ref = db.collection("practitioners").doc(seed.slug);
+    const snap = await ref.get();
+    if (snap.exists) {
+      await ref.update({ firebaseUid: uid, online: true, active: true, verified: true, featured: true, hasPortalAccess: true, isDemoAccount: true, updatedAt: now });
+    } else {
+      await ref.set({
+        name: seed.name,
+        slug: seed.slug,
+        email: seed.email,
+        title: "Vedic Astrologer",
+        bio: "A demo practitioner profile for walkthroughs — bookings and chat behave exactly like a real profile (payouts are disabled for this account).",
+        specialties: "Birth charts, Career, Relationships, Gemstones",
+        languages: "English, Hindi",
+        consultationModes: "Video, Audio, Chat",
+        experienceYears: 10,
+        verified: true,
+        verificationLevel: "senior-panel",
+        photoUrl: null,
+        online: true,
+        chatRatePerMinute: 15,
+        active: true,
+        featured: true,
+        hasPortalAccess: true,
+        isDemoAccount: true,
+        firebaseUid: uid,
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: null,
+      });
+      const batch = db.batch();
+      for (const weekday of [0, 1, 2, 3, 4, 5, 6]) {
+        batch.set(ref.collection("availabilityRules").doc(), { weekday, startTime: "00:00", endTime: "23:59", active: true });
+      }
+      await batch.commit();
     }
-    await batch.commit();
-  }
+    return { email: seed.email, url: "/practitioner/login" };
+  }));
 
-  await recordAudit(admin, "demo_accounts.seeded", "admin", admin.id, { memberEmail: MEMBER_EMAIL, practitionerEmail: PRACTITIONER_EMAIL });
+  // --- Demo members (active Pro subscription + funded wallet) ---------------------------------
+  const plans = await getAllPlans();
+  const proPlan = plans.find((plan) => plan.key === "pro") ?? plans[plans.length - 1];
+  const members = await Promise.all(MEMBER_SEEDS.map(async (seed) => {
+    const uid = await upsertAuthUser(seed.email, seed.name);
+    const memberRef = db.collection("members").doc(uid);
+    const memberSnap = await memberRef.get();
+    if (memberSnap.exists) {
+      await memberRef.update({ name: seed.name, email: seed.email, active: true, isDemoAccount: true, plan: proPlan?.key ?? "member", updatedAt: now });
+    } else {
+      await memberRef.set({
+        name: seed.name,
+        email: seed.email,
+        phone: null,
+        birthDate: "1994-06-15",
+        birthTime: "07:45",
+        birthPlace: "Jaipur, India",
+        plan: proPlan?.key ?? "member",
+        active: true,
+        isDemoAccount: true,
+        onboardingComplete: true,
+        createdAt: now,
+        updatedAt: now,
+        lastLoginAt: null,
+      });
+    }
 
-  return Response.json({
-    password,
-    member: { email: MEMBER_EMAIL, url: "/onboarding" },
-    practitioner: { email: PRACTITIONER_EMAIL, url: "/practitioner/login" },
+    if (proPlan) {
+      await db.collection("memberSubscriptions").doc(uid).set({
+        planId: proPlan.id,
+        billingInterval: "yearly",
+        status: "active",
+        razorpaySubscriptionId: null,
+        razorpayCustomerId: null,
+        currentPeriodStart: Timestamp.now(),
+        currentPeriodEnd: Timestamp.fromMillis(Date.now() + 365 * 24 * 60 * 60 * 1000),
+        cancelAtPeriodEnd: false,
+        cancelledAt: null,
+        createdAt: now,
+        updatedAt: now,
+      }, { merge: true });
+    }
+
+    // Idempotent per razorpayPaymentId — reruns won't keep stacking balance.
+    await rechargeWallet({ memberId: uid, amount: 5000, razorpayPaymentId: "demo-seed-topup" });
+    return { email: seed.email, url: "/account" };
+  }));
+
+  await recordAudit(admin, "demo_accounts.seeded", "admin", admin.id, {
+    admins: admins.map((entry) => entry.email),
+    practitioners: practitioners.map((entry) => entry.email),
+    members: members.map((entry) => entry.email),
   });
+
+  return Response.json({ password, admins, practitioners, members });
 }
