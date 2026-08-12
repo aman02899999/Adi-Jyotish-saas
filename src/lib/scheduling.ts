@@ -121,7 +121,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     experienceYears: 11,
     verified: true,
     verificationLevel: "verified-panel",
-    photoUrl: null,
+    photoUrl: "/images/practitioners/meera-kulkarni.jpg",
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -189,7 +189,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     experienceYears: 8,
     verified: true,
     verificationLevel: "verified-panel",
-    photoUrl: null,
+    photoUrl: "/images/practitioners/priyanka-deshmukh.jpg",
     chatRatePerMinute: 14,
     active: true,
     featured: false,
@@ -225,7 +225,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     experienceYears: 12,
     verified: true,
     verificationLevel: "verified-panel",
-    photoUrl: null,
+    photoUrl: "/images/practitioners/radhika-menon.jpg",
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -312,7 +312,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     experienceYears: 9,
     verified: true,
     verificationLevel: "verified-panel",
-    photoUrl: null,
+    photoUrl: "/images/practitioners/sneha-kapadia.jpg",
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -399,7 +399,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     experienceYears: 11,
     verified: true,
     verificationLevel: "verified-panel",
-    photoUrl: null,
+    photoUrl: "/images/practitioners/sunita-rao.jpg",
     chatRatePerMinute: 17,
     active: true,
     featured: false,
@@ -645,6 +645,13 @@ export async function seedPractitioners() {
         updatedAt: FieldValue.serverTimestamp(),
       });
     } else {
+      // photoUrl is deliberately excluded from this always-on update — it's an admin/practitioner
+      // editable field (see updatePractitionerProfile), so blindly overwriting it here on every
+      // directory fetch would silently revert a real uploaded photo back to the seed default.
+      // Backfilling it only when the existing doc has none lets a newly-added seed photo reach
+      // practitioners that were already seeded (e.g. in production) without ever touching one
+      // that's already set.
+      const existingPhotoUrl = (snap.data() as { photoUrl?: string | null }).photoUrl ?? null;
       await ref.update({
         title: starter.title,
         bio: starter.bio,
@@ -656,6 +663,7 @@ export async function seedPractitioners() {
         verificationLevel: starter.verificationLevel,
         chatRatePerMinute: starter.chatRatePerMinute,
         featured: starter.featured,
+        ...(existingPhotoUrl ? {} : { photoUrl: starter.photoUrl }),
       });
     }
 
