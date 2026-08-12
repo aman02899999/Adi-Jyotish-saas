@@ -1840,6 +1840,12 @@ button { border: 0; }
   .app-background { padding:0; }
   .app-frame { min-height:100dvh; display:block; border:0; border-radius:0; }
   .app-sidebar { display:none; }
+  /* The hamburger drawer (.mobile-app-nav) already carries the full nav list, so the
+     desktop topbar's own link row is a redundant second nav on mobile — it was rendering
+     alongside the compact header and overflowing behind the bell/avatar icons. Keep only
+     the topbar's tools (search/bell/profile) visible here. */
+  .app-topbar nav { display:none; }
+  .app-topbar { justify-content:flex-end; }
   .mobile-app-nav { height:63px; display:flex; align-items:center; justify-content:space-between; position:relative; z-index:30; padding:0 20px; border-bottom:1px solid var(--line); background:rgba(246,242,235,.9); }
   .mobile-app-nav .brand-mark .brand-mark__logo { height:35px; }
   .mobile-app-nav details summary { list-style:none; }
