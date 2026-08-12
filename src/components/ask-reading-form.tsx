@@ -147,6 +147,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         <LoaderCircle size={26} className="spin" />
         <h2>Preparing your reading…</h2>
         <p>Your payment is confirmed. Shree Santram Shashtri is studying your chart — this usually takes under a minute.</p>
+        {error && <p className="ask-waiting__error">{error}</p>}
         <button type="button" className="button button--ghost" onClick={retryNow}>Check again</button>
       </div>
     );
