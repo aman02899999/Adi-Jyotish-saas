@@ -2,8 +2,8 @@
 
 import Link from "next/link";
 import { useRouter, useSearchParams } from "next/navigation";
-import { useState } from "react";
-import { Check, Lock, ShieldCheck, X } from "lucide-react";
+import { useEffect, useState } from "react";
+import { Check, Lock, ShieldCheck, Tag, X } from "lucide-react";
 import { useGemstoneCart } from "@/components/gemstone-cart-context";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { trackEvent } from "@/lib/track-event";
@@ -13,11 +13,21 @@ type MemberInfo = { name: string; email: string; phone: string | null };
 const FREE_SHIPPING_THRESHOLD = 2000;
 const FLAT_SHIPPING_FEE = 99;
 
+// Mirrors computeShippingFee() in lib/gemstone-orders.ts, which the server evaluates against the
+// discounted subtotal (subtotal - discount), not the raw one — this has to match or the total
+// shown here can disagree with what createPendingOrder actually charges.
+function computeShippingFee(discountedSubtotal: number) {
+  return discountedSubtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_FEE;
+}
+
 export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) {
   const { lines, subtotal, clearCart } = useGemstoneCart();
   const router = useRouter();
   const searchParams = useSearchParams();
-  const [couponCode, setCouponCode] = useState(searchParams.get("coupon") ?? "");
+  const [couponInput, setCouponInput] = useState(searchParams.get("coupon") ?? "");
+  const [coupon, setCoupon] = useState<{ code: string; discountAmount: number } | null>(null);
+  const [couponError, setCouponError] = useState("");
+  const [applyingCoupon, setApplyingCoupon] = useState(false);
   const [form, setForm] = useState({
     name: member?.name ?? "", phone: member?.phone ?? "", email: member?.email ?? "",
     line1: "", line2: "", city: "", state: "", pincode: "", country: "India",
@@ -25,7 +35,36 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
 
-  const shippingFee = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_FEE;
+  async function applyCoupon() {
+    if (!couponInput.trim()) return;
+    setApplyingCoupon(true);
+    setCouponError("");
+    try {
+      const response = await fetch("/api/gemstones/coupons/validate", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ code: couponInput, subtotal }) });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "Coupon could not be applied.");
+      setCoupon({ code: data.code, discountAmount: data.discountAmount });
+    } catch (caught) {
+      setCouponError(caught instanceof Error ? caught.message : "Coupon could not be applied.");
+      setCoupon(null);
+    } finally {
+      setApplyingCoupon(false);
+    }
+  }
+
+  // Auto-apply a coupon carried over from the cart page (?coupon=CODE) so the discount is already
+  // shown here instead of only surfacing once Razorpay opens with a lower-than-displayed amount.
+  useEffect(() => {
+    const fromUrl = searchParams.get("coupon");
+    // eslint-disable-next-line react-hooks/set-state-in-effect -- applyCoupon's state updates come from its async fetch response, not synchronously during this effect
+    if (fromUrl) applyCoupon();
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, []);
+
+  const discount = coupon?.discountAmount ?? 0;
+  const discountedSubtotal = Math.max(0, subtotal - discount);
+  const shippingFee = computeShippingFee(discountedSubtotal);
+  const total = discountedSubtotal + shippingFee;
 
   if (!member) {
     return (
@@ -66,7 +105,7 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
         headers: { "Content-Type": "application/json" },
         body: JSON.stringify({
           lines: lines.map((line) => ({ productId: line.productId, variantId: line.variantId, quantity: line.quantity })),
-          couponCode: couponCode || undefined,
+          couponCode: (coupon?.code ?? couponInput) || undefined,
           shipping: { name: form.name, phone: form.phone, line1: form.line1, line2: form.line2, city: form.city, state: form.state, pincode: form.pincode, country: form.country },
         }),
       });
@@ -91,7 +130,7 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
           const verifyData = await verify.json();
           setLoading(false);
           if (verify.ok) {
-            trackEvent("purchase", { value: subtotal + shippingFee, currency: "INR", item_category: "gemstone" });
+            trackEvent("purchase", { value: total, currency: "INR", item_category: "gemstone" });
             clearCart();
             router.push(`/gemstones/order/${data.orderNumber}`);
           } else {
@@ -119,17 +158,26 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
           <label><span>State</span><div><input value={form.state} onChange={(event) => setForm({ ...form, state: event.target.value })} /></div></label>
           <label><span>Pincode</span><div><input value={form.pincode} onChange={(event) => setForm({ ...form, pincode: event.target.value })} /></div></label>
           <label><span>Country</span><div><input value={form.country} onChange={(event) => setForm({ ...form, country: event.target.value })} /></div></label>
-          <label className="wide"><span>Coupon code (optional)</span><div><input value={couponCode} onChange={(event) => setCouponCode(event.target.value.toUpperCase())} /></div></label>
         </div>
       </div>
 
       <aside className="cart-summary">
         <h2>Order summary</h2>
         {lines.map((line) => <div className="cart-summary__row" key={line.variantId}><span>{line.productName} × {line.quantity}</span><strong>{line.currency} {line.price * line.quantity}</strong></div>)}
+
+        <div className="cart-summary__coupon">
+          <div className="input-prefix" style={{ flex: 1 }}><Tag size={14} style={{ position: "absolute", left: 9, top: "50%", transform: "translateY(-50%)", color: "var(--muted)" }} /><input style={{ paddingLeft: 30 }} value={couponInput} onChange={(event) => setCouponInput(event.target.value.toUpperCase())} placeholder="Coupon code" /></div>
+          <button type="button" className="button button--ghost button--small" disabled={applyingCoupon} onClick={applyCoupon}>{applyingCoupon ? "Applying…" : "Apply"}</button>
+        </div>
+        {couponError && <p className="cart-summary__error">{couponError}</p>}
+        {coupon && <p className="cart-summary__coupon-applied"><Check size={13} /> {coupon.code} applied</p>}
+
+        <div className="cart-summary__row"><span>Subtotal</span><strong>₹{subtotal}</strong></div>
+        {coupon && <div className="cart-summary__row"><span>Discount</span><strong>-₹{discount}</strong></div>}
         <div className="cart-summary__row"><span>Shipping</span><strong>{shippingFee ? `₹${shippingFee}` : "Free"}</strong></div>
-        <div className="cart-summary__row cart-summary__row--total"><span>Estimated total</span><strong>₹{subtotal + shippingFee}</strong></div>
+        <div className="cart-summary__row cart-summary__row--total"><span>Total</span><strong>₹{total}</strong></div>
         <button className="button cart-summary__checkout" disabled={loading} onClick={placeOrder}><Lock size={15} /> {loading ? "Opening payment…" : "Pay & place order"}</button>
-        <p className="ask-form-card__note">Secured by Razorpay. Final total including any coupon is confirmed on the payment screen.</p>
+        <p className="ask-form-card__note">Secured by Razorpay. You&apos;ll be charged exactly the total shown above.</p>
         {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
       </aside>
     </section>
