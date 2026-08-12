@@ -1,0 +1,39 @@
+name: Deploy Firestore indexes
+
+on:
+  push:
+    branches: [main]
+    paths:
+      - "firestore.indexes.json"
+      - "firebase.json"
+  workflow_dispatch: {}
+
+jobs:
+  deploy:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - name: Check for Firebase credentials
+        id: check
+        run: |
+          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ] || [ -z "${{ secrets.FIREBASE_PROJECT_ID }}" ]; then
+            echo "FIREBASE_SERVICE_ACCOUNT or FIREBASE_PROJECT_ID repo secret not set — skipping (nothing to deploy with yet)."
+            echo "ready=false" >> "$GITHUB_OUTPUT"
+          else
+            echo "ready=true" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Write service account key
+        if: steps.check.outputs.ready == 'true'
+        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/firebase-sa.json"
+
+      - name: Deploy Firestore indexes
+        if: steps.check.outputs.ready == 'true'
+        env:
+          GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
+        run: npx firebase-tools@latest deploy --only firestore:indexes --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive
+
+      - name: Remove service account key
+        if: always()
+        run: rm -f "$RUNNER_TEMP/firebase-sa.json"
