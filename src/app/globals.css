@@ -1654,6 +1654,9 @@ button { border: 0; }
 .practitioner-booking__chevron--open { transform:rotate(180deg); color:var(--copper); }
 .practitioner-booking__detail { padding:0 19px 20px 68px; display:flex; flex-direction:column; gap:14px; }
 .practitioner-booking__birth { display:flex; flex-direction:column; gap:2px; color:var(--muted); font-size:12px; }
+.practitioner-booking__notes { display:flex; flex-direction:column; gap:4px; margin:10px 0; padding:11px 13px; border-radius:10px; background:rgba(198,132,68,.09); }
+.practitioner-booking__notes p { display:flex; align-items:center; gap:6px; margin:0; color:var(--copper); font-size:11px; font-weight:700; letter-spacing:.06em; text-transform:uppercase; }
+.practitioner-booking__notes span { color:var(--ink); font-size:13px; line-height:1.6; }
 .receipt-page { min-height:100dvh; padding:35px 20px 70px; background:#ded7cb; background-image:linear-gradient(rgba(120,87,61,.08) 1px,transparent 1px),linear-gradient(90deg,rgba(120,87,61,.08) 1px,transparent 1px); background-size:100px 100px; }
 .receipt-actions { width:min(780px,100%); display:flex; align-items:center; justify-content:space-between; margin:0 auto 16px; }
 .receipt-actions > a { display:flex; align-items:center; gap:6px; color:var(--muted); font-size:12px; }

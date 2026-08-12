@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, FileText, LoaderCircle, ScrollText } from "lucide-react";
+import { ChevronDown, FileText, LoaderCircle, MessageCircleQuestion, ScrollText } from "lucide-react";
 
 export type PractitionerBooking = {
   id: string;
@@ -15,6 +15,7 @@ export type PractitionerBooking = {
   status: string;
   paymentStatus: string;
   scheduledAt: string | Date;
+  notes: string | null;
   kundliSummary: string | null;
 };
 
@@ -63,6 +64,12 @@ export function PractitionerBookings({ initialBookings }: { initialBookings: Pra
                     <span>Born {booking.birthDate} · {booking.birthTime}</span>
                     <span>{booking.birthPlace}</span>
                   </div>
+                  {booking.notes && (
+                    <div className="practitioner-booking__notes">
+                      <p><MessageCircleQuestion size={14} /> What the client wants to explore</p>
+                      <span>{booking.notes}</span>
+                    </div>
+                  )}
                   {booking.kundliSummary ? (
                     <div className="kundli-report">
                       {booking.kundliSummary.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
