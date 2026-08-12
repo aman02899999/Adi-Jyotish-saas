@@ -35,6 +35,21 @@ const DEFAULT_FOOTER: FooterContent = {
 
 const collection = db.collection("siteContent");
 
+/** Only a same-site relative path or an https:// URL is allowed — rendered unescaped as a <Link
+ * href> on the homepage (src/app/page.tsx), so a javascript:/data: URI here would be a stored-XSS
+ * vector triggered just by clicking the hero CTA. Same guard already applied to the promo banner's
+ * CTA link (src/app/api/admin/promo-banner/route.ts). */
+function isSafeCtaHref(href: string) {
+  if (href.startsWith("/") && !href.startsWith("//")) return true;
+  try {
+    return new URL(href).protocol === "https:";
+  } catch {
+    return false;
+  }
+}
+
+const CTA_HREF_FIELDS = new Set<keyof HomeHeroContent>(["primaryCtaHref", "secondaryCtaHref"]);
+
 /** Every field falls back to the current hardcoded copy if the admin has never edited it, so a
  * fresh deploy (or a doc that only has some fields set) renders identically to before this
  * system existed — nothing on the homepage can go blank from a missing Firestore doc. */
@@ -55,8 +70,11 @@ export async function getHomeHeroContent(): Promise<HomeHeroContent> {
 
 export async function updateHomeHeroContent(patch: Partial<HomeHeroContent>): Promise<HomeHeroContent> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
-  for (const [key, value] of Object.entries(patch)) {
-    if (typeof value === "string") update[key] = value.trim().slice(0, 400);
+  for (const [key, rawValue] of Object.entries(patch) as [keyof HomeHeroContent, string][]) {
+    if (typeof rawValue !== "string") continue;
+    const value = rawValue.trim().slice(0, 400);
+    if (CTA_HREF_FIELDS.has(key) && value && !isSafeCtaHref(value)) continue;
+    update[key] = value;
   }
   await collection.doc("home-hero").set(update, { merge: true });
   return getHomeHeroContent();

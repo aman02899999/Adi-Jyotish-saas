@@ -9,6 +9,19 @@ function asList(value: string | string[] | undefined): string[] {
   return Array.isArray(value) ? value : [];
 }
 
+/** Only a same-site relative path or an https:// URL is allowed — the cta block's buttonHref is
+ * admin-authored freeform text rendered unescaped as a <Link href> to every site visitor, so a
+ * javascript:/data: URI here would be a stored-XSS vector triggered just by clicking the button.
+ * Same guard already applied to the promo banner's CTA link and the homepage hero CTA. */
+function safeHref(href: string) {
+  if (href.startsWith("/") && !href.startsWith("//")) return href;
+  try {
+    return new URL(href).protocol === "https:" ? href : "/";
+  } catch {
+    return "/";
+  }
+}
+
 export function BlockRenderer({ blocks }: { blocks: PageBlock[] }) {
   return (
     <>
@@ -46,7 +59,7 @@ export function BlockRenderer({ blocks }: { blocks: PageBlock[] }) {
                   {asString(block.data.heading) && <h2>{asString(block.data.heading)}</h2>}
                   {asString(block.data.body) && <p>{asString(block.data.body)}</p>}
                 </div>
-                {asString(block.data.buttonLabel) && <Link href={asString(block.data.buttonHref, "/")} className="button">{asString(block.data.buttonLabel)}</Link>}
+                {asString(block.data.buttonLabel) && <Link href={safeHref(asString(block.data.buttonHref, "/"))} className="button">{asString(block.data.buttonLabel)}</Link>}
               </section>
             );
           case "faq":

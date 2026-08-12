@@ -16,8 +16,11 @@ jobs:
 
       - name: Check for Firebase credentials
         id: check
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
         run: |
-          if [ -z "${{ secrets.FIREBASE_SERVICE_ACCOUNT }}" ] || [ -z "${{ secrets.FIREBASE_PROJECT_ID }}" ]; then
+          if [ -z "$FIREBASE_SERVICE_ACCOUNT" ] || [ -z "$FIREBASE_PROJECT_ID" ]; then
             echo "FIREBASE_SERVICE_ACCOUNT or FIREBASE_PROJECT_ID repo secret not set — skipping (nothing to deploy with yet)."
             echo "ready=false" >> "$GITHUB_OUTPUT"
           else
@@ -26,13 +29,16 @@ jobs:
 
       - name: Write service account key
         if: steps.check.outputs.ready == 'true'
-        run: echo '${{ secrets.FIREBASE_SERVICE_ACCOUNT }}' > "$RUNNER_TEMP/firebase-sa.json"
+        env:
+          FIREBASE_SERVICE_ACCOUNT: ${{ secrets.FIREBASE_SERVICE_ACCOUNT }}
+        run: printf '%s' "$FIREBASE_SERVICE_ACCOUNT" > "$RUNNER_TEMP/firebase-sa.json"
 
       - name: Deploy Firestore indexes
         if: steps.check.outputs.ready == 'true'
         env:
           GOOGLE_APPLICATION_CREDENTIALS: ${{ runner.temp }}/firebase-sa.json
-        run: npx firebase-tools@latest deploy --only firestore:indexes --project "${{ secrets.FIREBASE_PROJECT_ID }}" --non-interactive
+          FIREBASE_PROJECT_ID: ${{ secrets.FIREBASE_PROJECT_ID }}
+        run: npx firebase-tools@latest deploy --only firestore:indexes --project "$FIREBASE_PROJECT_ID" --non-interactive
 
       - name: Remove service account key
         if: always()
