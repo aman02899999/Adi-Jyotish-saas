@@ -4,12 +4,14 @@ import {
   BarChart3,
   Bell,
   BookOpenText,
+  Bot,
   CalendarRange,
   Coins,
   Crown,
   ExternalLink,
   Gem,
   LayoutDashboard,
+  LayoutTemplate,
   LogOut,
   Menu,
   MessageCircle,
@@ -20,6 +22,7 @@ import {
   ShieldCheck,
   Sparkles,
   Star,
+  UserRoundPlus,
   Users,
   WalletCards,
 } from "lucide-react";
@@ -32,6 +35,9 @@ import { getAdminUnreadCount } from "@/lib/messaging";
 const adminLinks: Array<{ label: string; icon: typeof LayoutDashboard; href: string; permission: AdminPermission }> = [
   { label: "Overview", icon: LayoutDashboard, href: "/admin", permission: "overview" },
   { label: "Services", icon: Sparkles, href: "/admin/services", permission: "services" },
+  { label: "Practitioners", icon: UserRoundPlus, href: "/admin/practitioners", permission: "practitioners" },
+  { label: "AI Personas", icon: Bot, href: "/admin/ai-personas", permission: "ai_personas" },
+  { label: "Website", icon: LayoutTemplate, href: "/admin/website", permission: "website" },
   { label: "Plans", icon: Crown, href: "/admin/plans", permission: "plans" },
   { label: "Gemstones", icon: Gem, href: "/admin/gemstones", permission: "gemstones" },
   { label: "Members", icon: Users, href: "/admin/members", permission: "members_view" },
@@ -47,7 +53,7 @@ const adminLinks: Array<{ label: string; icon: typeof LayoutDashboard; href: str
   { label: "Activity", icon: ScrollText, href: "/admin/activity", permission: "activity" },
 ];
 
-type ActiveSection = "Overview" | "Services" | "Plans" | "Gemstones" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Reviews" | "Chat" | "Wallets" | "Payouts" | "Settings";
+type ActiveSection = "Overview" | "Services" | "Practitioners" | "AI Personas" | "Website" | "Plans" | "Gemstones" | "Bookings" | "Members" | "Insights" | "Activity" | "Messages" | "Schedule" | "Billing" | "Reviews" | "Chat" | "Wallets" | "Payouts" | "Settings";
 
 /** Shared between the always-visible desktop sidebar and the mobile <details> drawer below —
  * kept as one function (not a separate component) since both call sites need the exact same

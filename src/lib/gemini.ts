@@ -207,3 +207,15 @@ export async function getLalKitabReadingAnswer({ name, birthDate, birthTime, bir
   const userPrompt = `Client ka naam: ${name}\nJanm tithi: ${birthDate}\nJanm samay: ${birthTime}\nJanm sthan: ${birthPlace}\n\nChinta: ${question}`;
   return callGemini({ systemPrompt: LAL_KITAB_SYSTEM_PROMPT, parts: [{ text: userPrompt }], temperature: 0.8, maxOutputTokens: 1300 });
 }
+
+/** Backs admin-created AI personas (see ai-personas.ts) — the studio writes the persona's voice
+ * and instructions as free text in the admin UI instead of a hardcoded prompt constant like the
+ * personas above, so this takes that prompt as a parameter rather than owning one itself. */
+export async function getPersonaReadingAnswer({ systemPrompt, name, question }: {
+  systemPrompt: string;
+  name: string;
+  question: string;
+}) {
+  const userPrompt = `Seeker: ${name}\n\nQuestion: ${question}`;
+  return callGemini({ systemPrompt, parts: [{ text: userPrompt }], temperature: 0.8, maxOutputTokens: 1200 });
+}

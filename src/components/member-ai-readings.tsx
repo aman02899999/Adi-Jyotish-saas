@@ -8,6 +8,7 @@ export type MemberAiReading = {
   id: string;
   readingType: string;
   clientName: string;
+  personaName?: string | null;
   question: string | null;
   answer: string | null;
   status: string;
@@ -53,7 +54,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
             <article key={reading.id} className="ai-reading-item">
               <div className="member-invoice-icon"><Sparkles size={16} /></div>
               <div className="member-invoice-name ai-reading-item__body">
-                <small>{new Date(reading.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{reading.readingType === "kundli" && <> · Full Kundli report</>}{reading.readingType === "palm" && <> · Palm reading (Pandit Trilochan Shashtri)</>}{reading.readingType === "tarot" && <> · Tarot reading (Tarot Mystic Divya)</>}{reading.readingType === "face" && <> · Face reading (Acharya Devraj Bhardwaj)</>}{reading.readingType === "vastu" && <> · Vastu consultation (Vastu Shastri Ramesh Chaturvedi)</>}{reading.readingType === "lalkitab" && <> · Lal Kitab reading (Pandit Girish Trivedi)</>}</small>
+                <small>{new Date(reading.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{reading.readingType === "kundli" && <> · Full Kundli report</>}{reading.readingType === "palm" && <> · Palm reading (Pandit Trilochan Shashtri)</>}{reading.readingType === "tarot" && <> · Tarot reading (Tarot Mystic Divya)</>}{reading.readingType === "face" && <> · Face reading (Acharya Devraj Bhardwaj)</>}{reading.readingType === "vastu" && <> · Vastu consultation (Vastu Shastri Ramesh Chaturvedi)</>}{reading.readingType === "lalkitab" && <> · Lal Kitab reading (Pandit Girish Trivedi)</>}{reading.readingType === "persona" && reading.personaName && <> · {reading.personaName}</>}</small>
                 <h3>{reading.question ?? (reading.readingType === "palm" ? "Hast Rekha Palm Reading" : reading.readingType === "face" ? "Mukh Samudrik Face Reading" : "Full Kundli Report")}</h3>
                 {reading.status === "answered" && reading.answer
                   ? <p className="ai-reading-item__answer">{reading.answer}</p>

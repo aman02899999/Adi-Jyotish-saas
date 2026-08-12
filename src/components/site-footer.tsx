@@ -1,11 +1,13 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
+import { getFooterContent } from "@/lib/site-content";
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const footer = await getFooterContent();
   return (
     <footer className="footer shell">
       <BrandMark />
-      <p>Ancient wisdom for modern life.<br />Made thoughtfully in the present.</p>
+      <p>{footer.blurb.split("\n").map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       <div className="footer__links">
         <Link href="/astrologers">Practitioners</Link>
         <Link href="/blog">Journal</Link>

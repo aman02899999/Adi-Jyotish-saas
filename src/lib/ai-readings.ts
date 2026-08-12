@@ -3,7 +3,8 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
 import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
-import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { getPersonaById } from "@/lib/ai-personas";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
 import { getSiteUrl } from "@/lib/site-url";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
@@ -31,6 +32,9 @@ export type AiReading = {
   rightPalmImagePath: string | null;
   tarotCards: TarotCardDraw[] | null;
   faceImagePaths: string[] | null;
+  personaId: string | null;
+  personaSlug: string | null;
+  personaName: string | null;
   price: number;
   currency: string;
   status: string;
@@ -54,6 +58,9 @@ type AiReadingDoc = {
   rightPalmImagePath?: string | null;
   tarotCards?: TarotCardDraw[] | null;
   faceImagePaths?: string[] | null;
+  personaId?: string | null;
+  personaSlug?: string | null;
+  personaName?: string | null;
   price: number;
   currency: string;
   status: string;
@@ -82,6 +89,9 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     rightPalmImagePath: data.rightPalmImagePath ?? null,
     tarotCards: data.tarotCards ?? null,
     faceImagePaths: data.faceImagePaths ?? null,
+    personaId: data.personaId ?? null,
+    personaSlug: data.personaSlug ?? null,
+    personaName: data.personaName ?? null,
     price: data.price,
     currency: data.currency,
     status: data.status,
@@ -136,13 +146,14 @@ function isAlreadyExists(error: unknown) {
   return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
 }
 
-export async function createFreeReading({ memberId, clientName, birthDate, birthTime, birthPlace, question }: {
+export async function createFreeReading({ memberId, clientName, birthDate, birthTime, birthPlace, question, persona }: {
   memberId: string;
   clientName: string;
   birthDate: string;
   birthTime: string;
   birthPlace: string;
   question: string;
+  persona?: { id: string; slug: string; name: string };
 }) {
   // isEligibleForFreeReading (the caller's check) reads outside any transaction, so two concurrent
   // requests (double submit, duplicate tab) could both see "not yet used" and both land here.
@@ -156,12 +167,19 @@ export async function createFreeReading({ memberId, clientName, birthDate, birth
 
   const ref = await collection.add({
     memberId,
-    readingType: "question",
+    // Tagging this correctly (rather than always "question") matters beyond display: a later
+    // retry (see the [id]/retry route) re-reads this doc and dispatches on readingType — a
+    // persona reading mislabeled "question" would silently answer as Shree Santram Shashtri
+    // instead of the persona the member actually asked.
+    readingType: persona ? "persona" : "question",
     clientName,
     birthDate,
     birthTime,
     birthPlace,
     question,
+    personaId: persona?.id ?? null,
+    personaSlug: persona?.slug ?? null,
+    personaName: persona?.name ?? null,
     price: 0,
     currency: AI_READING_CURRENCY,
     status: "paid",
@@ -403,6 +421,43 @@ export async function createPendingLalKitabReading({ memberId, clientName, birth
   return toReading(await ref.get());
 }
 
+export async function createPendingPersonaReading({ memberId, clientName, question, personaId, personaSlug, personaName, price }: {
+  memberId: string;
+  clientName: string;
+  question: string;
+  personaId: string;
+  personaSlug: string;
+  personaName: string;
+  price: number;
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "persona",
+    clientName,
+    birthDate: "",
+    birthTime: "",
+    birthPlace: "",
+    question,
+    personaId,
+    personaSlug,
+    personaName,
+    price,
+    currency: AI_READING_CURRENCY,
+    // A price-0 persona has no payment step, so there's nothing to be "pending" on — starting it
+    // at "paid" (like createFreeReading does) matters beyond display: the retry route rejects
+    // "pending_payment" readings with "This reading has not been paid for yet", which would
+    // wrongly block a member from retrying a free reading that failed to generate the first time.
+    status: price === 0 ? "paid" : "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    reminderSentAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
 export async function attachRazorpayOrder(readingId: string, orderId: string) {
   await collection.doc(readingId).update({ razorpayOrderId: orderId });
 }
@@ -465,6 +520,12 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
     if (reading.readingType === "lalkitab") {
       return getLalKitabReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
     }
+    if (reading.readingType === "persona") {
+      if (!reading.personaId) throw new Error("This reading is missing its persona.");
+      const persona = await getPersonaById(reading.personaId);
+      if (!persona) throw new Error("This persona is no longer available.");
+      return getPersonaReadingAnswer({ systemPrompt: persona.systemPrompt, name: reading.clientName, question: reading.question ?? "" });
+    }
     return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
   })();
 
@@ -506,7 +567,11 @@ export async function sendPendingReadingReminders() {
   let sent = 0;
   for (const doc of snap.docs) {
     const reading = toReading(doc);
-    const resume = READING_RESUME[reading.readingType];
+    // Personas have no fixed path (each admin-created one lives at its own /ai/{slug}), so their
+    // resume link is built from the reading's own personaSlug/personaName instead of the static map.
+    const resume = reading.readingType === "persona"
+      ? (reading.personaSlug ? { label: `your ${reading.personaName ?? "reading"}`, path: `/ai/${reading.personaSlug}` } : null)
+      : READING_RESUME[reading.readingType];
     try {
       if (resume) {
         const memberSnap = await db.collection("members").doc(reading.memberId).get();

@@ -9,7 +9,9 @@ export const dynamic = "force-dynamic";
 export async function POST(_request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
-  if (!hasAdminPermission(admin, "schedule")) return Response.json({ error: "Scheduling permission required." }, { status: 403 });
+  if (!hasAdminPermission(admin, "schedule") && !hasAdminPermission(admin, "practitioners")) {
+    return Response.json({ error: "Scheduling or Practitioners permission required." }, { status: 403 });
+  }
 
   const { id: slug } = await params;
   if (!slug) return Response.json({ error: "Invalid practitioner id." }, { status: 400 });

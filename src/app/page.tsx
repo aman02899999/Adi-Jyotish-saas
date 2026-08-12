@@ -36,6 +36,7 @@ import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnl
 import { getPublishedServices } from "@/lib/services";
 import { REFERRAL_REFERRER_REWARD, REFERRAL_REFEREE_REWARD } from "@/lib/referrals";
 import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
+import { getHomeHeroContent } from "@/lib/site-content";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
 import { HeroVideo } from "@/components/hero-video";
 import { StartHerePicker } from "@/components/start-here-picker";
@@ -80,7 +81,7 @@ const freeTools = [
 
 export default async function HomePage() {
   const defaultSign = ZODIAC_SIGNS[0];
-  const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null)]);
+  const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope, hero] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null), getHomeHeroContent()]);
   const seniorMain = seniorAstrologers.slice(0, 2);
   const seniorRest = seniorAstrologers.slice(2);
 
@@ -101,14 +102,14 @@ export default async function HomePage() {
       <section className="hero-cosmic">
         <div className="hero shell">
           <div className="hero-copy reveal">
-            <p className="eyebrow"><span /> Ancient clarity, beautifully modern</p>
-            <h1>Your stars.<br /><em>Your story.</em></h1>
+            <p className="eyebrow"><span /> {hero.eyebrow}</p>
+            <h1>{hero.headline}<br /><em>{hero.headlineEm}</em></h1>
             <p className="hero-lead">
-              Authentic Vedic astrology translated into thoughtful, personal guidance for the life you are living now.
+              {hero.lead}
             </p>
             <div className="hero-actions">
-              <Link href="/dashboard" className="button">Explore your chart <ArrowRight size={17} /></Link>
-              <Link href="#method" className="button button--ghost">How it works</Link>
+              <Link href={hero.primaryCtaHref} className="button">{hero.primaryCtaLabel} <ArrowRight size={17} /></Link>
+              <Link href={hero.secondaryCtaHref} className="button button--ghost">{hero.secondaryCtaLabel}</Link>
             </div>
             <div className="hero-proof">
               <div className="avatar-stack" aria-hidden="true">

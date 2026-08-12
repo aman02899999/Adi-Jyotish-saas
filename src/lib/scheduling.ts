@@ -750,6 +750,121 @@ export async function getPractitionerDirectory(activeOnly = false): Promise<Prac
   );
 }
 
+export class PractitionerAdminError extends Error {}
+
+function toPractitionerSlug(name: string) {
+  return name
+    .toLowerCase()
+    .trim()
+    .replace(/[^a-z0-9]+/g, "-")
+    .replace(/(^-|-$)/g, "")
+    .slice(0, 100);
+}
+
+/** Practitioners previously could only be onboarded by inviting an email to an *existing*
+ * Firestore doc — there was no way to create that doc from the admin UI at all, so a new
+ * practitioner had to be added by hand (a seed script) before an invite could even be sent.
+ * This creates the base record; the practitioner still needs a portal invite (see
+ * practitioner-invites.ts) before they can sign in and self-manage their profile. */
+export async function createPractitionerAdmin(input: {
+  name: string; email: string; title: string; bio: string; specialties: string; languages: string;
+  consultationModes: string; experienceYears: number; chatRatePerMinute: number; photoUrl: string | null;
+  featured: boolean; active: boolean;
+}) {
+  const name = input.name.trim().slice(0, 120);
+  const email = input.email.trim().toLowerCase().slice(0, 180);
+  if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
+  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PractitionerAdminError("Enter a valid email address.");
+
+  const collection = db.collection("practitioners");
+  const emailTaken = await collection.where("email", "==", email).limit(1).get();
+  if (!emailTaken.empty) throw new PractitionerAdminError("A practitioner with that email already exists.");
+
+  const base = toPractitionerSlug(name) || "practitioner";
+  let slug = base;
+  for (let attempt = 0; (await collection.doc(slug).get()).exists; attempt += 1) {
+    slug = `${base}-${attempt + 2}`;
+    if (attempt > 20) throw new PractitionerAdminError("Could not generate a unique profile URL — try a different name.");
+  }
+
+  const doc = {
+    name,
+    slug,
+    email,
+    title: input.title.trim().slice(0, 160),
+    bio: input.bio.trim().slice(0, 2000),
+    specialties: input.specialties.trim().slice(0, 300),
+    languages: input.languages.trim().slice(0, 200),
+    consultationModes: input.consultationModes.trim().slice(0, 200),
+    experienceYears: Math.max(0, Math.min(60, Number(input.experienceYears) || 0)),
+    verified: false,
+    verificationLevel: "unverified",
+    photoUrl: input.photoUrl?.trim() || null,
+    online: false,
+    chatRatePerMinute: Math.max(0, Number(input.chatRatePerMinute) || 0),
+    active: input.active,
+    featured: input.featured,
+    firebaseUid: null,
+  };
+  const ref = collection.doc(slug);
+  await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  return practitionerFromDoc(await ref.get());
+}
+
+export async function updatePractitionerAdmin(id: string, patch: Partial<{
+  name: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
+  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
+}>) {
+  const ref = db.collection("practitioners").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new PractitionerAdminError("Practitioner not found.");
+
+  const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+  if (patch.name !== undefined) {
+    const name = patch.name.trim().slice(0, 120);
+    if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
+    update.name = name;
+  }
+  if (patch.title !== undefined) update.title = patch.title.trim().slice(0, 160);
+  if (patch.bio !== undefined) update.bio = patch.bio.trim().slice(0, 2000);
+  if (patch.specialties !== undefined) update.specialties = patch.specialties.trim().slice(0, 300);
+  if (patch.languages !== undefined) update.languages = patch.languages.trim().slice(0, 200);
+  if (patch.consultationModes !== undefined) update.consultationModes = patch.consultationModes.trim().slice(0, 200);
+  if (patch.experienceYears !== undefined) update.experienceYears = Math.max(0, Math.min(60, Number(patch.experienceYears) || 0));
+  if (patch.chatRatePerMinute !== undefined) update.chatRatePerMinute = Math.max(0, Number(patch.chatRatePerMinute) || 0);
+  if (patch.photoUrl !== undefined) update.photoUrl = patch.photoUrl?.trim() || null;
+  if (patch.verified !== undefined) update.verified = patch.verified;
+  if (patch.featured !== undefined) update.featured = patch.featured;
+  if (patch.active !== undefined) update.active = patch.active;
+
+  await ref.update(update);
+  return practitionerFromDoc(await ref.get());
+}
+
+/** Hard-deletes a practitioner that never received any real activity (no bookings, no reviews) —
+ * once real bookings/reviews/payouts point at this id, deleting the doc would orphan that
+ * history, so those should be deactivated (active: false) instead via updatePractitionerAdmin. */
+export async function deletePractitionerAdmin(id: string) {
+  const ref = db.collection("practitioners").doc(id);
+  const snap = await ref.get();
+  if (!snap.exists) throw new PractitionerAdminError("Practitioner not found.");
+
+  const [bookings, reviews] = await Promise.all([
+    db.collection("bookings").where("practitionerId", "==", id).limit(1).get(),
+    db.collection("practitionerReviews").where("practitionerId", "==", id).limit(1).get(),
+  ]);
+  if (!bookings.empty || !reviews.empty) {
+    throw new PractitionerAdminError("This practitioner has bookings or reviews on record — deactivate instead of deleting.");
+  }
+
+  const [rulesSnap, timeOffSnap] = await Promise.all([ref.collection("availabilityRules").get(), ref.collection("timeOff").get()]);
+  const batch = db.batch();
+  for (const doc of rulesSnap.docs) batch.delete(doc.ref);
+  for (const doc of timeOffSnap.docs) batch.delete(doc.ref);
+  batch.delete(ref);
+  await batch.commit();
+}
+
 export function dateInTimeZone(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
