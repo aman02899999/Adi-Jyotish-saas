@@ -1,5 +1,5 @@
 import { timingSafeEqual } from "node:crypto";
-import { sendPendingReadingReminders } from "@/lib/ai-readings";
+import { retryUnansweredReadings, sendPendingReadingReminders } from "@/lib/ai-readings";
 import { expireStaleChatSessions } from "@/lib/chat";
 import { expireStalePendingOrders } from "@/lib/gemstone-orders";
 
@@ -22,10 +22,11 @@ function isAuthorized(request: Request) {
 export async function POST(request: Request) {
   if (!isAuthorized(request)) return Response.json({ error: "Unauthorized." }, { status: 401 });
 
-  const [chatResult, ordersResult, readingRemindersResult] = await Promise.allSettled([
+  const [chatResult, ordersResult, readingRemindersResult, unansweredReadingsResult] = await Promise.allSettled([
     expireStaleChatSessions(),
     expireStalePendingOrders(),
     sendPendingReadingReminders(),
+    retryUnansweredReadings(),
   ]);
 
   return Response.json({
@@ -34,5 +35,6 @@ export async function POST(request: Request) {
     chatSessions: chatResult.status === "fulfilled" ? "ok" : String(chatResult.reason),
     pendingOrders: ordersResult.status === "fulfilled" ? "ok" : String(ordersResult.reason),
     readingReminders: readingRemindersResult.status === "fulfilled" ? readingRemindersResult.value : String(readingRemindersResult.reason),
+    unansweredReadings: unansweredReadingsResult.status === "fulfilled" ? unansweredReadingsResult.value : String(unansweredReadingsResult.reason),
   });
 }

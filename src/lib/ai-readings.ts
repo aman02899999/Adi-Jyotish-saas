@@ -599,3 +599,28 @@ export async function sendPendingReadingReminders() {
   }
   return { sent, skipped: false as const };
 }
+
+const UNANSWERED_READING_RETRY_BATCH = 25;
+
+/** A reading that's been paid for (or was free) but never got an answer — most commonly because
+ * GEMINI_API_KEY wasn't set, or a transient Gemini API failure — otherwise sits stranded forever:
+ * nothing retries it automatically, and the member's only way to get their answer is manually
+ * clicking "Check again" on a page they may never revisit. Every reading with status "paid" is
+ * by definition unanswered (generateReadingAnswer only ever transitions "paid" -> "answered", and
+ * never resets it), so no extra filter is needed to find the backlog. Run on the housekeeping
+ * schedule so that fixing a misconfiguration actually clears everyone who paid during the outage,
+ * instead of leaving them silently stuck. */
+export async function retryUnansweredReadings() {
+  const snap = await collection.where("status", "==", "paid").limit(UNANSWERED_READING_RETRY_BATCH).get();
+
+  let answered = 0;
+  for (const doc of snap.docs) {
+    try {
+      const result = await generateReadingAnswer(toReading(doc));
+      if (result.status === "answered") answered += 1;
+    } catch (error) {
+      console.error(`Failed to retry AI reading ${doc.id}:`, error);
+    }
+  }
+  return { attempted: snap.size, answered };
+}
