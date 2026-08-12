@@ -9,7 +9,7 @@ const contentSecurityPolicy = [
   "style-src 'self' 'unsafe-inline'",
   "img-src 'self' data: blob: https://www.google-analytics.com https://www.facebook.com https://*.razorpay.com",
   "font-src 'self' data:",
-  "connect-src 'self' https://*.googleapis.com https://apis.google.com https://*.sentry.io https://challenges.cloudflare.com https://www.googletagmanager.com https://*.google-analytics.com https://connect.facebook.net https://www.facebook.com https://*.razorpay.com",
+  "connect-src 'self' https://*.googleapis.com https://apis.google.com https://*.sentry.io https://challenges.cloudflare.com https://www.googletagmanager.com https://*.google-analytics.com https://connect.facebook.net https://www.facebook.com https://*.razorpay.com" + (process.env.NEXT_PUBLIC_USE_EMULATOR === "true" ? " http://127.0.0.1:9099" : ""),
   "frame-src 'self' https://*.firebaseapp.com https://accounts.google.com https://challenges.cloudflare.com https://*.razorpay.com",
   "frame-ancestors 'none'",
   "base-uri 'self'",

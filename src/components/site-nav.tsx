@@ -97,6 +97,7 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
         <ShoppingBag size={19} />
         {cartCount > 0 && <span className="header-cart__badge">{cartCount > 99 ? "99+" : cartCount}</span>}
       </Link>
+      {menuOpen && <div className="mobile-menu__backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
       <div className="mobile-menu" ref={menuRef}>
         <button type="button" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Menu size={22} /></button>
         {menuOpen && (

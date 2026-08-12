@@ -672,7 +672,12 @@ export async function seedPractitioners() {
       const weekdays = starter.featured ? [1, 2, 3, 4, 5] : [2, 3, 4, 5, 6];
       const batch = db.batch();
       for (const weekday of weekdays) {
-        batch.set(ref.collection("availabilityRules").doc(), { weekday, startTime: "09:30", endTime: "17:30", active: true });
+        // A deterministic doc ID (not an auto-generated one) keeps this idempotent: this whole
+        // block runs on every directory read, so without it, two concurrent reads that both see
+        // rulesSnap.empty === true (the check-then-act race is real — nothing here locks between
+        // the read and the write) each create their own random-ID doc for the same weekday,
+        // doubling every slot the availability grid ever offers for that practitioner.
+        batch.set(ref.collection("availabilityRules").doc(`starter-${weekday}`), { weekday, startTime: "09:30", endTime: "17:30", active: true });
       }
       await batch.commit();
     }
@@ -935,7 +940,17 @@ export async function getAvailableSlots({ date, duration, practitionerId, exclud
   const slots: AvailableSlot[] = [];
   for (const person of people) {
     const personBookings = existingBookings.filter((booking) => booking.id !== excludeBookingId && booking.practitionerId === person.id && booking.status !== "cancelled");
-    const rules = person.rules.filter((rule) => rule.weekday === weekday && rule.active);
+    // Collapses any pre-existing duplicate rule rows (see seedPractitioners' idempotency note) by
+    // (weekday, startTime, endTime) so a practitioner whose data was affected before that fix
+    // doesn't keep offering every slot twice until someone re-seeds their profile.
+    const seenRuleWindows = new Set<string>();
+    const rules = person.rules.filter((rule) => {
+      if (rule.weekday !== weekday || !rule.active) return false;
+      const key = `${rule.startTime}-${rule.endTime}`;
+      if (seenRuleWindows.has(key)) return false;
+      seenRuleWindows.add(key);
+      return true;
+    });
     for (const rule of rules) {
       for (let cursor = minutes(rule.startTime); cursor + duration <= minutes(rule.endTime); cursor += 30) {
         const startsAt = civilToUtc(date, timeFromMinutes(cursor), settings.timezone);
