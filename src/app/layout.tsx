@@ -4,6 +4,7 @@ import { GoogleAnalytics } from "@/components/google-analytics";
 import { JsonLd } from "@/components/json-ld";
 import { MetaPixel } from "@/components/meta-pixel";
 import { PromoBanner } from "@/components/promo-banner";
+import { RouteProgress } from "@/components/route-progress";
 import { getSiteUrl } from "@/lib/site-url";
 import "./globals.css";
 
@@ -52,6 +53,7 @@ export default function RootLayout({ children }: { children: ReactNode }) {
   return (
     <html lang="en">
       <body>
+        <RouteProgress />
         <JsonLd data={websiteJsonLd} />
         <PromoBanner />
         {children}

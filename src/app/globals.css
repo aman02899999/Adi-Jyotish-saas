@@ -40,10 +40,20 @@ button { border: 0; }
 .brand-copy small { margin-top: 5px; color: var(--muted); font-size:12px; letter-spacing: .17em; text-transform: uppercase; }
 .button { min-height: 48px; display: inline-flex; align-items: center; justify-content: center; gap: 10px; border: 1px solid var(--copper); border-radius: 999px; padding: 0 23px; background: var(--copper); color: #fffaf4; font-size:15px; font-weight: 700; transition: transform .25s ease, box-shadow .25s ease, background .25s ease; }
 .button:hover { transform: translateY(-2px); background: var(--copper-dark); box-shadow: 0 10px 22px rgba(130,66,43,.2); }
+.button:active { transform: scale(.96); background: var(--copper-dark); box-shadow: none; transition-duration: .08s; }
 .button--small { min-height: 39px; padding-inline: 17px; font-size:14px; }
 .button--ghost { color: var(--ink); background: transparent; border-color: var(--line); }
 .button--ghost:hover { background: rgba(255,255,255,.45); border-color: rgba(169,88,56,.35); box-shadow: none; }
+.button--ghost:active { background: rgba(169,88,56,.14); }
 .button--light { background: #f8f1e7; border-color: #f8f1e7; color: var(--copper-dark); }
+.button--light:active { background: #efe4d3; }
+
+/* Slim top progress bar shown for the duration of an in-flight page navigation, so a click on
+   any Link-based button stays visibly "working" instead of appearing to do nothing until the
+   destination page (often server-rendered with its own data fetch) finishes loading. */
+.route-progress { position:fixed; top:0; left:0; right:0; height:3px; z-index:200; overflow:hidden; background:rgba(169,88,56,.15); }
+.route-progress::before { content:""; position:absolute; inset:0; width:40%; background:linear-gradient(90deg, transparent, var(--copper), var(--copper-dark), var(--copper), transparent); animation:route-progress-sweep 1.1s ease-in-out infinite; }
+@keyframes route-progress-sweep { 0% { transform:translateX(-100%); } 100% { transform:translateX(350%); } }
 .button:focus-visible, a:focus-visible, input:focus-visible, textarea:focus-visible, select:focus-visible, summary:focus-visible { outline: 2px solid var(--copper); outline-offset: 3px; }
 .eyebrow { display: flex; align-items: center; gap: 10px; margin: 0 0 22px; color: var(--copper-dark); font-size:13px; font-weight: 700; letter-spacing: .2em; text-transform: uppercase; }
 .eyebrow span { width: 25px; height: 1px; background: var(--copper); }
