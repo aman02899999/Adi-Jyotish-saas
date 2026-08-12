@@ -2269,6 +2269,16 @@ button { border: 0; }
 .chat-room__ended strong { display:block; color:var(--ink); font-size:13px; }
 .chat-room__ended small { color:var(--muted); font-size:12px; }
 
+.chat-with-kundli { display:grid; grid-template-columns:1.4fr 1fr; align-items:start; gap:18px; }
+.chat-kundli-panel { display:flex; flex-direction:column; gap:12px; max-height:min(640px,72vh); overflow-y:auto; padding:18px; border:1px solid var(--line); border-radius:14px; background:rgba(248,244,237,.62); }
+.chat-kundli-panel header { display:flex; align-items:center; gap:8px; color:var(--copper); }
+.chat-kundli-panel h3 { margin:0; color:var(--ink); font:400 15px var(--serif); }
+.chat-kundli-panel__hint { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
+.chat-kundli-panel__error { margin:0; padding:9px 11px; border-radius:8px; color:#99483d; background:rgba(166,73,61,.08); font-size:12px; }
+@media (max-width: 900px) {
+  .chat-with-kundli { grid-template-columns:1fr; }
+}
+
 /* admin wallets */
 .wallet-table__head,.wallet-table__row { display:grid; grid-template-columns:minmax(150px,1.4fr) 100px; align-items:center; gap:9px; padding-inline:19px; }
 .wallet-table--ledger .wallet-table__head,.wallet-table--ledger .wallet-table__row { grid-template-columns:minmax(150px,1.3fr) 90px 90px 132px 110px; }

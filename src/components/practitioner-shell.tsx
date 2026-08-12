@@ -1,6 +1,6 @@
 import type { ReactNode } from "react";
 import Link from "next/link";
-import { CalendarClock, Coins, LayoutDashboard, LogOut, Menu, Star, UserRound } from "lucide-react";
+import { CalendarClock, Coins, LayoutDashboard, LogOut, Menu, MessageCircle, Star, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { FaqWidget } from "@/components/faq-widget";
 import { NotificationBell } from "@/components/notification-bell";
@@ -9,12 +9,13 @@ import { ProfileMenu } from "@/components/profile-menu";
 import { PRACTITIONER_FAQ } from "@/lib/faq-data";
 import type { PractitionerIdentity } from "@/lib/practitioner-auth";
 
-type ActiveTab = "Overview" | "Schedule" | "Bookings" | "Earnings" | "Reviews" | "Profile";
+type ActiveTab = "Overview" | "Schedule" | "Bookings" | "Chat" | "Earnings" | "Reviews" | "Profile";
 
 const navItems: { label: string; icon: typeof LayoutDashboard; href: string; tab: ActiveTab }[] = [
   { label: "Overview", icon: LayoutDashboard, href: "/practitioner", tab: "Overview" },
   { label: "Schedule", icon: CalendarClock, href: "/practitioner/schedule", tab: "Schedule" },
   { label: "Bookings", icon: CalendarClock, href: "/practitioner/bookings", tab: "Bookings" },
+  { label: "Chat", icon: MessageCircle, href: "/practitioner/chat", tab: "Chat" },
   { label: "Earnings", icon: Coins, href: "/practitioner/earnings", tab: "Earnings" },
   { label: "Reviews", icon: Star, href: "/practitioner/reviews", tab: "Reviews" },
   { label: "Profile", icon: UserRound, href: "/practitioner/profile", tab: "Profile" },

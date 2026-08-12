@@ -2,6 +2,7 @@ import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { ChatSessionEndedError, ChatSessionNotFoundError, getSessionOr404, sendMessage } from "@/lib/chat";
 import { getCurrentMember } from "@/lib/member-auth";
+import { getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
@@ -13,18 +14,23 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const text = body.body?.trim();
   if (!text || text.length > 2000) return Response.json({ error: "Enter a message up to 2000 characters." }, { status: 400 });
 
-  const [member, admin] = await Promise.all([getCurrentMember(), getCurrentAdmin()]);
+  const [member, admin, practitioner] = await Promise.all([getCurrentMember(), getCurrentAdmin(), getCurrentPractitioner()]);
   const isAdmin = Boolean(admin && hasAdminPermission(admin, "messages"));
-  if (!member && !isAdmin) return Response.json({ error: "Sign-in required." }, { status: 401 });
+  if (!member && !isAdmin && !practitioner) return Response.json({ error: "Sign-in required." }, { status: 401 });
 
   // Generous enough for real typing-speed back-and-forth, tight enough to block a scripted flood.
-  const throttle = await checkRateLimit("chat-message", member ? `member:${member.id}` : `admin:${admin!.id}`, 60, 300);
+  const throttleKey = member ? `member:${member.id}` : practitioner ? `practitioner:${practitioner.id}` : `admin:${admin!.id}`;
+  const throttle = await checkRateLimit("chat-message", throttleKey, 60, 300);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   try {
     const session = await getSessionOr404(id);
     if (member && session.memberId === member.id) {
       const message = await sendMessage({ sessionId: id, senderType: "member", senderName: member.name, body: text });
+      return Response.json(message, { status: 201 });
+    }
+    if (practitioner && session.practitionerId === practitioner.id) {
+      const message = await sendMessage({ sessionId: id, senderType: "practitioner", senderName: practitioner.name, body: text });
       return Response.json(message, { status: 201 });
     }
     if (isAdmin) {

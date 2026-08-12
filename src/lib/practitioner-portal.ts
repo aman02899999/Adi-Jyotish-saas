@@ -447,3 +447,35 @@ export async function getBookingKundliSummary(bookingId: string, practitionerId:
   await ref.update({ kundliSummary: summary, kundliGeneratedAt: FieldValue.serverTimestamp() });
   return { ...booking, kundliSummary: summary, kundliGeneratedAt: new Date() };
 }
+
+/** Same idea as getBookingKundliSummary, but for an instant-chat session — a scheduled booking
+ * captures birth details as part of checkout, but a chat session doesn't, so this reads them off
+ * the client's own member profile instead (populated during onboarding). Scoped to sessions the
+ * calling practitioner actually owns, and cached on the chatSessions doc the same way. */
+export async function getChatMemberKundliSummary(sessionId: string, practitionerId: string) {
+  const sessionRef = db.collection("chatSessions").doc(sessionId);
+  const sessionSnap = await sessionRef.get();
+  if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
+  const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string; kundliSummary?: string };
+  if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+  if (sessionData.kundliSummary) return { kundliSummary: sessionData.kundliSummary };
+
+  const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
+  if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
+  const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Kundli can't be generated.");
+  }
+
+  let summary: string;
+  try {
+    const chart = buildKundliChart({ name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace });
+    summary = renderKundliReport(chart);
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+
+  await sessionRef.update({ kundliSummary: summary, kundliGeneratedAt: FieldValue.serverTimestamp() });
+  return { kundliSummary: summary };
+}
