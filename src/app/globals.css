@@ -2454,6 +2454,25 @@ button { border: 0; }
 .product-detail__trust { display:flex; flex-wrap:wrap; gap:14px; margin-bottom:26px; padding:14px 16px; border:1px solid var(--line); border-radius:12px; background:rgba(255,255,255,.25); }
 .product-detail__trust span { display:flex; align-items:center; gap:7px; color:var(--muted); font-size:10.5px; }
 .product-detail__trust svg { color:var(--copper); }
+.product-detail__cert-trigger { display:flex; align-items:center; gap:7px; padding:0; color:var(--muted); background:transparent; font-size:10.5px; font-family:inherit; cursor:pointer; }
+.product-detail__cert-trigger svg { color:var(--copper); }
+.product-detail__cert-trigger span { text-decoration:underline; text-underline-offset:2px; color:var(--copper-dark); font-weight:600; }
+.product-detail__cert-trigger:hover span { color:var(--ink); }
+
+.certificate-modal { width:min(440px,100%); max-height:calc(100dvh - 35px); overflow:auto; position:relative; padding:32px 26px 26px; border:1px solid rgba(255,255,255,.5); border-radius:16px; background:#f3eee6; box-shadow:0 30px 80px rgba(40,30,24,.24); animation:modalIn .3s ease both; }
+.certificate-modal__close { position:absolute; top:14px; right:14px; width:32px; height:32px; display:grid; place-items:center; border-radius:999px; color:var(--muted); background:rgba(255,255,255,.6); }
+.certificate-modal__title { margin:0 0 18px; font:400 20px var(--serif); text-align:center; }
+.certificate-modal__scan { display:flex; flex-direction:column; align-items:center; gap:12px; }
+.certificate-modal__scan img { width:100%; max-height:60vh; object-fit:contain; border-radius:10px; border:1px solid var(--line); background:#fff; }
+.certificate-modal__scan a { font-size:13px; font-weight:700; color:var(--copper-dark); }
+.certificate-card { display:flex; flex-direction:column; align-items:center; gap:4px; padding:6px 4px 0; text-align:center; border:1px dashed var(--copper); border-radius:12px; padding:24px 20px; }
+.certificate-card__seal { width:56px; height:56px; display:grid; place-items:center; margin-bottom:6px; border-radius:999px; color:#fff; background:linear-gradient(135deg,var(--copper),var(--copper-dark)); }
+.certificate-card__lab { margin:0 0 14px; font-weight:700; color:var(--copper-dark); text-transform:uppercase; letter-spacing:.06em; font-size:12px; }
+.certificate-card dl { width:100%; margin:0 0 16px; display:grid; gap:8px; text-align:left; }
+.certificate-card dl div { display:flex; justify-content:space-between; gap:12px; padding-bottom:6px; border-bottom:1px solid var(--line); }
+.certificate-card dt { color:var(--muted); font-size:12.5px; }
+.certificate-card dd { margin:0; font-weight:600; font-size:13px; text-align:right; }
+.certificate-card small { color:var(--muted); font-size:11.5px; line-height:1.5; }
 .product-detail__tabs-head { display:flex; gap:6px; margin-bottom:16px; border-bottom:1px solid var(--line); }
 .product-detail__tabs-head button { padding:10px 4px; margin-right:20px; color:var(--muted); background:transparent; font-size:14px; font-weight:600; border-bottom:2px solid transparent; }
 .product-detail__tabs-head button.active { color:var(--ink); border-color:var(--copper); }

@@ -76,6 +76,7 @@ export type GemstoneProduct = {
   color: string;
   treatment: string;
   certification: string;
+  certificateUrl: string;
   currency: string;
   sku: string;
   featured: boolean;
@@ -310,6 +311,7 @@ export type ProductPayload = {
   color?: string;
   treatment?: string;
   certification?: string;
+  certificateUrl?: string;
   sku?: string;
   featured?: boolean;
   trending?: boolean;
@@ -385,6 +387,7 @@ export async function createProduct(payload: ProductPayload) {
     color: capText(payload.color, 100),
     treatment: capText(payload.treatment, 200),
     certification: capText(payload.certification, 200),
+    certificateUrl: capText(payload.certificateUrl, 500),
     currency: "INR",
     sku,
     featured: payload.featured ?? false,
@@ -433,6 +436,7 @@ export async function updateProduct(id: string, payload: ProductPayload) {
     color: payload.color !== undefined ? capText(payload.color, 100) : existing.color,
     treatment: payload.treatment !== undefined ? capText(payload.treatment, 200) : existing.treatment,
     certification: payload.certification !== undefined ? capText(payload.certification, 200) : existing.certification,
+    certificateUrl: payload.certificateUrl !== undefined ? capText(payload.certificateUrl, 500) : (existing.certificateUrl ?? ""),
     sku: payload.sku?.trim() || existing.sku,
     featured: payload.featured ?? existing.featured,
     trending: payload.trending ?? existing.trending,
@@ -469,6 +473,7 @@ export async function duplicateProduct(id: string) {
     color: product.color,
     treatment: product.treatment,
     certification: product.certification,
+    certificateUrl: product.certificateUrl ?? "",
     sku: `${product.sku}-COPY-${suffix}`,
     featured: false,
     trending: false,

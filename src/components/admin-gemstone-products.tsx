@@ -39,6 +39,7 @@ type FormState = {
   color: string;
   treatment: string;
   certification: string;
+  certificateUrl: string;
   metaTitle: string;
   metaDescription: string;
   featured: boolean;
@@ -56,7 +57,7 @@ function emptyForm(defaultCategoryId: string): FormState {
   return {
     categoryId: defaultCategoryId, name: "", slug: "", sku: "",
     shortDescription: "", description: "", benefits: "", whoShouldWear: "",
-    recommendedZodiac: "", recommendedPlanets: "", origin: "", color: "", treatment: "", certification: "",
+    recommendedZodiac: "", recommendedPlanets: "", origin: "", color: "", treatment: "", certification: "", certificateUrl: "",
     metaTitle: "", metaDescription: "",
     featured: false, trending: false, bestseller: false, active: true,
     images: [{ ...emptyImage, isPrimary: true }],
@@ -91,7 +92,7 @@ export function AdminGemstoneProducts({ initialProducts, categories }: { initial
       setForm({
         categoryId: String(p.categoryId), name: p.name, slug: p.slug, sku: p.sku,
         shortDescription: p.shortDescription, description: p.description, benefits: p.benefits, whoShouldWear: p.whoShouldWear,
-        recommendedZodiac: p.recommendedZodiac, recommendedPlanets: p.recommendedPlanets, origin: p.origin, color: p.color, treatment: p.treatment, certification: p.certification,
+        recommendedZodiac: p.recommendedZodiac, recommendedPlanets: p.recommendedPlanets, origin: p.origin, color: p.color, treatment: p.treatment, certification: p.certification, certificateUrl: p.certificateUrl ?? "",
         metaTitle: p.metaTitle, metaDescription: p.metaDescription,
         featured: p.featured, trending: p.trending, bestseller: p.bestseller, active: p.active,
         images: data.images.length ? data.images.map((i: { id: string; url: string; alt: string; isPrimary: boolean }) => ({ id: i.id, url: i.url, alt: i.alt, isPrimary: i.isPrimary })) : [{ ...emptyImage, isPrimary: true }],
@@ -220,6 +221,7 @@ export function AdminGemstoneProducts({ initialProducts, categories }: { initial
                 <label className="field"><span>Color</span><input value={form.color} onChange={(event) => setForm({ ...form, color: event.target.value })} placeholder="e.g. Cornflower blue" /></label>
                 <label className="field"><span>Treatment</span><input value={form.treatment} onChange={(event) => setForm({ ...form, treatment: event.target.value })} placeholder="e.g. Natural / Untreated" /></label>
                 <label className="field"><span>Certification</span><input value={form.certification} onChange={(event) => setForm({ ...form, certification: event.target.value })} placeholder="e.g. GRS Certified" /></label>
+                <label className="field field--full"><span>Certificate image / PDF URL (optional)</span><input type="text" value={form.certificateUrl} onChange={(event) => setForm({ ...form, certificateUrl: event.target.value })} placeholder="https://… scanned lab certificate — leave blank to show an auto-generated certificate card" /></label>
                 <label className="field"><span>Recommended zodiac signs</span><input value={form.recommendedZodiac} onChange={(event) => setForm({ ...form, recommendedZodiac: event.target.value })} placeholder="Taurus, Libra" /></label>
                 <label className="field"><span>Recommended planets</span><input value={form.recommendedPlanets} onChange={(event) => setForm({ ...form, recommendedPlanets: event.target.value })} placeholder="Saturn, Venus" /></label>
                 <label className="field field--full"><span>Short description</span><input maxLength={300} value={form.shortDescription} onChange={(event) => setForm({ ...form, shortDescription: event.target.value })} placeholder="Shown on product cards" /></label>

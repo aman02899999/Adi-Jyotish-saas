@@ -86,7 +86,7 @@ export default async function GemstoneProductPage({ params }: { params: Promise<
           id: product.id, slug: product.slug, name: product.name, shortDescription: product.shortDescription,
           description: product.description, benefits: product.benefits, whoShouldWear: product.whoShouldWear,
           recommendedZodiac: product.recommendedZodiac, recommendedPlanets: product.recommendedPlanets,
-          origin: product.origin, color: product.color, treatment: product.treatment, certification: product.certification,
+          origin: product.origin, color: product.color, treatment: product.treatment, certification: product.certification, certificateUrl: product.certificateUrl ?? "",
           currency: product.currency, categoryName: product.categoryName, ratingAverage: product.ratingAverage, ratingCount: product.ratingCount,
           images: product.images.map((image) => ({ url: image.url, alt: image.alt })),
           variants: product.variants.map((variant) => ({ id: variant.id, label: variant.label, weightCarat: variant.weightCarat, weightRatti: variant.weightRatti, certificationLevel: variant.certificationLevel, price: variant.price, compareAtPrice: variant.compareAtPrice, stockQuantity: variant.stockQuantity })),
