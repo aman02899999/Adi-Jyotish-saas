@@ -13,9 +13,6 @@
     "test": "vitest run"
   },
   "dependencies": {
-    "@react-three/drei": "^10.7.7",
-    "@react-three/fiber": "^9.7.0",
-    "@react-three/postprocessing": "^3.0.4",
     "@sentry/nextjs": "^10.69.0",
     "ably": "^2.26.0",
     "astronomy-engine": "^2.1.19",
@@ -28,12 +25,10 @@
     "otplib": "^13.4.1",
     "panchanga": "^0.1.1",
     "pdf-lib": "^1.17.1",
-    "postprocessing": "^6.39.4",
     "qrcode": "^1.5.4",
     "razorpay": "^2.9.8",
     "react": "19.2.6",
-    "react-dom": "19.2.6",
-    "three": "^0.185.1"
+    "react-dom": "19.2.6"
   },
   "devDependencies": {
     "@tailwindcss/postcss": "4.1.17",

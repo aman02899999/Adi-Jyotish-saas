@@ -91,6 +91,9 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
                 : activePlanId
                   ? <Link href="/dashboard/billing" className="button button--ghost pricing-cta">Cancel current plan to switch</Link>
                   : <button className="button pricing-cta" disabled={loadingId === plan.id || !canSubscribe} onClick={() => subscribe(plan)}>{loadingId === plan.id ? "Opening…" : "Subscribe"}</button>}
+              {!isCurrent && !activePlanId && razorpayConfigured && !canSubscribe && (
+                <small className="pricing-cta-note">This plan isn&rsquo;t available for online billing yet. Please contact support.</small>
+              )}
             </article>
           );
         })}

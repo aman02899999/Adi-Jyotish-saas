@@ -20,7 +20,7 @@ export type AdminIdentity = {
 export type AdminPermission =
   | "overview" | "services" | "members_view" | "members_manage"
   | "bookings" | "schedule" | "billing" | "plans" | "reviews" | "messages" | "insights" | "reports"
-  | "activity" | "settings" | "team" | "gemstones" | "roles";
+  | "activity" | "settings" | "team" | "gemstones" | "roles" | "practitioners" | "ai_personas" | "website";
 
 export const ALL_ADMIN_PERMISSIONS: { key: AdminPermission; label: string }[] = [
   { key: "overview", label: "Overview" },
@@ -40,6 +40,9 @@ export const ALL_ADMIN_PERMISSIONS: { key: AdminPermission; label: string }[] = 
   { key: "team", label: "Team" },
   { key: "gemstones", label: "Gemstones" },
   { key: "roles", label: "Roles & permissions" },
+  { key: "practitioners", label: "Practitioners" },
+  { key: "ai_personas", label: "AI personas" },
+  { key: "website", label: "Website content" },
 ];
 
 /** Permissions are resolved once when the admin identity is loaded (see getCurrentAdmin), so this stays a synchronous, allocation-free check at every call site. */
@@ -99,7 +102,14 @@ export async function getCurrentAdmin(): Promise<AdminIdentity | null> {
   if (!data.active) return null;
 
   const roleSnap = await db.collection("adminRoles").doc(data.role).get();
-  const permissions = (roleSnap.exists ? (roleSnap.data()?.permissions as AdminPermission[] | undefined) : undefined) ?? [];
+  // The Owner role is meant to always have full access (see updateRole's "can't be restricted"
+  // guard in admin-roles.ts) — but its permissions array is only written once at bootstrap
+  // (auth/setup/route.ts), so any permission key added after an owner account already existed
+  // would silently lock that owner out of the new admin pages. Resolving it to the live
+  // ALL_ADMIN_PERMISSIONS list here keeps the invariant true regardless of when it was added.
+  const permissions = data.role === "owner" && roleSnap.exists && roleSnap.data()?.isSystem
+    ? ALL_ADMIN_PERMISSIONS.map((permission) => permission.key)
+    : (roleSnap.exists ? (roleSnap.data()?.permissions as AdminPermission[] | undefined) : undefined) ?? [];
 
   return { id: uid, name: data.name, email: data.email, role: data.role, permissions };
 }

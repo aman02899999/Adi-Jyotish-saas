@@ -263,3 +263,28 @@ export async function getSessionForAdmin(sessionId: string) {
   const practitionerName = (practitionerDoc.data() as { name?: string } | undefined)?.name ?? "Practitioner";
   return { ...session, memberName, practitionerName };
 }
+
+/** The practitioner-portal equivalent of getSessionForAdmin — same shape, but scoped to sessions
+ * that actually belong to the calling practitioner (thrown as ChatSessionNotFoundError rather than
+ * a 403, matching how every other practitioner-scoped lookup in this app avoids confirming a
+ * session id exists to someone who doesn't own it). */
+export async function getSessionForPractitioner(sessionId: string, practitionerId: string) {
+  const session = await getSessionOr404(sessionId);
+  if (session.practitionerId !== practitionerId) throw new ChatSessionNotFoundError("Chat session not found.");
+  const memberDoc = await db.collection("members").doc(session.memberId).get();
+  const memberName = (memberDoc.data() as { name?: string } | undefined)?.name ?? "Member";
+  return { ...session, memberName };
+}
+
+export async function listSessionsForPractitioner(practitionerId: string) {
+  await expireStaleChatSessions().catch((error) => console.error("Stale chat session sweep failed", error));
+  const snap = await sessionsCollection.where("practitionerId", "==", practitionerId).orderBy("startedAt", "desc").limit(30).get();
+  const sessions = snap.docs.map(toSession);
+  if (!sessions.length) return [];
+
+  const memberIds = Array.from(new Set(sessions.map((session) => session.memberId)));
+  const memberDocs = await db.getAll(...memberIds.map((id) => db.collection("members").doc(id)));
+  const memberById = new Map(memberDocs.map((doc) => [doc.id, doc.data() as { name?: string } | undefined]));
+
+  return sessions.map((session) => ({ ...session, memberName: memberById.get(session.memberId)?.name ?? "Member" }));
+}

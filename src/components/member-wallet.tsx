@@ -34,7 +34,7 @@ export function MemberWallet({ balance, currency, entries, onlinePaymentsAvailab
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Adi Jyotish Gurus",
+        name: "Adi Jyotish Guru",
         description: `Wallet recharge · ${currency} ${amount}`,
         prefill: { name: member.name, email: member.email },
         theme: { color: "#a95838" },

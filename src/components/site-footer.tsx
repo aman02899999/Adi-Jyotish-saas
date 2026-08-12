@@ -1,22 +1,26 @@
 import Link from "next/link";
 import { BrandMark } from "@/components/brand-mark";
+import { getFooterContent } from "@/lib/site-content";
 
-export function SiteFooter() {
+export async function SiteFooter() {
+  const footer = await getFooterContent();
   return (
     <footer className="footer shell">
       <BrandMark />
-      <p>Ancient wisdom for modern life.<br />Made thoughtfully in the present.</p>
+      <p>{footer.blurb.split("\n").map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       <div className="footer__links">
         <Link href="/astrologers">Practitioners</Link>
         <Link href="/blog">Journal</Link>
         <Link href="/pricing">Pricing</Link>
         <Link href="/dashboard">Dashboard</Link>
       </div>
-      <small>© {new Date().getFullYear()} Adi Jyotish Gurus</small>
+      <small>© {new Date().getFullYear()} Adi Jyotish Guru</small>
       <div className="footer__legal">
         <Link href="/terms">Terms of Service</Link>
         <Link href="/privacy">Privacy Policy</Link>
         <Link href="/refund-policy">Refund &amp; Cancellation</Link>
+        <Link href="/practitioner/login">Practitioner sign in</Link>
+        <Link href="/admin/login">Studio admin</Link>
         <span>Readings are offered for guidance and self-reflection. They are not a substitute for medical, legal, or financial advice, and no specific outcome is guaranteed.</span>
       </div>
     </footer>

@@ -17,6 +17,7 @@ export type PractitionerIdentity = {
   email: string;
   title: string;
   photoUrl: string | null;
+  online: boolean;
 };
 
 type PractitionerDoc = {
@@ -27,13 +28,14 @@ type PractitionerDoc = {
   photoUrl: string | null;
   active: boolean;
   firebaseUid: string | null;
+  online: boolean;
 };
 
 /** Practitioner docs are keyed by slug (stable, human-readable, used in /astrologers/[slug]
  * routing) rather than Firebase UID, because a practitioner record can exist — created by an
  * admin invite, or seeded demo data — before any Firebase Auth account is linked to it. The
  * `firebaseUid` field is the linkage, set once the practitioner actually signs in. */
-async function findPractitionerByUid(uid: string) {
+export async function findPractitionerByUid(uid: string) {
   const snap = await db.collection("practitioners").where("firebaseUid", "==", uid).limit(1).get();
   return snap.empty ? null : snap.docs[0];
 }
@@ -82,6 +84,7 @@ export async function getCurrentPractitioner(): Promise<PractitionerIdentity | n
     email: data.email,
     title: data.title,
     photoUrl: data.photoUrl,
+    online: data.online ?? false,
   };
 }
 

@@ -153,10 +153,9 @@ export function AdminGemstoneProducts({ initialProducts, categories }: { initial
 
   async function toggleFlag(row: AdminProductRow, field: "active" | "featured" | "trending" | "bestseller") {
     const response = await fetch(`/api/admin/gemstones/products/${row.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ [field]: !row[field] }) });
-    if (response.ok) {
-      const data = await response.json();
-      setItems((current) => current.map((item) => item.id === row.id ? { ...item, [field]: data[field] } : item));
-    }
+    const data = await response.json();
+    if (response.ok) setItems((current) => current.map((item) => item.id === row.id ? { ...item, [field]: data[field] } : item));
+    else setNotice(data.error || "Could not update product.");
   }
 
   async function duplicate(row: AdminProductRow) {
@@ -232,7 +231,7 @@ export function AdminGemstoneProducts({ initialProducts, categories }: { initial
                   <div className="gem-subsection__head"><span>Images</span><button type="button" className="button button--ghost button--small" onClick={addImage}><ImagePlus size={14} /> Add image</button></div>
                   {form.images.map((image, index) => (
                     <div className="gem-image-row" key={index}>
-                      <input type="url" required value={image.url} onChange={(event) => updateImage(index, { url: event.target.value })} placeholder="https://…" />
+                      <input type="text" required value={image.url} onChange={(event) => updateImage(index, { url: event.target.value })} placeholder="https://…" />
                       <input value={image.alt} onChange={(event) => updateImage(index, { alt: event.target.value })} placeholder="Alt text" />
                       <button type="button" className={image.isPrimary ? "on" : ""} onClick={() => makePrimary(index)}>Primary</button>
                       <button type="button" className="danger" onClick={() => removeImage(index)}><Trash2 size={14} /></button>

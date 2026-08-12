@@ -67,7 +67,7 @@ export function AdminGemstoneOrders({ initialOrders }: { initialOrders: Gemstone
               <span>{order.shippingName}</span>
               <strong>{order.currency} {order.total}</strong>
               <span className={`invoice-status invoice-status--${order.paymentStatus === "paid" ? "paid" : "void"}`}>{order.paymentStatus}</span>
-              <span className={`invoice-status invoice-status--${order.status === "delivered" ? "paid" : order.status === "cancelled" ? "void" : "refund_pending"}`}>{order.status}</span>
+              <span className={`invoice-status invoice-status--${order.status === "delivered" ? "paid" : order.status === "cancelled" ? "void" : order.status === "refunded" ? "refunded" : ""}`}>{order.status}</span>
               <div className="row-actions"><button onClick={() => openOrder(order)} aria-label={`View ${order.orderNumber}`}><Eye size={16} /></button></div>
             </div>
           ))}

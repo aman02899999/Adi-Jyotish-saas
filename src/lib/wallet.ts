@@ -288,7 +288,17 @@ async function memberLiteById(memberId: string): Promise<MemberLite> {
 }
 
 export async function getAdminWalletLedger(limit = 200): Promise<Array<WalletEntry & { memberName: string; memberEmail: string; currency: string }>> {
-  const snap = await db.collectionGroup("entries").orderBy("createdAt", "desc").limit(limit).get();
+  // collectionGroup("entries") needs the fieldOverride in firestore.indexes.json deployed
+  // (firebase deploy --only firestore:indexes) — same class of bug as the earlier admin-panel
+  // crashes (getAdminUnreadCount, getAnalytics): a single unindexed query here, unguarded, used
+  // to be able to take down the entire Wallets page. Degrade to an empty ledger instead.
+  let snap;
+  try {
+    snap = await db.collectionGroup("entries").orderBy("createdAt", "desc").limit(limit).get();
+  } catch (error) {
+    console.error("getAdminWalletLedger failed (likely a missing Firestore index)", error);
+    return [];
+  }
   const memberIds = new Set<string>();
   const rows = snap.docs.map((doc) => {
     const walletId = doc.ref.parent.parent!.id;

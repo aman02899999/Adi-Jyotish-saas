@@ -166,9 +166,12 @@ async function handlePaymentFailed(payment?: RazorpayWebhookPayment) {
 
 async function handleRefundProcessed(refund?: RazorpayWebhookRefund) {
   if (!refund) return;
+  // refundInvoice() only leaves a payment in "refund_processing" for the duration of the
+  // synchronous Razorpay API call; once that call returns, a non-instant refund settles into
+  // "refund_pending" until this webhook confirms it, so that's the state we need to match here.
   const snap = await db.collection("payments")
     .where("paymentIntentId", "==", refund.payment_id)
-    .where("status", "==", "refund_processing")
+    .where("status", "==", "refund_pending")
     .limit(1)
     .get();
   if (snap.empty) return;

@@ -1,3 +1,4 @@
+import type { Metadata } from "next";
 import Image from "next/image";
 import Link from "next/link";
 import { redirect } from "next/navigation";
@@ -7,6 +8,10 @@ import { BrandMark } from "@/components/brand-mark";
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
 
 export const dynamic = "force-dynamic";
+export const metadata: Metadata = {
+  title: "Practitioner Sign In",
+  robots: { index: false, follow: false },
+};
 
 export default async function PractitionerLoginPage() {
   if (await getCurrentPractitioner()) redirect("/practitioner");

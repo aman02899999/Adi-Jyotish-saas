@@ -2,21 +2,26 @@ import Image from "next/image";
 import Link from "next/link";
 import {
   ArrowRight,
+  BookOpen,
   BriefcaseBusiness,
   CalendarClock,
   CalendarDays,
   CheckCircle2,
+  Compass,
   Gem,
   GraduationCap,
+  Hand,
   Hash,
   Heart,
   HeartHandshake,
   HeartPulse,
   Home,
+  Layers,
   MessageCircle,
   Orbit,
   PhoneCall,
   Quote,
+  ScanFace,
   ScrollText,
   Sparkles,
   Star,
@@ -29,9 +34,12 @@ import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnlineNowCount, getSeniorAstrologers } from "@/lib/homepage";
 import { getPublishedServices } from "@/lib/services";
+import { REFERRAL_REFERRER_REWARD, REFERRAL_REFEREE_REWARD } from "@/lib/referrals";
 import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
+import { getHomeHeroContent } from "@/lib/site-content";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
 import { HeroVideo } from "@/components/hero-video";
+import { StartHerePicker } from "@/components/start-here-picker";
 import { TiltCard } from "@/components/tilt-card";
 import { StatCounter } from "@/components/stat-counter";
 
@@ -58,6 +66,11 @@ const categories = [
 const freeTools = [
   { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by your sign", href: "/horoscope" },
   { icon: MessageCircle, label: "Ask Live a Question", note: "Instant answer, one question", href: "/ask" },
+  { icon: Hand, label: "Palm Reading", note: "Pandit Trilochan Shashtri · ₹99", href: "/palm-reading" },
+  { icon: Layers, label: "Tarot Reading", note: "Tarot Mystic Divya · ₹149", href: "/tarot-reading" },
+  { icon: ScanFace, label: "Face Reading", note: "Acharya Devraj Bhardwaj · ₹129", href: "/face-reading" },
+  { icon: Compass, label: "Vastu Consultation", note: "Vastu Shastri Ramesh Chaturvedi · ₹249", href: "/vastu-consultation" },
+  { icon: BookOpen, label: "Lal Kitab Reading", note: "Pandit Girish Trivedi · ₹179", href: "/lal-kitab-reading" },
   { icon: Gem, label: "Gemstone Match", note: "Free Live recommendation", href: "/gemstones/recommend" },
   { icon: HeartHandshake, label: "Kundli Matching", note: "Free compatibility reading", href: "/kundli-matching" },
   { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat", href: "/panchang" },
@@ -68,7 +81,7 @@ const freeTools = [
 
 export default async function HomePage() {
   const defaultSign = ZODIAC_SIGNS[0];
-  const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null)]);
+  const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope, hero] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null), getHomeHeroContent()]);
   const seniorMain = seniorAstrologers.slice(0, 2);
   const seniorRest = seniorAstrologers.slice(2);
 
@@ -83,19 +96,20 @@ export default async function HomePage() {
         description: "Authentic Vedic astrology readings, cosmic insights, and auspicious timing.",
         aggregateRating: stats.averageRating ? { "@type": "AggregateRating", ratingValue: stats.averageRating, reviewCount: Math.max(1, stats.consultationsDelivered) } : undefined,
       }} />
+      <StartHerePicker />
       <SiteHeader />
 
       <section className="hero-cosmic">
         <div className="hero shell">
           <div className="hero-copy reveal">
-            <p className="eyebrow"><span /> Ancient clarity, beautifully modern</p>
-            <h1>Your stars.<br /><em>Your story.</em></h1>
+            <p className="eyebrow"><span /> {hero.eyebrow}</p>
+            <h1>{hero.headline}<br /><em>{hero.headlineEm}</em></h1>
             <p className="hero-lead">
-              Authentic Vedic astrology translated into thoughtful, personal guidance for the life you are living now.
+              {hero.lead}
             </p>
             <div className="hero-actions">
-              <Link href="/dashboard" className="button">Explore your chart <ArrowRight size={17} /></Link>
-              <Link href="#method" className="button button--ghost">How it works</Link>
+              <Link href={hero.primaryCtaHref} className="button">{hero.primaryCtaLabel} <ArrowRight size={17} /></Link>
+              <Link href={hero.secondaryCtaHref} className="button button--ghost">{hero.secondaryCtaLabel}</Link>
             </div>
             <div className="hero-proof">
               <div className="avatar-stack" aria-hidden="true">
@@ -106,7 +120,12 @@ export default async function HomePage() {
           </div>
 
           <div className="reveal reveal--delay">
-            <HeroVideo />
+            <HeroVideo
+              posterSrc="/images/homepage-hero-poster.jpg"
+              mp4Src="/videos/homepage-hero.mp4"
+              webmSrc="/videos/homepage-hero.webm"
+              label="brand video"
+            />
           </div>
         </div>
       </section>
@@ -273,7 +292,7 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="tools-strip shell" aria-label="Free astrology tools">
+      <section className="tools-strip shell" id="tools" aria-label="Free astrology tools">
         <div className="tools-grid">
           {freeTools.map(({ icon: Icon, label, note, href }) => (
             <Link href={href} className="tool-card reveal" key={label}>
@@ -286,11 +305,20 @@ export default async function HomePage() {
 
       <section className="horoscope-strip shell" aria-label="Your daily horoscope">
         <div className="horoscope-banner reveal">
-          <Image src="/images/horoscope-hero.jpg" alt="A journal page reading Your Transits Today beside a phone showing today's transit times" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+          <HeroVideo
+            posterSrc="/images/horoscope-hero.jpg"
+            mp4Src="/videos/horoscope-hero.mp4"
+            webmSrc="/videos/horoscope-hero.webm"
+            label="daily horoscope video"
+            fill
+          />
         </div>
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> Your daily horoscope</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Pick your sign,<br /><em>see today&rsquo;s sky.</em></h2></div>
-          <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>
+          <div className="section-heading__cta-block">
+            <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>
+            <Link href="/horoscope" className="button button--small">Check daily horoscope, click here <ArrowRight size={14} /></Link>
+          </div>
         </div>
         <HomeHoroscopeTeaser
           signs={ZODIAC_SIGNS.map((entry) => ({ key: entry.key, name: entry.name, symbol: entry.symbol }))}
@@ -347,6 +375,15 @@ export default async function HomePage() {
           </div>
         </section>
       )}
+
+      <section className="referral-promo shell reveal">
+        <div className="referral-promo__copy">
+          <p className="eyebrow"><span /> Invite &amp; earn</p>
+          <h2 style={{ fontSize: "clamp(30px,3.2vw,42px)" }}>Share the sky,<br /><em>earn wallet credit.</em></h2>
+          <p>Invite a friend to Adi Jyotish Guru. When they join and recharge their wallet, you get ₹{REFERRAL_REFERRER_REWARD} and they get ₹{REFERRAL_REFEREE_REWARD} — straight into your wallets.</p>
+        </div>
+        <Link href="/dashboard/referrals" className="button">Get my referral link <ArrowRight size={17} /></Link>
+      </section>
 
       <section className="cta shell reveal">
         <div className="cta-zodiac" aria-hidden="true">✦</div>

@@ -6,6 +6,7 @@ import {
   CalendarCheck2,
   CircleDollarSign,
   Clock3,
+  ShieldCheck,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -14,6 +15,7 @@ import {
 import { AdminShell } from "@/components/admin-shell";
 import { getAnalytics } from "@/lib/analytics";
 import { requireAdminPage } from "@/lib/admin-page";
+import { isGeminiConfigured } from "@/lib/gemini";
 
 export const dynamic = "force-dynamic";
 
@@ -30,6 +32,16 @@ export default async function AdminOverviewPage() {
 
   return <AdminShell active="Overview"><div className="admin-content admin-overview-content">
     <div className="overview-welcome"><div><p>Studio intelligence</p><h1>Welcome back, {admin?.name.split(" ")[0] ?? "administrator"}.</h1><span>Here is what is happening across Jyotish this month.</span></div><div><small>{new Date().toLocaleDateString("en",{weekday:"long",month:"long",day:"numeric"})}</small><Link href="/admin/insights">Open full report <ArrowUpRight size={14}/></Link></div></div>
+
+    {!isGeminiConfigured() && (
+      <div className="finance-config-note">
+        <ShieldCheck size={18} />
+        <div>
+          <strong>Live readings are not configured</strong>
+          <span>GEMINI_API_KEY is not set — members who pay for a Live reading (Ask, Palm, Tarot, Face, Vastu, Lal Kitab, or any AI persona) will see &ldquo;still being prepared&rdquo; forever until it&rsquo;s added in your hosting provider&rsquo;s environment variables. <Link href="/admin/ai-personas">Details</Link></span>
+        </div>
+      </div>
+    )}
 
     <section className="overview-kpis">
       <article><div><span><CircleDollarSign size={19}/></span><small>Collected revenue</small></div><strong>₹{metrics.revenue.toLocaleString()}</strong><footer><Change value={metrics.revenueChange}/><small>vs previous 30 days</small></footer></article>
@@ -53,7 +65,7 @@ export default async function AdminOverviewPage() {
 
       <section className="overview-card upcoming-overview">
         <header><div><p>Next on the calendar</p><h2>Upcoming readings</h2></div><Link href="/admin/bookings">View calendar <ArrowRight size={13}/></Link></header>
-        <div className="overview-appointments">{analytics.upcomingBookings.map((booking)=><article key={booking.id}><div><small>{booking.scheduledAt.toLocaleDateString("en",{month:"short"})}</small><strong>{booking.scheduledAt.getDate()}</strong></div><span><strong>{booking.clientName}</strong><small>{booking.serviceTitle}</small></span><time>{booking.scheduledAt.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit"})}</time></article>)}{!analytics.upcomingBookings.length&&<div className="overview-empty"><Clock3 size={21}/><span><strong>No upcoming readings</strong><small>The studio calendar is open.</small></span></div>}</div>
+        <div className="overview-appointments">{analytics.upcomingBookings.map((booking)=><article key={booking.id}><div><small>{booking.scheduledAt.toLocaleDateString("en",{month:"short",timeZone:"Asia/Kolkata"})}</small><strong>{booking.scheduledAt.toLocaleDateString("en",{day:"numeric",timeZone:"Asia/Kolkata"})}</strong></div><span><strong>{booking.clientName}</strong><small>{booking.serviceTitle}</small></span><time>{booking.scheduledAt.toLocaleTimeString("en",{hour:"numeric",minute:"2-digit",timeZone:"Asia/Kolkata"})}</time></article>)}{!analytics.upcomingBookings.length&&<div className="overview-empty"><Clock3 size={21}/><span><strong>No upcoming readings</strong><small>The studio calendar is open.</small></span></div>}</div>
       </section>
 
       <section className="overview-card services-overview">

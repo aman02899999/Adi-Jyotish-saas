@@ -2,8 +2,8 @@ import type { MetadataRoute } from "next";
 
 export default function manifest(): MetadataRoute.Manifest {
   return {
-    name: "Adi Jyotish Gurus — Vedic Astrology",
-    short_name: "Adi Jyotish Gurus",
+    name: "Adi Jyotish Guru — Vedic Astrology",
+    short_name: "Adi Jyotish Guru",
     description: "Personal Vedic astrology, thoughtful consultations, and modern cosmic guidance.",
     start_url: "/",
     display: "standalone",

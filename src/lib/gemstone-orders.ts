@@ -8,6 +8,8 @@ import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { splitGstInclusive } from "@/lib/gst";
+import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
+import { getSiteUrl } from "@/lib/site-url";
 
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
@@ -147,22 +149,65 @@ export async function priceCart(lines: CartLineInput[]): Promise<{ items: Priced
   return { items, subtotal };
 }
 
-const PENDING_ORDER_TTL_MS = 30 * 60 * 1000;
+// Shorter than a generous checkout window would be on its own — 30 minutes gave an abusive
+// caller (rotating IPs, or just staying under the per-identity rate limit) up to half an hour of
+// held stock per pending order on scarce/low-stock items. 15 minutes is still comfortably more
+// than a real Razorpay checkout takes, while roughly halving that exposure window.
+const PENDING_ORDER_TTL_MS = 15 * 60 * 1000;
 
 /** Self-healing cleanup for checkout abandonment: a pending order reserves stock (and coupon
  * usage) the moment it's created, before payment — if the customer never completes payment
  * (closed the tab, a failed Razorpay attempt with no retry), that reservation would otherwise
- * never be released. There's no scheduled job in this deployment, so this runs opportunistically
- * from a couple of natural trigger points (new checkout attempts, the admin orders list) instead
- * of on a timer. Reuses updateOrderStatus so stock/coupon release stays in one place. */
+ * never be released. Runs on the housekeeping cron (see .github/workflows/cron.yml) as well as
+ * opportunistically from a couple of natural trigger points (new checkout attempts, the admin
+ * orders list). Reuses updateOrderStatus so stock/coupon release stays in one place. Also fires a
+ * one-time "your cart is still here" recovery email — the 15-minute TTL is too short for a
+ * pre-expiry reminder to be worth the added complexity, so this nudges the customer back
+ * afterwards instead, which is when re-engagement email typically performs best anyway. */
 export async function expireStalePendingOrders() {
   const cutoff = Timestamp.fromMillis(Date.now() - PENDING_ORDER_TTL_MS);
   const snap = await ordersCol.where("status", "==", "pending").where("createdAt", "<", cutoff).limit(25).get();
   for (const doc of snap.docs) {
-    await updateOrderStatus(doc.id, "cancelled").catch((error) => {
-      console.error(`Failed to expire stale pending order ${doc.id}`, error);
-    });
+    const orderId = doc.id;
+    await updateOrderStatus(orderId, "cancelled")
+      .then(() => sendCartRecoveryEmail(fromOrderDoc(doc)))
+      .catch((error) => {
+        console.error(`Failed to expire stale pending order ${orderId}`, error);
+      });
   }
+}
+
+async function sendCartRecoveryEmail(order: GemstoneOrder) {
+  if (!isEmailConfigured()) return;
+
+  let name = order.guestName;
+  let email = order.guestEmail;
+  if (order.memberId) {
+    const memberSnap = await db.collection("members").doc(order.memberId).get();
+    const memberData = memberSnap.data() as { name?: string; email?: string } | undefined;
+    name = memberData?.name ?? name;
+    email = memberData?.email ?? email;
+  }
+  if (!email) return;
+
+  const items = await getOrderItems(order.id).catch(() => []);
+  const summary = items.length
+    ? items.map((item) => `${item.productName} (${item.variantLabel}) × ${item.quantity}`).join(", ")
+    : "the items in your cart";
+
+  await sendEmail({
+    to: email,
+    subject: "Your gemstone cart is still here",
+    html: genericNotificationEmailHtml({
+      title: "Your cart is still waiting for you",
+      name: name || "there",
+      body: `We released the stock hold on ${summary} since checkout wasn't completed — but everything is still in stock. Head back to the shop to finish your order.`,
+      ctaLabel: "Return to shop",
+      ctaUrl: new URL("/gemstones/shop", getSiteUrl()).toString(),
+    }),
+  }).catch((error) => {
+    console.error(`Failed to send cart-recovery email for order ${order.id}`, error);
+  });
 }
 
 export async function createPendingOrder({ memberId, guestName, guestEmail, guestPhone, shipping, lines, couponCode }: {
@@ -389,6 +434,10 @@ export async function updateOrderStatus(orderId: string, status: string) {
     const willRestoreStock = (status === "cancelled" || status === "refunded") && existing.status !== "cancelled" && existing.status !== "refunded";
     if (willRestoreStock) {
       if (status === "cancelled" && !CANCELLABLE_STATUSES.has(existing.status)) throw new CartValidationError("This order can no longer be cancelled.");
+      // Can't refund money that was never collected - without this, an admin could mark a
+      // still-pending/unpaid order "refunded", which flips paymentStatus to "refunded" and implies
+      // money moved when it never did.
+      if (status === "refunded" && existing.paymentStatus !== "paid") throw new CartValidationError("Only paid orders can be refunded.");
       const itemsSnap = await tx.get(itemsCol(orderId));
       itemDocs = itemsSnap.docs;
       variantSnaps = await Promise.all(itemDocs.map((doc) => {
@@ -444,20 +493,35 @@ export async function getGemstoneAdminStats() {
   const statusCountSnaps = await Promise.all(statuses.map((status) => ordersCol.where("status", "==", status).count().get()));
   const statusCounts = Object.fromEntries(statuses.map((status, index) => [status, statusCountSnaps[index].data().count]));
 
-  // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see firestore.indexes.json.
-  const lowStockSnap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", 5).count().get();
+  // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see
+  // firestore.indexes.json. Same failure mode already hit (and fixed) in wallet.ts/messaging.ts:
+  // a missing/still-building index throws FAILED_PRECONDITION in real Firestore and would take
+  // down the whole admin Gemstones page, so this degrades to 0 instead of crashing.
+  let lowStockVariantCount = 0;
+  try {
+    const lowStockSnap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", 5).count().get();
+    lowStockVariantCount = lowStockSnap.data().count;
+  } catch (error) {
+    console.error("getGemstoneAdminStats low-stock count failed (likely a missing Firestore index)", error);
+  }
 
   return {
     revenue: Number(revenueData.revenue ?? 0),
     paidOrderCount: revenueData.paidCount ?? 0,
     statusCounts,
-    lowStockVariantCount: lowStockSnap.data().count,
+    lowStockVariantCount,
   };
 }
 
 export async function getLowStockVariants(threshold = 5) {
   // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see firestore.indexes.json.
-  const snap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", threshold).orderBy("stockQuantity", "asc").get();
+  let snap;
+  try {
+    snap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", threshold).orderBy("stockQuantity", "asc").get();
+  } catch (error) {
+    console.error("getLowStockVariants failed (likely a missing Firestore index)", error);
+    return [];
+  }
   if (snap.empty) return [];
 
   const productIds = [...new Set(snap.docs.map((doc) => (doc.data() as { productId: string }).productId))];

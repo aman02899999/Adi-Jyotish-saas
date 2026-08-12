@@ -24,13 +24,16 @@ export function AdminGemstoneReviews({ initialReviews }: { initialReviews: Admin
 
   async function setStatus(review: AdminReviewRow, status: "published" | "hidden") {
     const response = await fetch(`/api/admin/gemstones/reviews/${review.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
-    if (response.ok) { const data = await response.json(); setItems((current) => current.map((item) => item.id === review.id ? { ...item, status: data.status } : item)); setNotice(`Review ${status}.`); }
+    const data = await response.json();
+    if (response.ok) { setItems((current) => current.map((item) => item.id === review.id ? { ...item, status: data.status } : item)); setNotice(`Review ${status}.`); }
+    else setNotice(data.error || "Could not update review.");
   }
 
   async function remove(review: AdminReviewRow) {
     if (!window.confirm("Delete this review permanently?")) return;
     const response = await fetch(`/api/admin/gemstones/reviews/${review.id}`, { method: "DELETE" });
     if (response.ok) { setItems((current) => current.filter((item) => item.id !== review.id)); setNotice("Review deleted."); }
+    else { const data = await response.json().catch(() => ({})); setNotice(data.error || "Could not delete review."); }
   }
 
   return (

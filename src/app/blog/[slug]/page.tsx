@@ -46,7 +46,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
         image: new URL(post.cover, getSiteUrl()).toString(),
         datePublished: post.publishedAt,
         author: { "@type": "Person", name: post.author },
-        publisher: { "@type": "Organization", name: "Adi Jyotish Gurus" },
+        publisher: { "@type": "Organization", name: "Adi Jyotish Guru" },
         mainEntityOfPage: new URL(`/blog/${post.slug}`, getSiteUrl()).toString(),
       }} />
       <SiteHeader />

@@ -112,10 +112,35 @@ export async function seedMembershipPlans(): Promise<void> {
   }));
 }
 
+/** Plans created by seedMembershipPlans() (or saved before Razorpay was configured) can be left
+ * with null razorpayPlanId(Monthly|Yearly) forever — nothing else ever revisits them, which
+ * silently disables their Subscribe button on /pricing with no explanation. Backfilling here,
+ * on every read, makes that self-healing the moment Razorpay is configured, without requiring an
+ * admin to manually re-save each plan. Cheap once synced: ensureRazorpayPlans() only calls the
+ * Razorpay API for plans still missing an id. */
+async function backfillRazorpayIds(plan: MembershipPlan): Promise<MembershipPlan> {
+  const needsMonthly = !plan.razorpayPlanIdMonthly && plan.priceMonthly > 0;
+  const needsYearly = !plan.razorpayPlanIdYearly && Boolean(plan.priceYearly && plan.priceYearly > 0);
+  if (!needsMonthly && !needsYearly) return plan;
+
+  try {
+    const razorpayIds = await ensureRazorpayPlans(plan);
+    if (razorpayIds.razorpayPlanIdMonthly === plan.razorpayPlanIdMonthly && razorpayIds.razorpayPlanIdYearly === plan.razorpayPlanIdYearly) {
+      return plan;
+    }
+    await plansCollection().doc(plan.id).update({ ...razorpayIds, updatedAt: FieldValue.serverTimestamp() });
+    return { ...plan, ...razorpayIds };
+  } catch (error) {
+    console.error(`Could not sync Razorpay plan ids for "${plan.key}":`, error instanceof Error ? error.message : error);
+    return plan;
+  }
+}
+
 export async function getAllPlans(): Promise<MembershipPlan[]> {
   await seedMembershipPlans();
   const snap = await plansCollection().orderBy("sortOrder", "asc").get();
-  return snap.docs.map((doc) => planFromSnap(doc));
+  const plans = snap.docs.map((doc) => planFromSnap(doc));
+  return Promise.all(plans.map(backfillRazorpayIds));
 }
 
 export async function getPublicPlans(): Promise<MembershipPlan[]> {

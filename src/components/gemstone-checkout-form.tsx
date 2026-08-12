@@ -27,6 +27,22 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
 
   const shippingFee = subtotal >= FREE_SHIPPING_THRESHOLD ? 0 : FLAT_SHIPPING_FEE;
 
+  if (!member) {
+    return (
+      <section className="shell" style={{ paddingBlock: 40 }}>
+        <div className="ask-signin">
+          <ShieldCheck size={26} />
+          <h2>Sign in to complete your purchase</h2>
+          <p>Create a free account or sign in to check out. Your cart is saved, and every order you place is tracked in your dashboard.</p>
+          <div className="ask-signin__actions">
+            <Link href="/account?mode=register" className="button">Create account</Link>
+            <Link href="/account" className="button button--ghost">Sign in</Link>
+          </div>
+        </div>
+      </section>
+    );
+  }
+
   if (!lines.length) {
     return (
       <section className="shell" style={{ paddingBlock: 40 }}>
@@ -36,12 +52,12 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
   }
 
   async function placeOrder() {
+    if (!member) return;
     setError("");
     if (!form.name.trim() || !form.phone.trim() || !form.line1.trim() || !form.city.trim() || !form.state.trim() || !form.pincode.trim()) {
       setError("Please complete your shipping address.");
       return;
     }
-    if (!member && !form.email.trim()) { setError("Enter an email address for your order confirmation."); return; }
 
     setLoading(true);
     try {
@@ -51,9 +67,6 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
         body: JSON.stringify({
           lines: lines.map((line) => ({ productId: line.productId, variantId: line.variantId, quantity: line.quantity })),
           couponCode: couponCode || undefined,
-          guestName: member ? undefined : form.name,
-          guestEmail: member ? undefined : form.email,
-          guestPhone: member ? undefined : form.phone,
           shipping: { name: form.name, phone: form.phone, line1: form.line1, line2: form.line2, city: form.city, state: form.state, pincode: form.pincode, country: form.country },
         }),
       });
@@ -65,9 +78,9 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
         amount: data.amount,
         currency: data.currency,
         order_id: data.razorpayOrderId,
-        name: "Adi Jyotish Gurus",
+        name: "Adi Jyotish Guru",
         description: `Gemstone order · ${data.orderNumber}`,
-        prefill: { name: form.name, email: member?.email ?? form.email, contact: form.phone },
+        prefill: { name: form.name, email: member.email, contact: form.phone },
         theme: { color: "#a95838" },
         onSuccess: async (payment) => {
           const verify = await fetch(`/api/gemstones/orders/${data.orderId}/verify`, {
@@ -80,7 +93,7 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
           if (verify.ok) {
             trackEvent("purchase", { value: subtotal + shippingFee, currency: "INR", item_category: "gemstone" });
             clearCart();
-            router.push(`/gemstones/order/${data.orderNumber}${member ? "" : `?email=${encodeURIComponent(form.email)}`}`);
+            router.push(`/gemstones/order/${data.orderNumber}`);
           } else {
             setError(verifyData.error || "Payment could not be confirmed. Contact support if you were charged.");
           }
@@ -96,14 +109,10 @@ export function GemstoneCheckoutForm({ member }: { member: MemberInfo | null }) 
   return (
     <section className="checkout-layout shell">
       <div className="checkout-form">
-        {!member && (
-          <div className="finance-config-note"><ShieldCheck size={18} /><div><strong>Checking out as a guest</strong><span>Have an account? <Link href="/account">Sign in</Link> to track this order in your dashboard.</span></div></div>
-        )}
         <h2>Shipping address</h2>
         <div className="booking-fields">
           <label><span>Full name</span><div><input value={form.name} onChange={(event) => setForm({ ...form, name: event.target.value })} /></div></label>
           <label><span>Phone number</span><div><input value={form.phone} onChange={(event) => setForm({ ...form, phone: event.target.value })} placeholder="+91 …" /></div></label>
-          {!member && <label className="wide"><span>Email (for order confirmation)</span><div><input type="email" value={form.email} onChange={(event) => setForm({ ...form, email: event.target.value })} /></div></label>}
           <label className="wide"><span>Address line 1</span><div><input value={form.line1} onChange={(event) => setForm({ ...form, line1: event.target.value })} /></div></label>
           <label className="wide"><span>Address line 2 (optional)</span><div><input value={form.line2} onChange={(event) => setForm({ ...form, line2: event.target.value })} /></div></label>
           <label><span>City</span><div><input value={form.city} onChange={(event) => setForm({ ...form, city: event.target.value })} /></div></label>

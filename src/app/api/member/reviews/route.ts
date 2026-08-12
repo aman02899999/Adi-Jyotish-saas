@@ -1,11 +1,14 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { bookingFromDoc } from "@/app/api/bookings/route";
 
 export async function POST(request:Request){
   const member=await getCurrentMember();
   if(!member)return Response.json({error:"Member sign-in required."},{status:401});
+  const throttle = await checkRateLimit("practitioner-review", `member:${member.id}:ip:${requestIp(request)}`, 5, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
   const body=await request.json() as {bookingId?:string;rating?:number;clarity?:number;empathy?:number;usefulness?:number;body?:string};
   const bookingId=body.bookingId?.trim();
   const scores=[body.rating,body.clarity,body.empathy,body.usefulness].map(Number);

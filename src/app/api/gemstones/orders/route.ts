@@ -1,25 +1,28 @@
 import { attachRazorpayOrder, CartValidationError, createPendingOrder } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
-import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 type CheckoutPayload = {
   lines?: Array<{ productId: string; variantId: string; quantity: number }>;
   couponCode?: string;
-  guestName?: string;
-  guestEmail?: string;
-  guestPhone?: string;
   shipping?: { name: string; phone: string; line1: string; line2?: string; city: string; state: string; pincode: string; country?: string };
 };
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();
+  if (!member) return Response.json({ error: "Sign in to complete your purchase." }, { status: 401 });
+
   const razorpay = getRazorpay();
   if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
 
-  const throttle = await checkRateLimit("gemstone-order", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 10, 600);
+  // Tighter than most sibling limits on purpose: each successful call reserves stock (and coupon
+  // usage) for the pending-order TTL before any payment happens, so this caps how many
+  // simultaneous reservations one identity can hold against scarce inventory, not just how often
+  // they can hit the endpoint.
+  const throttle = await checkRateLimit("gemstone-order", `member:${member.id}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as CheckoutPayload;
@@ -28,14 +31,10 @@ export async function POST(request: Request) {
   if (!body.shipping?.name || !body.shipping?.phone || !body.shipping?.line1 || !body.shipping?.city || !body.shipping?.state || !body.shipping?.pincode) {
     return Response.json({ error: "Please complete your shipping address." }, { status: 400 });
   }
-  if (!member && !body.guestEmail?.trim()) return Response.json({ error: "Enter an email address for your order confirmation." }, { status: 400 });
 
   try {
     const order = await createPendingOrder({
-      memberId: member?.id ?? null,
-      guestName: body.guestName,
-      guestEmail: body.guestEmail,
-      guestPhone: body.guestPhone,
+      memberId: member.id,
       shipping: body.shipping,
       lines,
       couponCode: body.couponCode,
@@ -45,7 +44,7 @@ export async function POST(request: Request) {
       amount: order.total * 100,
       currency: order.currency,
       receipt: order.orderNumber,
-      notes: { gemstoneOrderId: String(order.id), memberId: member ? String(member.id) : "guest" },
+      notes: { gemstoneOrderId: String(order.id), memberId: String(member.id) },
     });
     await attachRazorpayOrder(order.id, razorpayOrder.id);
 

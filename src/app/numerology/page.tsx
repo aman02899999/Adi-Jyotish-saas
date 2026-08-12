@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import Image from "next/image";
 import { CheckCircle2, Clock3, Hash, ShieldCheck } from "lucide-react";
 import { NumerologyForm } from "@/components/numerology-form";
 import { SiteHeader } from "@/components/site-header";
@@ -29,7 +30,7 @@ export default function NumerologyPage() {
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">
-            <div className="ask-persona-avatar"><Hash size={26} /></div>
+            <div className="ask-persona-avatar"><Image src="/images/santram-shashtri.jpg" alt="Shree Santram Shashtri" fill sizes="64px" /></div>
             <strong>Shree Santram Shashtri</strong>
             <span>Live Jyotish Guide · Free tool</span>
             <ul>
@@ -39,6 +40,10 @@ export default function NumerologyPage() {
           </div>
         </div>
       </section>
+
+      <div className="page-hero-banner shell">
+        <Image src="/images/numerology-hero.jpg" alt="A glowing numerology chart centered on the number seven" fill sizes="(max-width: 800px) 100vw, 1200px" style={{ objectFit: "cover" }} />
+      </div>
 
       <section className="ask-form-section shell">
         <NumerologyForm />

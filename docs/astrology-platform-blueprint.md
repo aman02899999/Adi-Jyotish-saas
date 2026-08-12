@@ -368,7 +368,7 @@ Every mutation uses authentication, authorization, validation, idempotency where
 - **RTC:** Daily, Twilio, Agora, or LiveKit Cloud; do not build media transport from scratch.
 - **Search:** PostgreSQL FTS initially; Algolia/OpenSearch at marketplace/content scale.
 - **Charts:** D3 for zodiac/timeline; Recharts for operations analytics.
-- **Hosting:** Vercel for web/BFF; Cloud Run for ephemeris, realtime gateway, and background workers.
+- **Hosting:** Firebase Hosting for web/BFF; Cloud Run for ephemeris, realtime gateway, and background workers.
 - **Monitoring:** Sentry, OpenTelemetry, structured logs, uptime checks, webhook/queue DLQ dashboards.
 
 ### Firebase/Firestore alternative requested
