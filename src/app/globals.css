@@ -70,6 +70,11 @@ button { border: 0; }
 .desktop-nav a.active { color: var(--copper-dark); }
 .desktop-nav a.active::after { right: 0; }
 .header-actions { display: flex; align-items: center; gap: 22px; }
+.language-switcher { display: flex; align-items: center; gap: 5px; color: var(--muted); }
+.language-switcher span { display: flex; align-items: center; gap: 5px; }
+.language-switcher i { color: var(--faint); font-style: normal; }
+.language-switcher a { color: var(--muted); font-size: 11px; font-weight: 600; }
+.language-switcher a.active { color: var(--copper-dark); }
 .header-cart { position: relative; display: flex; align-items: center; justify-content: center; width: 42px; height: 42px; margin-left: 14px; border: 1px solid var(--line); border-radius: 50%; color: var(--copper-dark); background: rgba(255,255,255,.4); transition: background .2s ease; }
 .header-cart:hover { background: #f4ece1; }
 .header-cart__badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px; color: #fff; background: var(--copper); font-size:12px; font-weight: 700; }

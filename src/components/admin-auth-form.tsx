@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Link } from "@/i18n/navigation";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { TwoFactorChallenge } from "@/components/two-factor-challenge";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
@@ -53,7 +54,7 @@ export function AdminAuthForm({ setup }: { setup: boolean }) {
       <label><span>Email address</span><div><Mail size={16} /><input autoComplete="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="admin@yourstudio.com" /></div></label>
       <label><span>Password</span><div><LockKeyhole size={16} /><input autoComplete={setup ? "new-password" : "current-password"} type={visible ? "text" : "password"} required minLength={setup ? 10 : undefined} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={setup ? "At least 10 characters" : "Your password"} /><button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
       {setup && <label><span>Confirm password</span><div><ShieldCheck size={16} /><input autoComplete="new-password" type={visible ? "text" : "password"} required minLength={10} maxLength={128} value={confirm} onChange={(event) => setConfirm(event.target.value)} placeholder="Repeat your password" /></div><small>Use a unique phrase with 10 or more characters.</small></label>}
-      {!setup && <a className="member-auth-forgot" href="/forgot-password?portal=admin">Forgot your password?</a>}
+      {!setup && <Link className="member-auth-forgot" href="/forgot-password?portal=admin">Forgot your password?</Link>}
       {error && <p className="admin-auth-error" role="alert">{error}</p>}
       <button className="button admin-auth-submit" disabled={submitting}>{submitting ? "Verifying…" : setup ? "Create secure workspace" : "Enter workspace"}<ArrowRight size={16} /></button>
     </form>

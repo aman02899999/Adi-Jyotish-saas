@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Layers, MessageCircle, ScrollText, Sparkles, Users, X } from "lucide-react";
 
 const STORAGE_KEY = "adiJyotish:startHereSeen";

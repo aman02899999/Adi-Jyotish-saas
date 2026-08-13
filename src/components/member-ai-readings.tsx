@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, Clock3, RefreshCw, Sparkles, X } from "lucide-react";
 
 export type MemberAiReading = {

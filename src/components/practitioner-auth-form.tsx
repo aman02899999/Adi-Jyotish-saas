@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Link } from "@/i18n/navigation";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { TwoFactorChallenge } from "@/components/two-factor-challenge";
@@ -45,7 +46,7 @@ export function PractitionerAuthForm() {
       <form className="admin-auth-form" onSubmit={submit}>
         <label><span>Email address</span><div><Mail size={16} /><input autoComplete="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@studio.com" /></div></label>
         <label><span>Password</span><div><LockKeyhole size={16} /><input autoComplete="current-password" type={visible ? "text" : "password"} required value={password} onChange={(event) => setPassword(event.target.value)} placeholder="Your password" /><button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
-        <a className="member-auth-forgot" href="/forgot-password?portal=practitioner">Forgot your password?</a>
+        <Link className="member-auth-forgot" href="/forgot-password?portal=practitioner">Forgot your password?</Link>
         {error && <p className="admin-auth-error" role="alert">{error}</p>}
         <button className="button admin-auth-submit" disabled={submitting}>{submitting ? "Verifying…" : "Enter your workspace"}<ArrowRight size={16} /></button>
       </form>

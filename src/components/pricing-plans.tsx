@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, Sparkles, X } from "lucide-react";
 import type { MembershipPlan } from "@/lib/plans";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";

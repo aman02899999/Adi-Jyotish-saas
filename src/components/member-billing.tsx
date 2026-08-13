@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { ArrowRight, Check, CircleDollarSign, CreditCard, FileText, LockKeyhole, ReceiptText, ShieldCheck, X } from "lucide-react";
 import type { FinanceInvoice } from "@/components/admin-billing";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";

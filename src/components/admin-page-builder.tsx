@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, ChevronDown, ChevronUp, Copy, ExternalLink, GripVertical, Plus, Trash2, X } from "lucide-react";
 import type { BlockType, CustomPage, PageBlock } from "@/lib/custom-pages";
 

@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { CalendarClock, Coins, LayoutDashboard, LogOut, Menu, MessageCircle, Star, UserRound } from "lucide-react";
 import { BrandMark } from "@/components/brand-mark";
 import { FaqWidget } from "@/components/faq-widget";

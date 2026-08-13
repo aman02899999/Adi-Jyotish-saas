@@ -1,8 +1,18 @@
 import { NextResponse, type NextRequest } from "next/server";
+import createIntlMiddleware from "next-intl/middleware";
+import { routing } from "@/i18n/routing";
 
 const unsafeMethods = new Set(["POST", "PUT", "PATCH", "DELETE"]);
+const intlMiddleware = createIntlMiddleware(routing);
 
 export function proxy(request: NextRequest) {
+  // Locale detection/redirects (e.g. bare "/astrologers" -> "/hi/astrologers" for a Hindi-
+  // preferring browser) only apply to page routes — API routes have no locale concept and must
+  // fall through to the CSRF check below untouched.
+  if (!request.nextUrl.pathname.startsWith("/api/")) {
+    return intlMiddleware(request);
+  }
+
   // Both exemptions authenticate themselves independently of cookies (HMAC signature for the
   // webhook, a bearer secret for the cron route), so there's no ambient browser credential for
   // CSRF to forge in the first place — the Origin/sec-fetch-site check below only makes sense for
@@ -37,5 +47,9 @@ export function proxy(request: NextRequest) {
 }
 
 export const config = {
-  matcher: "/api/:path*",
+  // "/api/:path*" for the CSRF check; the second pattern is next-intl's own recommended matcher
+  // for page routes — it excludes /api, Next internals, and any path with a dotted last segment
+  // (robots.txt, sitemap.xml, manifest.webmanifest, icon.png, …), which is exactly the set of
+  // locale-agnostic files kept outside src/app/[locale].
+  matcher: ["/api/:path*", "/((?!api|_next|_vercel|.*\\..*).*)"],
 };

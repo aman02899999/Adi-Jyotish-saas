@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import type { PageBlock } from "@/lib/custom-pages";
 
 function asString(value: string | string[] | undefined, fallback = "") {

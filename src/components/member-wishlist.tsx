@@ -1,6 +1,6 @@
 "use client";
 
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Heart } from "lucide-react";
 import { GemstoneCartProvider } from "@/components/gemstone-cart-context";
 import { GemstoneProductCard } from "@/components/gemstone-product-card";

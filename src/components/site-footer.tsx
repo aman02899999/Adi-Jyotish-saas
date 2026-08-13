@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { getFooterContent } from "@/lib/site-content";
 

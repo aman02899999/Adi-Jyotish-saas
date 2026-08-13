@@ -1,8 +1,10 @@
 import type { NextConfig } from "next";
 import withBundleAnalyzerInit from "@next/bundle-analyzer";
+import createNextIntlPlugin from "next-intl/plugin";
 import { withSentryConfig } from "@sentry/nextjs";
 
 const withBundleAnalyzer = withBundleAnalyzerInit({ enabled: process.env.ANALYZE === "true" });
+const withNextIntl = createNextIntlPlugin("./src/i18n/request.ts");
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -55,7 +57,7 @@ const nextConfig: NextConfig = {
 // source maps (only actually uploaded when SENTRY_AUTH_TOKEN is set — silent no-op otherwise,
 // never blocks the build) and treeshake.removeDebugLogging to strip Sentry's own internal debug
 // logger strings from the client bundle.
-export default withSentryConfig(withBundleAnalyzer(nextConfig), {
+export default withSentryConfig(withNextIntl(withBundleAnalyzer(nextConfig)), {
   silent: true,
   org: process.env.SENTRY_ORG,
   project: process.env.SENTRY_PROJECT,

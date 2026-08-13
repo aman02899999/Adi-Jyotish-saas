@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo,useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { ArrowUpRight,CheckCircle2,Languages,MessageCircle,Search,SlidersHorizontal,Sparkles,Star } from "lucide-react";
 import { AvatarImage } from "@/components/avatar-image";
 import { FavoritePractitionerButton } from "@/components/favorite-practitioner-button";

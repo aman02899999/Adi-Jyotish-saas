@@ -1,6 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
+import { Link } from "@/i18n/navigation";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { TwoFactorChallenge } from "@/components/two-factor-challenge";
@@ -67,7 +68,7 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
         <label><span>Email address</span><div><Mail size={16} /><input autoComplete="email" type="email" required value={email} onChange={(event) => setEmail(event.target.value)} placeholder="you@example.com" /></div></label>
         <label><span>Password</span><div><LockKeyhole size={16} /><input autoComplete={mode === "register" ? "new-password" : "current-password"} type={visible ? "text" : "password"} required minLength={mode === "register" ? 10 : undefined} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === "register" ? "At least 10 characters" : "Your password"} /><button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
         {mode === "register" && <label><span>Confirm password</span><div><ShieldCheck size={16} /><input autoComplete="new-password" type={visible ? "text" : "password"} required minLength={10} maxLength={128} value={confirm} onChange={(event) => setConfirm(event.target.value)} placeholder="Repeat your password" /></div></label>}
-        {mode === "login" && <a className="member-auth-forgot" href="/forgot-password?portal=member">Forgot your password?</a>}
+        {mode === "login" && <Link className="member-auth-forgot" href="/forgot-password?portal=member">Forgot your password?</Link>}
         {error && <p className="admin-auth-error" role="alert">{error}</p>}
         <button className="button admin-auth-submit" disabled={submitting}>{submitting ? "Opening your sky…" : mode === "register" ? "Create my chart" : "Open my dashboard"}<ArrowRight size={16} /></button>
       </form>

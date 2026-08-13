@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useRef, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, Clock3, MessageCircle, Send, ShieldCheck, X } from "lucide-react";
 import { createChatRealtimeClient } from "@/lib/ably-client";
 

@@ -1,7 +1,7 @@
 "use client";
 
-import Link from "next/link";
-import { useRouter, useSearchParams } from "next/navigation";
+import { Link, useRouter } from "@/i18n/navigation";
+import { useSearchParams } from "next/navigation";
 import { useEffect, useState } from "react";
 import { Check, Lock, ShieldCheck, Tag, X } from "lucide-react";
 import { useGemstoneCart } from "@/components/gemstone-cart-context";

@@ -1,6 +1,6 @@
 "use client";
 
-import { usePathname } from "next/navigation";
+import { usePathname } from "@/i18n/navigation";
 import { useEffect, useRef, useState } from "react";
 
 /** Next.js gives no built-in "navigation is in flight" signal for plain <Link> clicks, so a click

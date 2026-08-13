@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useEffect, useMemo, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { ArrowLeft, ArrowRight, CalendarDays, Check, CheckCircle2, Clock3, LoaderCircle, LockKeyhole, Mail, MapPin, Orbit, ShieldCheck, Sparkles, UserRound } from "lucide-react";
 import { trackEvent } from "@/lib/track-event";
 

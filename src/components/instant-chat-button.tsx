@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { MessageCircle } from "lucide-react";
 
 export function InstantChatButton({ practitionerId, online, memberSignedIn }: { practitionerId: string; online: boolean; memberSignedIn: boolean }) {

@@ -1,4 +1,4 @@
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Gem } from "lucide-react";
 import type { GemstoneOrder } from "@/lib/gemstone-orders";
 

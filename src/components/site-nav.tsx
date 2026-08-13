@@ -1,9 +1,9 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, usePathname } from "@/i18n/navigation";
 import { useEffect, useRef, useState } from "react";
 import { ArrowUpRight, Menu, ShoppingBag } from "lucide-react";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 const NAV_ITEMS = [
   { href: "/gemstones", label: "Gemstones" },
@@ -88,6 +88,7 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
         ))}
       </nav>
       <div className="header-actions">
+        <LanguageSwitcher compact />
         <Link href={signedInName ? "/dashboard" : "/account"} className="text-link">{signedInName ?? "Sign in"}</Link>
         <Link href={signedInName ? "/dashboard" : "/account?mode=register"} className="button button--small">
           {signedInName ? "Open your chart" : "Create your chart"} <ArrowUpRight size={15} />
@@ -106,6 +107,7 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
               <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{item.label}</Link>
             ))}
             <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? "My account" : "Sign in"}</Link>
+            <LanguageSwitcher />
           </nav>
         )}
       </div>

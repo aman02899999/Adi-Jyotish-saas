@@ -1,7 +1,7 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, ExternalLink, FileText, Plus, Trash2, X } from "lucide-react";
 import type { CustomPage } from "@/lib/custom-pages";
 
