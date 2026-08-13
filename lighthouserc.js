@@ -26,7 +26,11 @@ module.exports = {
       },
     },
     assert: {
-      preset: "lighthouse:no-pwa",
+      // No preset here on purpose: lighthouse:no-pwa's own assertions include dozens of
+      // per-audit checks (unused CSS, image sizing, legacy JS, etc.) hardcoded to "error" —
+      // pulling it in silently overrode the warn-only intent below and failed the job outright
+      // on things like "uses-responsive-images" and "unused-javascript". Declaring just the four
+      // category scores here is what actually keeps this a non-blocking baseline for now.
       assertions: {
         "categories:performance": ["warn", { minScore: 0.5 }],
         "categories:accessibility": ["warn", { minScore: 0.8 }],
