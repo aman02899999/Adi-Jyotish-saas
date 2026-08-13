@@ -1775,11 +1775,9 @@ button { border: 0; }
 .admin-auth-form label button { display:grid; place-items:center; padding:3px; color:var(--muted); background:transparent; }
 .admin-auth-form label > small { color:var(--muted); font-size:12px; }
 .admin-auth-error { margin:0; padding:10px 11px; border-radius:7px; color:#99483d; background:rgba(166,73,61,.08); font-size:12px; }
-.member-auth-forgot { align-self:flex-end; margin-top:-6px; color:var(--muted); font-size:12px; }
-.member-auth-forgot:hover { color:var(--copper); }
 .member-auth-sent { margin:0; padding:16px 17px; border-radius:10px; color:#3c7a56; background:rgba(60,122,86,.08); font-size:13.5px; line-height:1.7; }
 .member-auth-sent a { color:#3c7a56; text-decoration:underline; }
-.member-auth-forgot { display:block; margin:-8px 0 18px; color:var(--muted); font-size:12.5px; text-align:right; text-decoration:underline; text-underline-offset:2px; }
+.member-auth-forgot { align-self:flex-end; display:block; margin:-8px 0 18px; color:var(--muted); font-size:12.5px; text-align:right; text-decoration:underline; text-underline-offset:2px; }
 .member-auth-forgot:hover { color:var(--copper-dark); }
 .member-auth-divider { display:flex; align-items:center; gap:12px; margin:16px 0; color:var(--faint); font-size:11px; text-transform:uppercase; letter-spacing:.06em; }
 .member-auth-divider::before, .member-auth-divider::after { content:""; flex:1; height:1px; background:var(--line); }

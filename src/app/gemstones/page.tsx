@@ -37,7 +37,7 @@ export default async function GemstonesLandingPage() {
 
       <section className="gem-hero shell">
         <div className="gem-hero__copy reveal">
-          <p className="eyebrow"><span /> The Buy Gemstones module</p>
+          <p className="eyebrow"><span /> Buy Gemstones</p>
           <h1>Genuine<br /><em>Vedic Gemstones.</em></h1>
           <p className="gem-hero__lead">Discover premium natural gemstones carefully selected for spiritual and astrological guidance. Shop securely with verified quality and transparent information.</p>
           <div className="hero-actions">

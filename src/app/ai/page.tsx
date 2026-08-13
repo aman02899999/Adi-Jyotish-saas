@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import Link from "next/link";
 import { ArrowRight, Sparkles } from "lucide-react";
+import { AvatarImage } from "@/components/avatar-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getActivePersonas } from "@/lib/ai-personas";
@@ -30,7 +31,7 @@ export default async function AiPersonasIndexPage() {
         <div className="category-grid">
           {personas.map((persona) => (
             <Link href={`/ai/${persona.slug}`} className="category-tile" key={persona.id}>
-              <span>{persona.avatarUrl ? <img src={persona.avatarUrl} alt="" style={{ width: 21, height: 21, borderRadius: "50%", objectFit: "cover" }} /> : <Sparkles size={21} strokeWidth={1.4} />}</span>
+              <span><AvatarImage src={persona.avatarUrl} alt="" style={{ width: 21, height: 21, borderRadius: "50%", objectFit: "cover" }} fallback={<Sparkles size={21} strokeWidth={1.4} />} /></span>
               <strong>{persona.name}</strong>
               <small>{persona.title} · {persona.price > 0 ? `₹${persona.price}` : "Free"}</small>
             </Link>

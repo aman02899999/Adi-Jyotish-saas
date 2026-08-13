@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Check, Crown, Edit3, Mail, Plus, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { AvatarImage } from "@/components/avatar-image";
 import type { Practitioner } from "@/lib/scheduling";
 
 type FormState = {
@@ -120,7 +121,7 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
           {items.map((person) => (
             <div className="service-table__row" role="row" key={person.id}>
               <div className="table-service">
-                <span className="table-service__icon">{person.photoUrl ? <img src={person.photoUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} /> : <Users size={17} />}</span>
+                <span className="table-service__icon"><AvatarImage src={person.photoUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} fallback={<Users size={17} />} /></span>
                 <div><strong>{person.name}</strong><small>{person.email} · {person.hasPortalAccess ? "Portal linked" : "Not yet invited"}</small></div>
               </div>
               <strong>{person.experienceYears} yrs</strong>

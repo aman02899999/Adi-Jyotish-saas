@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { notFound } from "next/navigation";
 import { CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { AiPersonaReadingForm } from "@/components/ai-persona-reading-form";
+import { AvatarImage } from "@/components/avatar-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getPersonaBySlug } from "@/lib/ai-personas";
@@ -44,7 +45,7 @@ export default async function AiPersonaPage({ params }: { params: Promise<{ slug
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">
             <div className="ask-persona-avatar">
-              {persona.avatarUrl ? <img src={persona.avatarUrl} alt={persona.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} /> : <Sparkles size={26} />}
+              <AvatarImage src={persona.avatarUrl} alt={persona.name} style={{ width: "100%", height: "100%", objectFit: "cover", borderRadius: "inherit" }} fallback={<Sparkles size={26} />} />
             </div>
             <strong>{persona.name}</strong>
             <span>{persona.title}</span>

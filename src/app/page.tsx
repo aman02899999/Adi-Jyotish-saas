@@ -28,6 +28,7 @@ import {
   Sun,
   Users,
 } from "lucide-react";
+import { AvatarImage } from "@/components/avatar-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { JsonLd } from "@/components/json-ld";
@@ -174,7 +175,7 @@ export default async function HomePage() {
                 <TiltCard strength={4}>
                   <article className="senior-main-card">
                     <div className="senior-main-card__photo">
-                      {expert.photoUrl ? <img src={expert.photoUrl} alt={expert.name} /> : <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>}
+                      <AvatarImage src={expert.photoUrl} alt={expert.name} fallback={<span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>} />
                       {expert.verified && <em><CheckCircle2 size={13} /> Verified</em>}
                     </div>
                     <div className="senior-main-card__body">
@@ -203,7 +204,7 @@ export default async function HomePage() {
               {seniorRest.map((expert) => (
                 <Link href={`/astrologers/${expert.slug}`} className="senior-card reveal" key={expert.id}>
                   <div className="senior-card__avatar">
-                    {expert.photoUrl ? <img src={expert.photoUrl} alt={expert.name} /> : <span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>}
+                    <AvatarImage src={expert.photoUrl} alt={expert.name} fallback={<span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>} />
                   </div>
                   <strong>{expert.name}</strong>
                   <span>{expert.title}</span>
@@ -325,7 +326,7 @@ export default async function HomePage() {
           <div><p className="eyebrow"><span /> Your daily horoscope</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Pick your sign,<br /><em>see today&rsquo;s sky.</em></h2></div>
           <div className="section-heading__cta-block">
             <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>
-            <Link href="/horoscope" className="button button--small">Check daily horoscope, click here <ArrowRight size={14} /></Link>
+            <Link href="/horoscope" className="button button--small">See today&apos;s horoscope <ArrowRight size={14} /></Link>
           </div>
         </div>
         <HomeHoroscopeTeaser

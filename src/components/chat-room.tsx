@@ -120,7 +120,7 @@ export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt,
       ) : (
         <div className="chat-room__ended"><ShieldCheck size={18} /><div><strong>This chat has ended.</strong><small>{viewerRole === "member" ? <Link href="/dashboard/wallet">View wallet activity</Link> : "Session closed."}</small></div></div>
       )}
-      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
+      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
     </section>
   );
 }

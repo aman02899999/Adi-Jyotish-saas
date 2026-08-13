@@ -51,7 +51,7 @@ export default async function GemstoneComparePage({ searchParams }: { searchPara
             </tbody>
           </table>
         ) : (
-          <div className="empty-state"><X size={26} /><h3>Nothing to compare</h3><p>Select up to 3 gemstones from the shop page.</p></div>
+          <div className="empty-state"><X size={26} /><h3>Nothing to compare</h3><p>Select up to 3 gemstones from the shop page.</p><Link href="/gemstones/shop" className="button button--small">Browse gemstones</Link></div>
         )}
       </section>
     <SiteFooter />
