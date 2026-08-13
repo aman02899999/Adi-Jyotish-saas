@@ -7,13 +7,13 @@ import type { Practitioner } from "@/lib/scheduling";
 
 type FormState = {
   name: string; email: string; title: string; bio: string; specialties: string; languages: string;
-  consultationModes: string; experienceYears: string; chatRatePerMinute: string; photoUrl: string;
+  consultationModes: string; experienceYears: string; chatRatePerMinute: string; photoUrl: string; videoUrl: string;
   featured: boolean; active: boolean;
 };
 
 const emptyForm: FormState = {
   name: "", email: "", title: "", bio: "", specialties: "", languages: "English, Hindi",
-  consultationModes: "Chat, Call, Video", experienceYears: "5", chatRatePerMinute: "15", photoUrl: "",
+  consultationModes: "Chat, Call, Video", experienceYears: "5", chatRatePerMinute: "15", photoUrl: "", videoUrl: "",
   featured: false, active: false,
 };
 
@@ -38,7 +38,7 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
       name: person.name, email: person.email, title: person.title, bio: person.bio,
       specialties: person.specialties, languages: person.languages, consultationModes: person.consultationModes,
       experienceYears: String(person.experienceYears), chatRatePerMinute: String(person.chatRatePerMinute),
-      photoUrl: person.photoUrl ?? "", featured: person.featured, active: person.active,
+      photoUrl: person.photoUrl ?? "", videoUrl: person.videoUrl ?? "", featured: person.featured, active: person.active,
     });
     setOpen(true);
   }
@@ -52,6 +52,7 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
       experienceYears: Number(form.experienceYears),
       chatRatePerMinute: Number(form.chatRatePerMinute),
       photoUrl: form.photoUrl.trim() || null,
+      videoUrl: form.videoUrl.trim() || null,
     };
     try {
       const response = await fetch(editing ? `/api/admin/practitioners/${editing.id}` : "/api/admin/practitioners", {
@@ -164,6 +165,7 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
               <label className="field"><span>Experience (years)</span><input min="0" max="60" type="number" value={form.experienceYears} onChange={(event) => setForm({ ...form, experienceYears: event.target.value })} /></label>
               <label className="field"><span>Chat rate</span><div className="input-prefix"><b>₹/min</b><input min="0" type="number" value={form.chatRatePerMinute} onChange={(event) => setForm({ ...form, chatRatePerMinute: event.target.value })} /></div></label>
               <label className="field field--full"><span>Photo URL (optional)</span><input value={form.photoUrl} onChange={(event) => setForm({ ...form, photoUrl: event.target.value })} placeholder="https://…" /></label>
+              <label className="field field--full"><span>Video intro URL (optional)</span><input value={form.videoUrl} onChange={(event) => setForm({ ...form, videoUrl: event.target.value })} placeholder="https://… a short .mp4 clip" /></label>
               <div className="form-options field--full">
                 <label><button type="button" className={`switch ${form.active ? "on" : ""}`} onClick={() => setForm({ ...form, active: !form.active })}><i /></button><span><strong>Publish to marketplace</strong><small>Visible on /astrologers once on</small></span></label>
                 <label><button type="button" className={`switch ${form.featured ? "on" : ""}`} onClick={() => setForm({ ...form, featured: !form.featured })}><i /></button><span><strong>Feature on homepage</strong><small>Shown in the senior astrologers strip</small></span></label>

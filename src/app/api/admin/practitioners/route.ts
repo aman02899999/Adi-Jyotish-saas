@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 type CreatePayload = {
   name?: string; email?: string; title?: string; bio?: string; specialties?: string; languages?: string;
-  consultationModes?: string; experienceYears?: number; chatRatePerMinute?: number; photoUrl?: string | null;
+  consultationModes?: string; experienceYears?: number; chatRatePerMinute?: number; photoUrl?: string | null; videoUrl?: string | null;
   featured?: boolean; active?: boolean;
 };
 
@@ -35,6 +35,7 @@ export async function POST(request: Request) {
       experienceYears: Number(body.experienceYears) || 0,
       chatRatePerMinute: Number(body.chatRatePerMinute) || 0,
       photoUrl: body.photoUrl ?? null,
+      videoUrl: body.videoUrl ?? null,
       featured: body.featured ?? false,
       active: body.active ?? false,
     });

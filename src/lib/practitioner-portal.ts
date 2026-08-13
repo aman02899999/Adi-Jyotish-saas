@@ -228,7 +228,7 @@ export async function updatePractitionerSchedule(practitionerId: string, input: 
 }
 
 export async function updatePractitionerProfile(practitionerId: string, input: {
-  bio?: string; specialties?: string; languages?: string; consultationModes?: string; photoUrl?: string | null;
+  bio?: string; specialties?: string; languages?: string; consultationModes?: string; photoUrl?: string | null; videoUrl?: string | null;
 }) {
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (input.bio !== undefined) patch.bio = input.bio.trim().slice(0, 4000);
@@ -236,6 +236,7 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
   if (input.languages !== undefined) patch.languages = input.languages.trim().slice(0, 240) || "English, Hindi";
   if (input.consultationModes !== undefined) patch.consultationModes = input.consultationModes.trim().slice(0, 160) || "Video, Audio, Chat";
   if (input.photoUrl !== undefined) patch.photoUrl = input.photoUrl?.trim() || null;
+  if (input.videoUrl !== undefined) patch.videoUrl = input.videoUrl?.trim() || null;
 
   const ref = db.collection("practitioners").doc(practitionerId);
   await ref.update(patch);

@@ -6,11 +6,13 @@ import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/li
 import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { getPersonaById } from "@/lib/ai-personas";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
+import { buildVarshphalChart, renderVarshphalReport } from "@/lib/varshphal";
 import { getSiteUrl } from "@/lib/site-url";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 export const AI_READING_PRICE = 149;
 export const AI_KUNDLI_PRICE = 499;
+export const AI_VARSHPHAL_PRICE = 399;
 export const AI_PALM_READING_PRICE = 99;
 export const AI_PALM_READING_ORIGINAL_PRICE = 495;
 export const AI_TAROT_READING_PRICE = 149;
@@ -35,6 +37,7 @@ export type AiReading = {
   personaId: string | null;
   personaSlug: string | null;
   personaName: string | null;
+  year: number | null;
   price: number;
   currency: string;
   status: string;
@@ -61,6 +64,7 @@ type AiReadingDoc = {
   personaId?: string | null;
   personaSlug?: string | null;
   personaName?: string | null;
+  year?: number | null;
   price: number;
   currency: string;
   status: string;
@@ -92,6 +96,7 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     personaId: data.personaId ?? null,
     personaSlug: data.personaSlug ?? null,
     personaName: data.personaName ?? null,
+    year: data.year ?? null,
     price: data.price,
     currency: data.currency,
     status: data.status,
@@ -209,6 +214,36 @@ export async function createPendingKundliReport({ memberId, clientName, birthDat
     birthPlace,
     question: null,
     price: AI_KUNDLI_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    reminderSentAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingVarshphalReading({ memberId, clientName, birthDate, birthTime, birthPlace, year }: {
+  memberId: string;
+  clientName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+  year: number;
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "varshphal",
+    clientName,
+    birthDate,
+    birthTime,
+    birthPlace,
+    question: null,
+    year,
+    price: AI_VARSHPHAL_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
     razorpayOrderId: null,
@@ -496,6 +531,11 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
     if (reading.readingType === "kundli") {
       return renderKundliReport(buildKundliChart({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace }));
     }
+    if (reading.readingType === "varshphal") {
+      if (!reading.year) throw new Error("This reading is missing its target year.");
+      const chart = buildVarshphalChart({ birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, year: reading.year });
+      return renderVarshphalReport(chart, reading.clientName);
+    }
     if (!isGeminiConfigured()) throw new Error("Live readings are not configured yet. Please try again shortly.");
     if (reading.readingType === "palm") {
       if (!reading.leftPalmImagePath || !reading.rightPalmImagePath) throw new Error("Palm images are missing for this reading.");
@@ -537,6 +577,7 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
 const READING_RESUME: Record<string, { label: string; path: string }> = {
   question: { label: "your question reading", path: "/ask" },
   kundli: { label: "your full Kundli report", path: "/kundli" },
+  varshphal: { label: "your Varshphal report", path: "/varshphal" },
   palm: { label: "your Palm Reading", path: "/palm-reading" },
   tarot: { label: "your Tarot Reading", path: "/tarot-reading" },
   face: { label: "your Face Reading", path: "/face-reading" },

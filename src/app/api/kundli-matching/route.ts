@@ -45,6 +45,7 @@ export async function POST(request: Request) {
       memberId: member?.id ?? null, nameA, birthDateA, birthTimeA, birthPlaceA, nameB, birthDateB, birthTimeB, birthPlaceB,
     });
     return Response.json({
+      id: match.id,
       score: match.compatibilityScore,
       maxScore: result.maxScore,
       breakdown: result.breakdown,

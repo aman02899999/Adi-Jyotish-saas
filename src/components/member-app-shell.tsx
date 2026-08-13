@@ -16,6 +16,7 @@ import {
   LogOut,
   Menu,
   MessageSquareText,
+  NotebookPen,
   Search,
   ShieldCheck,
   Sparkles,
@@ -37,6 +38,7 @@ const navItems = [
   { label: "Family Charts", icon: Users, href: "/dashboard/family" },
   { label: "My Consultations", icon: BookOpenText, href: "/dashboard/consultations" },
   { label: "Predictions", icon: CircleCheck, href: "/dashboard/predictions" },
+  { label: "Astro Journal", icon: NotebookPen, href: "/dashboard/journal" },
   { label: "Live Answers", icon: Sparkles, href: "/dashboard/ai-readings" },
   { label: "Gemstone Orders", icon: Gem, href: "/dashboard/gemstone-orders" },
   { label: "Wishlist", icon: Heart, href: "/dashboard/wishlist" },
@@ -50,7 +52,7 @@ const navItems = [
   { label: "Invite & Earn", icon: Gift, href: "/dashboard/referrals" },
 ];
 
-type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family" | "Predictions" | "Security";
+type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family" | "Predictions" | "Security" | "Journal";
 
 function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveSection }) {
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -60,7 +62,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
       <nav className="app-nav" aria-label="Member navigation">
         <p>My cosmos</p>
         {navItems.map(({ label, icon: Icon, href }) => {
-          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions");
+          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions") || (active === "Journal" && label === "Astro Journal");
           return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
         })}
         <p className="app-nav__lower">Account</p>

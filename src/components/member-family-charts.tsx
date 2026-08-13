@@ -1,6 +1,7 @@
 "use client";
 
 import { useState } from "react";
+import { Link } from "@/i18n/navigation";
 import { CalendarDays, Check, Clock3, LoaderCircle, MapPin, Plus, Trash2, UserRound, Users, X } from "lucide-react";
 
 type ChartSnapshot = { ascendantRashi: string; moonRashi: string; moonNakshatra: string; sunRashi: string };
@@ -71,7 +72,7 @@ export function MemberFamilyCharts({ initialFamilyMembers }: { initialFamilyMemb
   return (
     <>
       <div className="consultation-heading billing-heading">
-        <div><p>Household</p><h1>Family charts</h1><span>Link family members&rsquo; birth details to see each of their real natal charts — no separate login needed.</span></div>
+        <div><p>Household</p><h1>Family charts</h1><span>Link family members&rsquo; birth details to see each of their real natal charts — no separate login needed. Booking a reading? Pick anyone here from step two of <Link href="/book">/book</Link> and your own membership discount still applies.</span></div>
         {!showForm && <button type="button" className="button button--small" onClick={() => setShowForm(true)}><Plus size={14} /> Add family member</button>}
       </div>
 

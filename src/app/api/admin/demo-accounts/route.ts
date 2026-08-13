@@ -83,6 +83,7 @@ export async function POST() {
         verified: true,
         verificationLevel: "senior-panel",
         photoUrl: null,
+        videoUrl: null,
         online: true,
         chatRatePerMinute: 15,
         active: true,

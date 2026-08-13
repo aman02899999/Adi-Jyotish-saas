@@ -1,6 +1,14 @@
 {
   "indexes": [
     {
+      "collectionGroup": "journalEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberId", "order": "ASCENDING" },
+        { "fieldPath": "entryDate", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "gemstoneCategories",
       "queryScope": "COLLECTION",
       "fields": [

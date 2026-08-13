@@ -1,13 +1,14 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Clock3, HeartHandshake, LoaderCircle, MapPin, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, HeartHandshake, LoaderCircle, MapPin, Share2, UserRound, X } from "lucide-react";
 import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
+import { ShareButtons } from "@/components/share-buttons";
 
 type Breakdown = { varna: number; vashya: number; tara: number; yoni: number; grahaMaitri: number; gana: number; bhakoot: number; nadi: number };
 type TimelineMonth = { monthLabel: string; score: number; tier: "favorable" | "supportive" | "neutral" | "caution"; headline: string };
 type Result = {
-  score: number; maxScore: number; breakdown: Breakdown; nadiDosha: boolean; bhakootDosha: boolean;
+  id: string; score: number; maxScore: number; breakdown: Breakdown; nadiDosha: boolean; bhakootDosha: boolean;
   moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string; narrative: string;
   timeline: TimelineMonth[];
 };
@@ -91,6 +92,14 @@ export function KundliMatchingForm() {
               <p>{month.headline}</p>
             </div>
           ))}
+        </div>
+        <div className="match-share">
+          <p><Share2 size={15} /> Share this match</p>
+          <ShareButtons
+            url={`${window.location.origin}/match/${result.id}`}
+            title={`${nameA} & ${nameB}'s compatibility match`}
+            text={`We scored ${result.score}/${result.maxScore} on the classical Ashtakoot Guna Milan scale.`}
+          />
         </div>
         <div className="ask-answer__actions">
           <button type="button" className="button button--ghost" onClick={() => { setResult(null); }}>Match another pair</button>

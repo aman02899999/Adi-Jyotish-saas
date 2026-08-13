@@ -132,3 +132,21 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     timeline: timeline as TimelineMonth[],
   };
 }
+
+/** Public, share-safe summary of a saved match — deliberately omits birth date/time/place,
+ * which the full match document stores but a shared social card should never expose. */
+export type ShareableKundliMatch = { id: string; nameA: string; nameB: string; score: number; maxScore: number; tierLabel: string };
+
+export async function getShareableKundliMatch(id: string): Promise<ShareableKundliMatch | null> {
+  const snap = await db.collection("kundliMatches").doc(id).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as { personAName: string; personBName: string; compatibilityScore: number };
+  return {
+    id,
+    nameA: data.personAName,
+    nameB: data.personBName,
+    score: data.compatibilityScore,
+    maxScore: 36,
+    tierLabel: scoreTier(data.compatibilityScore).label,
+  };
+}

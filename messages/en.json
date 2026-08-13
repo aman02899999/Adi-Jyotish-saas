@@ -120,7 +120,9 @@
       "panchang": { "label": "Panchang Today", "note": "Tithi, nakshatra & muhurat" },
       "muhurat": { "label": "Muhurat Concierge", "note": "Best days for your decision" },
       "numerology": { "label": "Numerology", "note": "Life Path & Destiny numbers" },
-      "kundli": { "label": "Full Kundli Report", "note": "Your complete birth chart" }
+      "kundli": { "label": "Full Kundli Report", "note": "Your complete birth chart" },
+      "festivals": { "label": "Festival Muhurat", "note": "Real puja timing, not a date list" },
+      "varshphal": { "label": "Varshphal Report", "note": "Your annual solar-return chart" }
     },
     "horoscopeStrip": {
       "eyebrow": "Your daily horoscope",

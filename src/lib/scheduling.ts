@@ -18,6 +18,7 @@ export type Practitioner = {
   verified: boolean;
   verificationLevel: string;
   photoUrl: string | null;
+  videoUrl: string | null;
   online: boolean;
   chatRatePerMinute: number;
   active: boolean;
@@ -47,6 +48,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/jagmohan-shashtri.jpg",
+    videoUrl: null,
     chatRatePerMinute: 121,
     active: true,
     featured: true,
@@ -64,6 +66,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/arun-dubey.jpg",
+    videoUrl: null,
     chatRatePerMinute: 109,
     active: true,
     featured: true,
@@ -81,6 +84,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/anika-sharma.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: true,
@@ -98,6 +102,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/rohan-mehta.jpg",
+    videoUrl: null,
     chatRatePerMinute: 15,
     active: true,
     featured: false,
@@ -123,6 +128,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/meera-kulkarni.jpg",
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -140,6 +146,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/ravindra-bhatt.jpg",
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -157,6 +164,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/ananya-iyer.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -174,6 +182,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/suresh-nair.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: false,
@@ -191,6 +200,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/priyanka-deshmukh.jpg",
+    videoUrl: null,
     chatRatePerMinute: 14,
     active: true,
     featured: false,
@@ -210,6 +220,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/harish-shukla.jpg",
+    videoUrl: null,
     chatRatePerMinute: 24,
     active: true,
     featured: false,
@@ -227,6 +238,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/radhika-menon.jpg",
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -244,6 +256,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/om-prakash-tiwari.jpg",
+    videoUrl: null,
     chatRatePerMinute: 26,
     active: true,
     featured: false,
@@ -261,6 +274,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/kavita-joshi.jpg",
+    videoUrl: null,
     chatRatePerMinute: 17,
     active: true,
     featured: false,
@@ -278,6 +292,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/deepak-pandey.jpg",
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -297,6 +312,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/rajesh-malhotra.jpg",
+    videoUrl: null,
     chatRatePerMinute: 22,
     active: true,
     featured: false,
@@ -314,6 +330,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/sneha-kapadia.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -331,6 +348,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 21,
     active: true,
     featured: false,
@@ -348,6 +366,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/ashok-bhargava.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: false,
@@ -365,6 +384,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/priya-ramachandran.jpg",
+    videoUrl: null,
     chatRatePerMinute: 15,
     active: true,
     featured: false,
@@ -384,6 +404,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/mahesh-awasthi.jpg",
+    videoUrl: null,
     chatRatePerMinute: 23,
     active: true,
     featured: false,
@@ -401,6 +422,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/sunita-rao.jpg",
+    videoUrl: null,
     chatRatePerMinute: 17,
     active: true,
     featured: false,
@@ -418,6 +440,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -435,6 +458,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/kavita-nair.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -452,6 +476,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 25,
     active: true,
     featured: false,
@@ -471,6 +496,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/vinod-chaubey.jpg",
+    videoUrl: null,
     chatRatePerMinute: 24,
     active: true,
     featured: false,
@@ -488,6 +514,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -505,6 +532,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/sarita-agnihotri.jpg",
+    videoUrl: null,
     chatRatePerMinute: 15,
     active: true,
     featured: false,
@@ -522,6 +550,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 21,
     active: true,
     featured: false,
@@ -539,6 +568,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/lata-kulshreshtha.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: false,
@@ -558,6 +588,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/naresh-vyas.jpg",
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -575,6 +606,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/poonam-sinha.jpg",
+    videoUrl: null,
     chatRatePerMinute: 14,
     active: true,
     featured: false,
@@ -592,6 +624,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/manoj-chatterjee.jpg",
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -609,6 +642,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/shweta-bapat.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -626,6 +660,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 22,
     active: true,
     featured: false,
@@ -701,6 +736,7 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
     verified: data.verified as boolean,
     verificationLevel: data.verificationLevel as string,
     photoUrl: (data.photoUrl as string | null) ?? null,
+    videoUrl: (data.videoUrl as string | null) ?? null,
     online: (data.online as boolean) ?? false,
     chatRatePerMinute: data.chatRatePerMinute as number,
     active: data.active as boolean,
@@ -787,7 +823,7 @@ function toPractitionerSlug(name: string) {
  * practitioner-invites.ts) before they can sign in and self-manage their profile. */
 export async function createPractitionerAdmin(input: {
   name: string; email: string; title: string; bio: string; specialties: string; languages: string;
-  consultationModes: string; experienceYears: number; chatRatePerMinute: number; photoUrl: string | null;
+  consultationModes: string; experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null;
   featured: boolean; active: boolean;
 }) {
   const name = input.name.trim().slice(0, 120);
@@ -819,6 +855,7 @@ export async function createPractitionerAdmin(input: {
     verified: false,
     verificationLevel: "unverified",
     photoUrl: input.photoUrl?.trim() || null,
+    videoUrl: input.videoUrl?.trim() || null,
     online: false,
     chatRatePerMinute: Math.max(0, Number(input.chatRatePerMinute) || 0),
     active: input.active,
@@ -832,7 +869,7 @@ export async function createPractitionerAdmin(input: {
 
 export async function updatePractitionerAdmin(id: string, patch: Partial<{
   name: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
-  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
+  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
 }>) {
   const ref = db.collection("practitioners").doc(id);
   const snap = await ref.get();
@@ -852,6 +889,7 @@ export async function updatePractitionerAdmin(id: string, patch: Partial<{
   if (patch.experienceYears !== undefined) update.experienceYears = Math.max(0, Math.min(60, Number(patch.experienceYears) || 0));
   if (patch.chatRatePerMinute !== undefined) update.chatRatePerMinute = Math.max(0, Number(patch.chatRatePerMinute) || 0);
   if (patch.photoUrl !== undefined) update.photoUrl = patch.photoUrl?.trim() || null;
+  if (patch.videoUrl !== undefined) update.videoUrl = patch.videoUrl?.trim() || null;
   if (patch.verified !== undefined) update.verified = patch.verified;
   if (patch.featured !== undefined) update.featured = patch.featured;
   if (patch.active !== undefined) update.active = patch.active;

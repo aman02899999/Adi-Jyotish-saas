@@ -4,6 +4,7 @@ import { getAllPosts } from "@/lib/blog";
 import { getAllActiveProductSlugs, getActiveCategories } from "@/lib/gemstones";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { getPublishedCustomPages } from "@/lib/custom-pages";
+import { FESTIVALS } from "@/lib/festivals";
 import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
@@ -32,6 +33,9 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: new URL("/kundli-matching", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.75 },
     { url: new URL("/panchang", site).toString(), lastModified: updated, changeFrequency: "daily", priority: 0.75 },
     { url: new URL("/muhurat", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.75 },
+    { url: new URL("/festivals", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.7 },
+    { url: new URL("/gift", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.6 },
+    { url: new URL("/varshphal", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.7 },
     { url: new URL("/numerology", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.7 },
     { url: new URL("/blog", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.7 },
     { url: new URL("/pricing", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.6 },
@@ -44,5 +48,6 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...gemstoneProducts.map((product) => ({ url: new URL(`/gemstones/${product.slug}`, site).toString(), lastModified: product.updatedAt, changeFrequency: "weekly" as const, priority: 0.75 })),
     ...personas.map((persona) => ({ url: new URL(`/ai/${persona.slug}`, site).toString(), lastModified: persona.updatedAt, changeFrequency: "weekly" as const, priority: 0.7 })),
     ...customPages.map((page) => ({ url: new URL(`/p/${page.slug}`, site).toString(), lastModified: page.updatedAt, changeFrequency: "monthly" as const, priority: 0.5 })),
+    ...FESTIVALS.map((festival) => ({ url: new URL(`/festivals/${festival.slug}`, site).toString(), lastModified: updated, changeFrequency: "monthly" as const, priority: 0.6 })),
   ];
 }

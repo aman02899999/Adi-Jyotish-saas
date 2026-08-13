@@ -21,6 +21,7 @@ import {
   Layers,
   MessageCircle,
   Orbit,
+  PartyPopper,
   Quote,
   ScanFace,
   ScrollText,
@@ -84,6 +85,8 @@ const freeTools = [
   { icon: CalendarClock, key: "muhurat" as const, href: "/muhurat" },
   { icon: Hash, key: "numerology" as const, href: "/numerology" },
   { icon: ScrollText, key: "kundli" as const, href: "/kundli" },
+  { icon: PartyPopper, key: "festivals" as const, href: "/festivals" },
+  { icon: Sparkles, key: "varshphal" as const, href: "/varshphal" },
 ];
 
 export default async function HomePage() {

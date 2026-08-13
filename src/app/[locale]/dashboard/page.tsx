@@ -3,18 +3,21 @@ import {
   ArrowRight,
   ArrowUpRight,
   Clock3,
+  Flame,
   MoreHorizontal,
   Sparkles,
   Star,
   SunMedium,
 } from "lucide-react";
 import { MemberAppShell } from "@/components/member-app-shell";
+import { CosmicProfileShareCard } from "@/components/cosmic-profile-share-card";
 import { KundliChartDiagram, rashiName } from "@/components/kundli-chart-diagram";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { bookingFromDoc } from "@/app/api/bookings/route";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPublishedServices } from "@/lib/services";
 import { getCosmicWeather } from "@/lib/transit-alerts";
+import { BADGE_MILESTONES, recordDailyVisit } from "@/lib/streaks";
 import { buildHouseGrid, buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
 import { formatDegree, NAKSHATRAS } from "@/lib/astro-engine";
 
@@ -37,7 +40,7 @@ function buildDashboardKundli(member: { name: string; birthDate: string | null; 
 export default async function DashboardPage() {
   const member = await getCurrentMember();
   if (!member) return null;
-  const [services, upcomingSnap, weather] = await Promise.all([
+  const [services, upcomingSnap, weather, streak] = await Promise.all([
     getPublishedServices(),
     // Falls back to no "next session" card (not a page crash) if the (clientEmail, scheduledAt)
     // composite index isn't built yet.
@@ -46,6 +49,7 @@ export default async function DashboardPage() {
       { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
     ),
     getCosmicWeather(member, member.id),
+    recordDailyVisit(member.id),
   ]);
   const firstName = member.name.split(" ")[0];
   const location = member.birthPlace?.split(",")[0] || "Your location";
@@ -53,6 +57,7 @@ export default async function DashboardPage() {
   const nextBooking = upcomingSnap.docs[0] ? bookingFromDoc(upcomingSnap.docs[0]) : undefined;
   const kundli = buildDashboardKundli(member);
   const moon = kundli?.chart.positions.find((position) => position.graha === "moon");
+  const sun = kundli?.chart.positions.find((position) => position.graha === "sun");
 
   return (
     <MemberAppShell member={member} active="Dashboard">
@@ -129,6 +134,27 @@ export default async function DashboardPage() {
           <p>The shift you feel is not a disruption—it is an invitation to be more visible. Choose one brave, specific action today.</p>
           <Link href="#services-list">Read full insight <ArrowRight size={14} /></Link>
           <span className="insight-star">✦</span>
+        </article>
+
+        {kundli && sun && moon && (
+          <CosmicProfileShareCard
+            sunRashi={rashiName(sun.rashiIndex)}
+            moonRashi={rashiName(moon.rashiIndex)}
+            risingRashi={rashiName(kundli.chart.ascendantRashiIndex)}
+          />
+        )}
+
+        <article className="glass-card streak-card">
+          <div className="card-heading"><div><p>Keep showing up</p><h2>Your streak</h2></div><Flame size={19} /></div>
+          <div className="streak-count"><strong>{streak.currentStreak}</strong><span>{streak.currentStreak === 1 ? "day" : "days"} in a row</span></div>
+          {streak.longestStreak > streak.currentStreak && <p className="streak-best">Best: {streak.longestStreak} days</p>}
+          {streak.badges.length > 0 && (
+            <div className="streak-badges">
+              {BADGE_MILESTONES.filter((milestone) => streak.badges.includes(milestone.key)).map((milestone) => (
+                <span key={milestone.key} className={milestone.key === streak.justEarned ? "streak-badge streak-badge--new" : "streak-badge"}>{milestone.label}</span>
+              ))}
+            </div>
+          )}
         </article>
       </div>
 

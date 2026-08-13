@@ -1,4 +1,5 @@
 import type { Metadata } from "next";
+import { Link } from "@/i18n/navigation";
 import { PricingPlans } from "@/components/pricing-plans";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
@@ -24,7 +25,7 @@ export default async function PricingPage() {
       <section className="pricing-hero shell">
         <p className="eyebrow"><span />Membership</p>
         <h1>Choose the pace of<br /><em>your cosmic practice.</em></h1>
-        <p>Every reading is available à la carte. A membership adds daily depth, priority access, and lower consultation prices.</p>
+        <p>Every reading is available à la carte. A membership adds daily depth, priority access, and lower consultation prices — and that discount carries over when you book for anyone you&rsquo;ve linked in your <Link href="/dashboard/family">family charts</Link>, not just yourself.</p>
       </section>
       <section className="shell pricing-body">
         <PricingPlans

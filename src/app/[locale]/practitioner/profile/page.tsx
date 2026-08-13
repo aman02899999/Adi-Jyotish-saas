@@ -11,12 +11,12 @@ export default async function PractitionerProfilePage() {
   const practitioner = await requirePractitionerPage();
   const snap = await db.collection("practitioners").doc(practitioner.id).get();
   const data = snap.data() as {
-    bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null;
+    bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null; videoUrl: string | null;
     bankAccountName: string | null; bankIfsc: string | null; bankAccountNumberEnc: string | null; upiIdEnc: string | null;
     totpEnabled?: boolean;
   };
   const row = {
-    bio: data.bio, specialties: data.specialties, languages: data.languages, consultationModes: data.consultationModes, photoUrl: data.photoUrl,
+    bio: data.bio, specialties: data.specialties, languages: data.languages, consultationModes: data.consultationModes, photoUrl: data.photoUrl, videoUrl: data.videoUrl ?? null,
     bankAccountName: data.bankAccountName, bankIfsc: data.bankIfsc, hasBankAccount: data.bankAccountNumberEnc, hasUpi: data.upiIdEnc,
   };
 
