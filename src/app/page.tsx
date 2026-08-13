@@ -20,7 +20,6 @@ import {
   Layers,
   MessageCircle,
   Orbit,
-  PhoneCall,
   Quote,
   ScanFace,
   ScrollText,
@@ -223,7 +222,7 @@ export default async function HomePage() {
               <p className="live-pulse"><i /> {onlineCount} astrologer{onlineCount === 1 ? "" : "s"} online now</p>
               <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>Talk to a guide<br /><em style={{ color: "var(--copper)" }}>right now.</em></h2>
             </div>
-            <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat or call instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
+            <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
           </div>
           <div className="live-grid">
             {liveExperts.map((expert) => (
@@ -238,13 +237,16 @@ export default async function HomePage() {
                     <span>{expert.online ? "Online now" : "Offline"}</span>
                   </div>
                 </div>
-                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating ?? "New"}</strong><small>{expert.reviewCount} review{expert.reviewCount === 1 ? "" : "s"} · {expert.experienceYears} yrs</small></div>
-                <div className="live-card__tags"><span>{expert.specialties}</span></div>
+                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating?.toFixed(1) ?? "New"}</strong><small>{expert.reviewCount} review{expert.reviewCount === 1 ? "" : "s"} · {expert.experienceYears} yrs</small></div>
+                <div className="live-card__tags">{expert.specialties.split(",").slice(0, 3).map((tag, tagIndex) => <span key={tag} className={tagIndex === 0 ? "primary-specialty" : undefined}>{tag.trim()}</span>)}</div>
                 <div className="live-card__foot">
-                  <div className="live-card__price"><strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong><small>Chat or call</small></div>
+                  <div className="live-card__price">{expert.reviewDiscountPercent > 0 ? (
+                    <strong><s style={{ opacity: .5, fontSize: 12 }}>₹{expert.chatRatePerMinute}</s> ₹{expert.discountedRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong>
+                  ) : (
+                    <strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong>
+                  )}<small>Chat now</small></div>
                   <div className="live-card__actions">
-                    <Link href={`/astrologers/${expert.slug}`} aria-label={`Chat with ${expert.name}`}><MessageCircle size={15} /></Link>
-                    <Link href={`/astrologers/${expert.slug}`} className="primary" aria-label={`Call ${expert.name}`}><PhoneCall size={15} /></Link>
+                    <Link href={`/astrologers/${expert.slug}`} className="primary" aria-label={`Chat with ${expert.name}`}><MessageCircle size={15} /></Link>
                   </div>
                 </div>
               </article>
@@ -255,8 +257,8 @@ export default async function HomePage() {
       )}
 
       <div className="shell" style={{ paddingBlock: "10px 20px" }}>
-        <div className="promo-banner promo-banner--dark reveal">
-          <div className="promo-banner__copy">
+        <div className="cta-banner cta-banner--dark reveal">
+          <div className="cta-banner__copy">
             <strong>Or ask Shree Santram Shashtri instantly.</strong>
             <span>Our Live Jyotish guide answers one focused question in under a minute. Your first reading is free.</span>
           </div>
@@ -265,8 +267,8 @@ export default async function HomePage() {
       </div>
 
       <div className="shell" style={{ paddingBlock: "10px 20px" }}>
-        <div className="promo-banner reveal">
-          <div className="promo-banner__copy">
+        <div className="cta-banner reveal">
+          <div className="cta-banner__copy">
             <strong>Wear what the sky recommends.</strong>
             <span>Shop certified, natural Vedic gemstones — chosen for your zodiac sign and planetary influence.</span>
           </div>

@@ -3,6 +3,8 @@ import "server-only";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
+import { reviewDiscountPercent } from "@/lib/practitioner-pricing";
+import { applyDiscount } from "@/lib/subscriptions";
 
 export type PractitionerReview = {
   id: string;
@@ -44,6 +46,8 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   reviewCount: number;
   dimensions: { clarity: number; empathy: number; usefulness: number } | null;
   predictionAccuracy: { accuracyPercent: number; resolvedCount: number } | null;
+  reviewDiscountPercent: number;
+  discountedRatePerMinute: number;
 };
 
 export async function getMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
@@ -61,12 +65,16 @@ export async function getMarketplacePractitioners(): Promise<MarketplacePractiti
   return directory.map((person) => {
     const personReviews = reviews.filter((review) => review.practitionerId === person.id);
     const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => personReviews.length ? personReviews.reduce((sum, review) => sum + review[field], 0) / personReviews.length : null;
+    const rating = average("rating");
+    const discountPercent = reviewDiscountPercent(personReviews.length);
     return {
       ...person,
-      rating: average("rating"),
+      rating: rating === null ? null : Math.round(rating * 10) / 10,
       reviewCount: personReviews.length,
       dimensions: personReviews.length ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
       predictionAccuracy: accuracyMap.get(person.id) ?? null,
+      reviewDiscountPercent: discountPercent,
+      discountedRatePerMinute: Math.max(1, applyDiscount(person.chatRatePerMinute, discountPercent)),
     } satisfies MarketplacePractitioner;
   });
 }

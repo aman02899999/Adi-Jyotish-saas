@@ -97,6 +97,8 @@ export default async function AstrologersPage({ searchParams }: { searchParams: 
     rating: person.rating,
     reviewCount: person.reviewCount,
     chatRatePerMinute: person.chatRatePerMinute,
+    discountedRatePerMinute: person.discountedRatePerMinute,
+    reviewDiscountPercent: person.reviewDiscountPercent,
     availableDays: new Set(person.rules.filter((rule) => rule.active).map((rule) => rule.weekday)).size,
   }));
   const copy = copyFor(q);

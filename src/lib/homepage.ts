@@ -4,25 +4,30 @@ import { db, withIndexFallback } from "@/lib/firestore";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 
 export async function getHomepageStats() {
-  const [completedBookingsAgg, activePractitionersAgg, reviewsSnap] = await Promise.all([
+  // Demo accounts (isDemoAccount:true, seeded for internal testing only) are filtered out in JS
+  // rather than via a Firestore `!=` query, which would wrongly exclude every real practitioner
+  // that never has the field set at all — see getPractitionerDirectory in scheduling.ts.
+  const [completedBookingsAgg, practitionersSnap, reviewsSnap] = await Promise.all([
     db.collection("bookings").where("status", "==", "completed").count().get(),
-    db.collection("practitioners").where("active", "==", true).count().get(),
-    db.collection("practitionerReviews").where("status", "==", "published").select("rating").get(),
+    db.collection("practitioners").select("active", "isDemoAccount").get(),
+    db.collection("practitionerReviews").where("status", "==", "published").select("rating", "practitionerId").get(),
   ]);
 
-  const ratings = reviewsSnap.docs.map((doc) => doc.data().rating as number);
+  const demoIds = new Set(practitionersSnap.docs.filter((doc) => doc.data().isDemoAccount).map((doc) => doc.id));
+  const practitionerCount = practitionersSnap.docs.filter((doc) => doc.data().active && !demoIds.has(doc.id)).length;
+  const ratings = reviewsSnap.docs.filter((doc) => !demoIds.has(doc.data().practitionerId as string)).map((doc) => doc.data().rating as number);
   const average = ratings.length ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length : 0;
 
   return {
     consultationsDelivered: completedBookingsAgg.data().count,
-    practitionerCount: activePractitionersAgg.data().count,
+    practitionerCount,
     averageRating: Math.round(average * 10) / 10,
   };
 }
 
 export async function getOnlineNowCount() {
-  const agg = await db.collection("practitioners").where("active", "==", true).where("online", "==", true).count().get();
-  return agg.data().count;
+  const snap = await db.collection("practitioners").where("active", "==", true).where("online", "==", true).select("isDemoAccount").get();
+  return snap.docs.filter((doc) => !doc.data().isDemoAccount).length;
 }
 
 export async function getLivePractitioners(limit = 6) {

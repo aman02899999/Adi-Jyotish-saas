@@ -9,7 +9,7 @@ export const dynamic = "force-dynamic";
 export default async function AdminSchedulePage() {
   await requireAdminPage("schedule");
   const [people, upcomingSnap] = await Promise.all([
-    getPractitionerDirectory(false),
+    getPractitionerDirectory(false, true),
     db.collection("bookings").where("scheduledAt", ">", new Date()).get(),
   ]);
   const counts: Record<string, number> = {};

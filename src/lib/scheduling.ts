@@ -22,6 +22,7 @@ export type Practitioner = {
   chatRatePerMinute: number;
   active: boolean;
   featured: boolean;
+  isDemoAccount: boolean;
   firebaseUid: string | null;
   hasPortalAccess: boolean;
   lastLoginAt: Date | null;
@@ -32,7 +33,7 @@ export type Practitioner = {
 export type AvailabilityRule = { id: string; practitionerId: string; weekday: number; startTime: string; endTime: string; active: boolean };
 export type PractitionerTimeOff = { id: string; practitionerId: string; startsAt: Date; endsAt: Date; reason: string | null };
 
-const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "hasPortalAccess" | "lastLoginAt" | "createdAt" | "updatedAt" | "online">> = [
+const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "hasPortalAccess" | "lastLoginAt" | "createdAt" | "updatedAt" | "online" | "isDemoAccount">> = [
   {
     name: "Shree Jagmohan Shashtri Ji",
     slug: "jagmohan-shashtri-ji",
@@ -704,6 +705,7 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
     chatRatePerMinute: data.chatRatePerMinute as number,
     active: data.active as boolean,
     featured: data.featured as boolean,
+    isDemoAccount: Boolean(data.isDemoAccount),
     firebaseUid: (data.firebaseUid as string | null) ?? null,
     hasPortalAccess: Boolean(data.firebaseUid),
     lastLoginAt: (data.lastLoginAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? null,
@@ -714,7 +716,7 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
 
 export type PractitionerWithSchedule = Practitioner & { rules: AvailabilityRule[]; timeOff: PractitionerTimeOff[] };
 
-export async function getPractitionerDirectory(activeOnly = false): Promise<PractitionerWithSchedule[]> {
+export async function getPractitionerDirectory(activeOnly = false, includeDemo = false): Promise<PractitionerWithSchedule[]> {
   await seedPractitioners();
   const collection = db.collection("practitioners");
   const query = activeOnly ? collection.where("active", "==", true) : collection;
@@ -728,6 +730,10 @@ export async function getPractitionerDirectory(activeOnly = false): Promise<Prac
     console.error("Firestore composite index unavailable for practitioners directory, sorting in JS:", error);
     docs = (await query.get()).docs.sort((a, b) => (a.data().name as string).localeCompare(b.data().name as string));
   }
+  // Demo accounts are only for internal testing (see api/admin/demo-accounts/route.ts) — filtered
+  // in JS rather than via a Firestore `isDemoAccount != true` query, since Firestore's `!=`
+  // excludes docs where the field is unset at all, which would wrongly drop every real practitioner.
+  if (!includeDemo) docs = docs.filter((doc) => !doc.data().isDemoAccount);
   if (!docs.length) return [];
 
   const now = new Date();

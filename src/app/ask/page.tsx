@@ -60,8 +60,8 @@ export default async function AskPage() {
       </section>
 
       <div className="shell" style={{ paddingBlock: "10px 60px" }}>
-        <div className="promo-banner reveal">
-          <div className="promo-banner__copy">
+        <div className="cta-banner reveal">
+          <div className="cta-banner__copy">
             <strong>Want your whole picture, not just one answer?</strong>
             <span>Get a full Kundli report covering career, relationships, health, and wealth in one reading.</span>
           </div>

@@ -13,7 +13,7 @@ export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "practitioners")) return Response.json({ error: "Practitioners permission required." }, { status: 403 });
-  const rows = await getPractitionerDirectory(false);
+  const rows = await getPractitionerDirectory(false, true);
   return Response.json(rows.map(({ rules, timeOff, ...person }) => person));
 }
 

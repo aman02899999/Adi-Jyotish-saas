@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { publishChatEvent } from "@/lib/ably";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
+import { reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
 
 const MAX_HOLD_MINUTES = 30;
@@ -127,8 +128,14 @@ export async function startChatSession(memberId: string, practitionerId: string)
   if (existing) throw new ChatSessionConflictError("You already have an active chat. Finish it before starting another.");
 
   const wallet = await getOrCreateWallet(memberId);
+  // Mirrors the discounted price shown on the practitioner's marketplace card (see
+  // getMarketplacePractitioners in marketplace.ts) — new/unreviewed practitioners are discounted
+  // to encourage first bookings, and that discount stacks with the member's own plan discount.
+  const reviewsAgg = await db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published").count().get();
+  const reviewDiscount = reviewDiscountPercent(reviewsAgg.data().count);
+  const baseRate = applyDiscount(practitioner.chatRatePerMinute, reviewDiscount);
   const discountPercent = await getMemberDiscountPercent(memberId);
-  const rate = Math.max(1, applyDiscount(practitioner.chatRatePerMinute, discountPercent));
+  const rate = Math.max(1, applyDiscount(baseRate, discountPercent));
   const affordableMinutes = Math.floor(wallet.balance / rate);
   if (affordableMinutes < MIN_HOLD_MINUTES) {
     throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${rate} to your wallet to start this chat.`);

@@ -24,7 +24,7 @@ type PractitionerPayload = {
   featured?: boolean;
 };
 
-export async function GET(){const admin=await getCurrentAdmin();if(!admin)return Response.json({error:"Administrator access required."},{status:401});if(!hasAdminPermission(admin,"schedule"))return Response.json({error:"Scheduling permission required."},{status:403});return Response.json(await getPractitionerDirectory(false));}
+export async function GET(){const admin=await getCurrentAdmin();if(!admin)return Response.json({error:"Administrator access required."},{status:401});if(!hasAdminPermission(admin,"schedule"))return Response.json({error:"Scheduling permission required."},{status:403});return Response.json(await getPractitionerDirectory(false,true));}
 
 export async function POST(request:Request){
   const admin=await getCurrentAdmin();
@@ -70,6 +70,6 @@ export async function POST(request:Request){
   await batch.commit();
 
   await recordAudit(admin,"practitioner.created","practitioner",slug,{name,email});
-  const all=await getPractitionerDirectory(false);
+  const all=await getPractitionerDirectory(false,true);
   return Response.json(all.find(x=>x.id===slug),{status:201});
 }

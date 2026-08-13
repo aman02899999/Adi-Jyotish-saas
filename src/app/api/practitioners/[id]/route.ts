@@ -59,7 +59,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
   };
   await ref.update({...patch, updatedAt: FieldValue.serverTimestamp()});
   await recordAudit(admin,"practitioner.updated","practitioner",id,{name,active:patch.active,verified:patch.verified});
-  const all=await getPractitionerDirectory(false);
+  const all=await getPractitionerDirectory(false,true);
   return Response.json(all.find(x=>x.id===id));
 }
 

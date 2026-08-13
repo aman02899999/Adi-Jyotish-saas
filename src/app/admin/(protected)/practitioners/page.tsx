@@ -7,7 +7,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminPractitionersPage() {
   await requireAdminPage("practitioners");
-  const directory = await getPractitionerDirectory(false);
+  const directory = await getPractitionerDirectory(false, true);
   const practitioners = directory.map(({ rules, timeOff, ...person }) => person);
   return (
     <AdminShell active="Practitioners">
