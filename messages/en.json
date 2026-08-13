@@ -122,7 +122,12 @@
       "numerology": { "label": "Numerology", "note": "Life Path & Destiny numbers" },
       "kundli": { "label": "Full Kundli Report", "note": "Your complete birth chart" },
       "festivals": { "label": "Festival Muhurat", "note": "Real puja timing, not a date list" },
-      "varshphal": { "label": "Varshphal Report", "note": "Your annual solar-return chart" }
+      "varshphal": { "label": "Varshphal Report", "note": "Your personalized forecast for the year ahead" },
+      "groups": {
+        "knowYourDay": "Know your day",
+        "understandYourChart": "Understand your chart",
+        "talkToSomeone": "Talk to a specialist"
+      }
     },
     "horoscopeStrip": {
       "eyebrow": "Your daily horoscope",

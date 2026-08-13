@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { VarshphalReportForm } from "@/components/varshphal-report-form";
+import { GlossaryStrip } from "@/components/glossary-strip";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AI_READING_CURRENCY, AI_VARSHPHAL_PRICE } from "@/lib/ai-readings";
@@ -31,6 +32,7 @@ export default async function VarshphalPage() {
             <li><Clock3 size={15} /> Ready instantly after payment</li>
             <li><ShieldCheck size={15} /> Your birth details are kept private</li>
           </ul>
+          <GlossaryStrip terms={["varshphal", "lagna", "dasha", "rashi"]} />
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">

@@ -4,6 +4,7 @@ import { Link } from "@/i18n/navigation";
 import { ArrowLeft, ArrowUpRight, Moon, Sparkles, Sunrise, Sunset } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { GlossaryStrip } from "@/components/glossary-strip";
 import { FESTIVALS, getFestivalBySlug, getFestivalPanchang } from "@/lib/festivals";
 import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
@@ -52,6 +53,7 @@ export default async function FestivalDetailPage({ params }: { params: Promise<{
         <p className="eyebrow"><span /> {festival.rangeLabel}</p>
         <h1>{festival.name}</h1>
         <p className="zodiac-hero__lead">{festival.description}</p>
+        <GlossaryStrip terms={["muhurat", "panchang", "tithi", "nakshatra"]} />
       </section>
 
       <section className="horoscope-panel shell">

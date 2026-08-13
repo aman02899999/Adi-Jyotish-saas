@@ -4,6 +4,7 @@ import { CheckCircle2, Clock3, ScrollText, ShieldCheck } from "lucide-react";
 import { KundliReportForm } from "@/components/kundli-report-form";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { GlossaryStrip } from "@/components/glossary-strip";
 import { AI_KUNDLI_PRICE, AI_READING_CURRENCY } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { isRazorpayConfigured } from "@/lib/razorpay";
@@ -32,6 +33,7 @@ export default async function KundliPage() {
             <li><Clock3 size={15} /> Ready instantly after payment</li>
             <li><ShieldCheck size={15} /> Your birth details are kept private</li>
           </ul>
+          <GlossaryStrip terms={["kundli", "lagna", "rashi", "bhava"]} />
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">

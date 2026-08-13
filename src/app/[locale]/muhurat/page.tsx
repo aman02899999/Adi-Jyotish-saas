@@ -3,6 +3,7 @@ import { CalendarClock, CheckCircle2, ScrollText, Sparkles } from "lucide-react"
 import { MuhuratConciergeForm } from "@/components/muhurat-concierge-form";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { GlossaryStrip } from "@/components/glossary-strip";
 import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
 export const dynamic = "force-dynamic";
@@ -27,6 +28,7 @@ export default function MuhuratConciergePage() {
             <li><Sparkles size={15} /> Specific to your decision, not generic</li>
             <li><CheckCircle2 size={15} /> Free, no account required</li>
           </ul>
+          <GlossaryStrip terms={["muhurat", "panchang", "tithi", "nakshatra"]} />
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-card">

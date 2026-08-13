@@ -4,10 +4,13 @@ import {
   ArrowUpRight,
   Clock3,
   Flame,
+  MessageCircle,
   MoreHorizontal,
+  ScrollText,
   Sparkles,
   Star,
   SunMedium,
+  UserRound,
 } from "lucide-react";
 import { MemberAppShell } from "@/components/member-app-shell";
 import { CosmicProfileShareCard } from "@/components/cosmic-profile-share-card";
@@ -65,6 +68,19 @@ export default async function DashboardPage() {
         <div><p>Welcome back, {firstName}</p><h1>Your cosmic overview</h1></div>
         <div className="today-pill"><SunMedium size={17} /><span><small>{location}</small>{today}</span></div>
       </div>
+
+      {!kundli && (
+        <section className="dashboard-onboarding">
+          <p className="eyebrow"><span /> Getting started</p>
+          <h2>Three steps to your first reading</h2>
+          <div className="dashboard-onboarding__steps">
+            <div><b>1</b><div><UserRound size={16} /><strong>Complete your birth profile</strong><small>Your exact date, time, and place of birth — this powers every chart on this page.</small></div></div>
+            <div><b>2</b><div><ScrollText size={16} /><strong>See your real birth chart</strong><small>Your Kundli, Cosmic Weather, and lucky numbers appear automatically once your profile is set.</small></div></div>
+            <div><b>3</b><div><MessageCircle size={16} /><strong>Ask a question or book a reading</strong><small>Get a live answer for free, or talk to a verified astrologer.</small></div></div>
+          </div>
+          <Link href="/onboarding" className="button">Complete birth profile <ArrowUpRight size={15} /></Link>
+        </section>
+      )}
 
       <div className="cosmic-grid">
         <article className="glass-card kundli-card">

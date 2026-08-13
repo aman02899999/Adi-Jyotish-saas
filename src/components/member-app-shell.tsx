@@ -33,23 +33,45 @@ import { MEMBER_FAQ } from "@/lib/faq-data";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getMemberUnreadCount } from "@/lib/messaging";
 
-const navItems = [
-  { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
-  { label: "Family Charts", icon: Users, href: "/dashboard/family" },
-  { label: "My Consultations", icon: BookOpenText, href: "/dashboard/consultations" },
-  { label: "Predictions", icon: CircleCheck, href: "/dashboard/predictions" },
-  { label: "Astro Journal", icon: NotebookPen, href: "/dashboard/journal" },
-  { label: "Live Answers", icon: Sparkles, href: "/dashboard/ai-readings" },
-  { label: "Gemstone Orders", icon: Gem, href: "/dashboard/gemstone-orders" },
-  { label: "Wishlist", icon: Heart, href: "/dashboard/wishlist" },
-  { label: "Studio Inbox", icon: MessageSquareText, href: "/dashboard/messages" },
-  { label: "Wallet", icon: Coins, href: "/dashboard/wallet" },
-  { label: "Billing & Receipts", icon: WalletCards, href: "/dashboard/billing" },
-  { label: "Daily Horoscope", icon: SunMedium, href: "/dashboard#insights" },
-  { label: "Panchang", icon: CalendarDays, href: "/dashboard#insights" },
-  { label: "Connections", icon: HeartHandshake, href: "/dashboard#services-list" },
-  { label: "Career & Dharma", icon: BriefcaseBusiness, href: "/book" },
-  { label: "Invite & Earn", icon: Gift, href: "/dashboard/referrals" },
+// Grouped instead of one flat 16-item list — a first-time member can scan 5 short sections
+// instead of parsing a wall of links to find what they need.
+const navGroups = [
+  {
+    group: "My cosmos",
+    items: [
+      { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
+      { label: "Family Charts", icon: Users, href: "/dashboard/family" },
+      { label: "Predictions", icon: CircleCheck, href: "/dashboard/predictions" },
+      { label: "Astro Journal", icon: NotebookPen, href: "/dashboard/journal" },
+    ],
+  },
+  {
+    group: "Readings & help",
+    items: [
+      { label: "My Consultations", icon: BookOpenText, href: "/dashboard/consultations" },
+      { label: "Live Answers", icon: Sparkles, href: "/dashboard/ai-readings" },
+      { label: "Studio Inbox", icon: MessageSquareText, href: "/dashboard/messages" },
+      { label: "Connections", icon: HeartHandshake, href: "/dashboard#services-list" },
+      { label: "Career & Dharma", icon: BriefcaseBusiness, href: "/book" },
+    ],
+  },
+  {
+    group: "Store & wallet",
+    items: [
+      { label: "Gemstone Orders", icon: Gem, href: "/dashboard/gemstone-orders" },
+      { label: "Wishlist", icon: Heart, href: "/dashboard/wishlist" },
+      { label: "Wallet", icon: Coins, href: "/dashboard/wallet" },
+      { label: "Billing & Receipts", icon: WalletCards, href: "/dashboard/billing" },
+    ],
+  },
+  {
+    group: "Daily & community",
+    items: [
+      { label: "Daily Horoscope", icon: SunMedium, href: "/dashboard#insights" },
+      { label: "Panchang", icon: CalendarDays, href: "/dashboard#insights" },
+      { label: "Invite & Earn", icon: Gift, href: "/dashboard/referrals" },
+    ],
+  },
 ];
 
 type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family" | "Predictions" | "Security" | "Journal";
@@ -60,11 +82,15 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
     <>
       <div className="dashboard-brand"><BrandMark /></div>
       <nav className="app-nav" aria-label="Member navigation">
-        <p>My cosmos</p>
-        {navItems.map(({ label, icon: Icon, href }) => {
-          const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions") || (active === "Journal" && label === "Astro Journal");
-          return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
-        })}
+        {navGroups.map((navGroup, groupIndex) => (
+          <div className="app-nav__group" key={navGroup.group}>
+            <p className={groupIndex > 0 ? "app-nav__lower" : undefined}>{navGroup.group}</p>
+            {navGroup.items.map(({ label, icon: Icon, href }) => {
+              const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions") || (active === "Journal" && label === "Astro Journal");
+              return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
+            })}
+          </div>
+        ))}
         <p className="app-nav__lower">Account</p>
         <Link href="/onboarding"><UserRound size={18} strokeWidth={1.5} /><span>Birth profile</span></Link>
         <Link className={active === "Security" ? "active" : ""} href="/dashboard/security"><ShieldCheck size={18} strokeWidth={1.5} /><span>Security</span></Link>

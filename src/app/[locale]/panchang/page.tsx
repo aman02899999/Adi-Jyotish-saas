@@ -4,6 +4,7 @@ import { Link } from "@/i18n/navigation";
 import { ArrowRight, Moon, Sparkles, Sunrise, Sunset } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { GlossaryStrip } from "@/components/glossary-strip";
 import { getTodayPanchang, REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
 export const dynamic = "force-dynamic";
@@ -44,6 +45,7 @@ export default async function PanchangPage() {
         <p className="eyebrow"><span /> Today&rsquo;s Panchang</p>
         <h1>The day&rsquo;s<br /><em>almanac.</em></h1>
         <p className="zodiac-hero__lead">Real tithi, nakshatra, yoga, and muhurat — computed live from actual planetary positions for {REFERENCE_LOCATION_LABEL}.</p>
+        <GlossaryStrip terms={["panchang", "tithi", "nakshatra", "muhurat"]} />
       </section>
 
       <div className="page-hero-banner shell">

@@ -4,6 +4,7 @@ import { CheckCircle2, Clock3, HeartHandshake, ShieldCheck } from "lucide-react"
 import { KundliMatchingForm } from "@/components/kundli-matching-form";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { GlossaryStrip } from "@/components/glossary-strip";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -27,6 +28,7 @@ export default function KundliMatchingPage() {
             <li><Clock3 size={15} /> Ready in under a minute</li>
             <li><ShieldCheck size={15} /> Birth details are kept private</li>
           </ul>
+          <GlossaryStrip terms={["gunaMilan", "ashtakoot", "nakshatra", "mangalDosha"]} />
         </div>
         <div className="ask-hero__persona reveal reveal--delay">
           <div className="ask-persona-photo">

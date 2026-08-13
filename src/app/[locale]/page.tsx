@@ -71,22 +71,39 @@ const categories = [
   { icon: GraduationCap, key: "education" as const, query: "education" },
 ];
 
-const freeTools = [
-  { icon: Sun, key: "horoscope" as const, href: "/horoscope" },
-  { icon: MessageCircle, key: "ask" as const, href: "/ask" },
-  { icon: Hand, key: "palm" as const, href: "/palm-reading" },
-  { icon: Layers, key: "tarot" as const, href: "/tarot-reading" },
-  { icon: ScanFace, key: "face" as const, href: "/face-reading" },
-  { icon: Compass, key: "vastu" as const, href: "/vastu-consultation" },
-  { icon: BookOpen, key: "lalKitab" as const, href: "/lal-kitab-reading" },
-  { icon: Gem, key: "gemstoneMatch" as const, href: "/gemstones/recommend" },
-  { icon: HeartHandshake, key: "kundliMatching" as const, href: "/kundli-matching" },
-  { icon: CalendarDays, key: "panchang" as const, href: "/panchang" },
-  { icon: CalendarClock, key: "muhurat" as const, href: "/muhurat" },
-  { icon: Hash, key: "numerology" as const, href: "/numerology" },
-  { icon: ScrollText, key: "kundli" as const, href: "/kundli" },
-  { icon: PartyPopper, key: "festivals" as const, href: "/festivals" },
-  { icon: Sparkles, key: "varshphal" as const, href: "/varshphal" },
+// Grouped by intent (what the visitor is trying to do) instead of one flat 15-tile grid — makes
+// the free-tools strip scannable instead of a wall of icons.
+const freeToolGroups = [
+  {
+    groupKey: "knowYourDay" as const,
+    tools: [
+      { icon: Sun, key: "horoscope" as const, href: "/horoscope" },
+      { icon: CalendarDays, key: "panchang" as const, href: "/panchang" },
+      { icon: CalendarClock, key: "muhurat" as const, href: "/muhurat" },
+      { icon: PartyPopper, key: "festivals" as const, href: "/festivals" },
+    ],
+  },
+  {
+    groupKey: "understandYourChart" as const,
+    tools: [
+      { icon: ScrollText, key: "kundli" as const, href: "/kundli" },
+      { icon: Sparkles, key: "varshphal" as const, href: "/varshphal" },
+      { icon: Hash, key: "numerology" as const, href: "/numerology" },
+      { icon: HeartHandshake, key: "kundliMatching" as const, href: "/kundli-matching" },
+      { icon: Gem, key: "gemstoneMatch" as const, href: "/gemstones/recommend" },
+    ],
+  },
+  {
+    groupKey: "talkToSomeone" as const,
+    tools: [
+      { icon: MessageCircle, key: "ask" as const, href: "/ask" },
+      { icon: Hand, key: "palm" as const, href: "/palm-reading" },
+      { icon: Layers, key: "tarot" as const, href: "/tarot-reading" },
+      { icon: ScanFace, key: "face" as const, href: "/face-reading" },
+      { icon: Compass, key: "vastu" as const, href: "/vastu-consultation" },
+      { icon: BookOpen, key: "lalKitab" as const, href: "/lal-kitab-reading" },
+    ],
+  },
 ];
 
 export default async function HomePage() {
@@ -307,14 +324,19 @@ export default async function HomePage() {
       </section>
 
       <section className="tools-strip shell" id="tools" aria-label={t("aria.tools")}>
-        <div className="tools-grid">
-          {freeTools.map(({ icon: Icon, key, href }) => (
-            <Link href={href} className="tool-card reveal" key={`${key}-${href}`}>
-              <span><Icon size={19} strokeWidth={1.5} /></span>
-              <div><strong>{t(`tools.${key}.label`)}</strong><small>{t(`tools.${key}.note`)}</small></div>
-            </Link>
-          ))}
-        </div>
+        {freeToolGroups.map(({ groupKey, tools }) => (
+          <div className="tools-group" key={groupKey}>
+            <p className="tools-group__label">{t(`tools.groups.${groupKey}`)}</p>
+            <div className="tools-grid">
+              {tools.map(({ icon: Icon, key, href }) => (
+                <Link href={href} className="tool-card reveal" key={`${key}-${href}`}>
+                  <span><Icon size={19} strokeWidth={1.5} /></span>
+                  <div><strong>{t(`tools.${key}.label`)}</strong><small>{t(`tools.${key}.note`)}</small></div>
+                </Link>
+              ))}
+            </div>
+          </div>
+        ))}
       </section>
 
       <section className="horoscope-strip shell" aria-label={t("aria.horoscope")}>

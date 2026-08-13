@@ -122,7 +122,12 @@
       "numerology": { "label": "Numerology", "note": "Life Path aur Destiny numbers" },
       "kundli": { "label": "Poori Kundli Report", "note": "Aapka poora birth chart" },
       "festivals": { "label": "Tyohar Muhurat", "note": "Real puja timing, sirf date list nahi" },
-      "varshphal": { "label": "Varshphal Report", "note": "Aapka annual solar-return chart" }
+      "varshphal": { "label": "Varshphal Report", "note": "Agle saal ka aapka personal forecast" },
+      "groups": {
+        "knowYourDay": "Aapka aaj",
+        "understandYourChart": "Apna chart samjhein",
+        "talkToSomeone": "Kisi specialist se baat karein"
+      }
     },
     "horoscopeStrip": {
       "eyebrow": "Aapka daily rashifal",

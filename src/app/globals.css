@@ -329,7 +329,8 @@ button { border: 0; }
 .senior-card small { color: var(--muted); font-size: 12px; }
 
 /* free tools */
-.tools-strip { padding-block: 20px 30px; }
+.tools-strip { padding-block: 20px 30px; display: flex; flex-direction: column; gap: 26px; }
+.tools-group__label { margin: 0 0 12px; color: var(--copper-dark); font-size: 13px; font-weight: 700; letter-spacing: .14em; text-transform: uppercase; }
 .tools-grid { display: grid; grid-template-columns: repeat(4, 1fr); gap: 14px; }
 .tool-card { display: flex; align-items: center; gap: 14px; padding: 22px; border: 1px solid var(--line); border-radius: 16px; background: rgba(255,255,255,.3); transition: transform .25s ease, box-shadow .25s ease; }
 .tool-card:hover { transform: translateY(-3px); box-shadow: 0 16px 32px rgba(94,62,41,.08); }
@@ -746,7 +747,8 @@ button { border: 0; }
 .app-frame { width: min(1450px,100%); min-height: calc(100dvh - 52px); margin: auto; display: grid; grid-template-columns: 230px 1fr; overflow: hidden; border: 1px solid rgba(255,255,255,.6); border-radius: 25px; background: rgba(239,234,225,.77); box-shadow: 0 28px 70px rgba(67,51,39,.15); backdrop-filter: blur(18px); }
 .app-sidebar { position: relative; display:flex; flex-direction:column; padding: 27px 16px 17px; border-right: 1px solid var(--line); background: rgba(239,235,227,.57); }
 .dashboard-brand { padding: 0 10px 35px; }
-.app-nav { display:flex; flex-direction:column; gap:3px; }
+.app-nav { display:flex; flex-direction:column; gap:0; }
+.app-nav__group { display:flex; flex-direction:column; gap:3px; }
 .app-nav p { margin: 0 12px 8px; color: #a09285; font-size:12px; font-weight:700; letter-spacing:.15em; text-transform:uppercase; }
 .app-nav p.app-nav__lower { margin-top:20px; }
 .app-nav a { min-height: 43px; display:flex; align-items:center; gap:11px; padding:0 12px; border-radius:9px; color:#5e554e; font-size:14px; font-weight:600; transition:.2s; }
@@ -782,6 +784,15 @@ button { border: 0; }
 .today-pill { display:flex; align-items:center; gap:9px; color:var(--copper); }
 .today-pill span { display:flex; flex-direction:column; gap:2px; color:var(--ink); font-size:13px; }
 .today-pill small { color:var(--muted); font-size:12px; text-align:right; }
+.dashboard-onboarding { margin-bottom:20px; padding:26px 28px; border:1px solid var(--copper-pale); border-radius:20px; background:linear-gradient(135deg, rgba(185,141,84,.1), rgba(169,88,56,.05)); }
+.dashboard-onboarding h2 { margin:0 0 18px; font:400 clamp(20px,2.4vw,26px) var(--serif); letter-spacing:-.02em; }
+.dashboard-onboarding__steps { display:grid; grid-template-columns:repeat(3,1fr); gap:16px; margin-bottom:20px; }
+.dashboard-onboarding__steps > div { display:flex; align-items:flex-start; gap:12px; }
+.dashboard-onboarding__steps b { flex:0 0 auto; display:grid; place-items:center; width:26px; height:26px; border-radius:50%; background:var(--copper); color:#fffaf4; font:700 12px var(--sans); }
+.dashboard-onboarding__steps svg { color:var(--copper); margin-bottom:4px; }
+.dashboard-onboarding__steps strong { display:block; font:600 14px var(--sans); color:var(--ink); }
+.dashboard-onboarding__steps small { display:block; margin-top:3px; color:var(--muted); font-size:12.5px; line-height:1.55; }
+@media (max-width:820px) { .dashboard-onboarding__steps { grid-template-columns:1fr; } }
 .cosmic-grid { display:grid; grid-template-columns:repeat(12,1fr); gap:12px; }
 .glass-card { position:relative; overflow:hidden; border:1px solid rgba(106,81,62,.13); border-radius:15px; background:rgba(247,243,235,.57); box-shadow:inset 0 1px rgba(255,255,255,.7),0 12px 30px rgba(74,54,39,.045); backdrop-filter:blur(12px); transition:transform .25s,box-shadow .25s; }
 .glass-card:hover { transform:translateY(-2px); box-shadow:inset 0 1px rgba(255,255,255,.7),0 18px 35px rgba(74,54,39,.075); }
@@ -2312,6 +2323,8 @@ button { border: 0; }
 .pricing-toggle button.active { color:#fffaf4; background:var(--copper); }
 .pricing-toggle button small { margin-left:6px; opacity:.85; font-weight:600; }
 .pricing-config-note { max-width:520px; margin-inline:auto; }
+.pricing-recommend { max-width:640px; margin:0 auto 28px; padding:14px 20px; border:1px solid var(--copper-pale); border-radius:14px; background:rgba(185,141,84,.08); color:var(--ink); font-size:14px; line-height:1.6; text-align:center; }
+.pricing-recommend strong { color:var(--copper-dark); }
 .pricing-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(260px,1fr)); gap:20px; align-items:stretch; }
 .pricing-card { position:relative; display:flex; flex-direction:column; gap:18px; padding:28px 26px; border:1px solid var(--line); border-radius:16px; background:rgba(248,244,237,.6); }
 .pricing-card--highlight { border-color:var(--copper); background:var(--ivory); box-shadow:0 20px 46px rgba(130,66,43,.14); }
@@ -2788,5 +2801,18 @@ button { border: 0; }
 .page-builder__fields { padding:14px; display:grid; grid-template-columns:1fr 1fr; gap:12px; }
 .page-builder__fields label { display:flex; flex-direction:column; gap:6px; font-size:12px; color:var(--muted); }
 .page-builder__fields label.field--full { grid-column:1 / -1; }
+
+/* Glossary term tooltip — plain-language explainer for Sanskrit/Jyotish jargon */
+.glossary-term { position:relative; display:inline-block; }
+.glossary-term__trigger { display:inline; padding:0; border:0; background:none; font:inherit; color:inherit; cursor:help; text-decoration:underline; text-decoration-style:dotted; text-decoration-color:var(--copper); text-underline-offset:3px; }
+.glossary-term__trigger:hover, .glossary-term__trigger[aria-expanded="true"] { color:var(--copper-dark); }
+.glossary-term__popover { position:absolute; z-index:40; left:50%; bottom:calc(100% + 10px); transform:translateX(-50%); width:min(260px,72vw); padding:14px 16px; border:1px solid var(--copper-pale); border-radius:12px; background:#fffaf3; box-shadow:0 18px 40px rgba(78,58,43,.18); text-align:left; text-decoration:none; animation:glossaryPopIn .16s ease both; }
+.glossary-term__popover::after { content:""; position:absolute; top:100%; left:50%; transform:translateX(-50%); border:6px solid transparent; border-top-color:#fffaf3; }
+.glossary-term__popover strong { display:block; margin-bottom:4px; font:600 13px var(--sans); color:var(--copper-dark); letter-spacing:.02em; }
+.glossary-term__popover span { display:block; color:var(--ink); font-size:12.5px; line-height:1.6; }
+@keyframes glossaryPopIn { from { opacity:0; transform:translateX(-50%) translateY(4px); } to { opacity:1; transform:translateX(-50%) translateY(0); } }
+@media (max-width:520px) { .glossary-term__popover { width:min(240px,78vw); } }
+.glossary-strip { display:flex; flex-wrap:wrap; align-items:center; gap:4px 8px; margin:12px 0 0; font-size:13px; color:var(--muted); }
+.glossary-strip__label { font-weight:600; color:var(--ink); margin-right:2px; }
 .page-builder__fields input, .page-builder__fields textarea { border:1px solid var(--line); border-radius:9px; padding:8px 10px; font-size:14px; color:var(--ink); background:var(--ivory); }
 .page-builder__add { display:flex; flex-wrap:wrap; gap:8px; padding-top:6px; }
