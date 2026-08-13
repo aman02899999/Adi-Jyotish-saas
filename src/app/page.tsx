@@ -1,5 +1,6 @@
 import Image from "next/image";
 import Link from "next/link";
+import nextDynamic from "next/dynamic";
 import {
   ArrowRight,
   BookOpen,
@@ -40,8 +41,13 @@ import { getHomeHeroContent } from "@/lib/site-content";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
 import { HeroVideo } from "@/components/hero-video";
 import { StartHerePicker } from "@/components/start-here-picker";
-import { TiltCard } from "@/components/tilt-card";
-import { StatCounter } from "@/components/stat-counter";
+
+// framer-motion (the animation library behind both of these) is ~150KB and otherwise only used
+// on this page — dynamic() splits it into its own chunk loaded alongside, instead of inline in the
+// shared bundle every route pays for. Both still render their real server HTML immediately (no
+// ssr:false), so there's no layout shift; only the hydration JS is deferred.
+const TiltCard = nextDynamic(() => import("@/components/tilt-card").then((mod) => mod.TiltCard));
+const StatCounter = nextDynamic(() => import("@/components/stat-counter").then((mod) => mod.StatCounter));
 
 export const dynamic = "force-dynamic";
 

@@ -1,4 +1,8 @@
 import type { NextConfig } from "next";
+import withBundleAnalyzerInit from "@next/bundle-analyzer";
+import { withSentryConfig } from "@sentry/nextjs";
+
+const withBundleAnalyzer = withBundleAnalyzerInit({ enabled: process.env.ANALYZE === "true" });
 
 const contentSecurityPolicy = [
   "default-src 'self'",
@@ -31,9 +35,31 @@ const nextConfig: NextConfig = {
   // firebase-admin's grpc/protobuf dependency tree defeats bundler tracing when inlined;
   // externalizing lets the platform's own Node-module resolution handle it at runtime.
   serverExternalPackages: ["firebase-admin", "google-gax", "@grpc/grpc-js", "@sentry/nextjs"],
+  // AVIF isn't in Next's default format list (slower to encode) but is typically 20-30% smaller
+  // than WebP for photographic content — worth it here since gemstone/blog/practitioner photos
+  // make up most of the page weight on this site. Next still falls back to WebP/original per the
+  // client's Accept header.
+  images: { formats: ["image/avif", "image/webp"] },
   async headers() {
-    return [{ source: "/(.*)", headers: securityHeaders }];
+    return [
+      { source: "/(.*)", headers: securityHeaders },
+      // Not content-hashed filenames (unlike /_next/static, which Next already caches
+      // immutably), so a moderate cache instead of a year-long immutable one — still a real win
+      // for repeat visits without risking a stale image sticking around after a future swap.
+      { source: "/images/:path*", headers: [{ key: "Cache-Control", value: "public, max-age=86400, stale-while-revalidate=604800" }] },
+    ];
   },
 };
 
-export default nextConfig;
+// The officially supported way to run @sentry/nextjs: readable production stack traces via
+// source maps (only actually uploaded when SENTRY_AUTH_TOKEN is set — silent no-op otherwise,
+// never blocks the build) and treeshake.removeDebugLogging to strip Sentry's own internal debug
+// logger strings from the client bundle.
+export default withSentryConfig(withBundleAnalyzer(nextConfig), {
+  silent: true,
+  org: process.env.SENTRY_ORG,
+  project: process.env.SENTRY_PROJECT,
+  authToken: process.env.SENTRY_AUTH_TOKEN,
+  sourcemaps: { disable: !process.env.SENTRY_AUTH_TOKEN },
+  webpack: { treeshake: { removeDebugLogging: true }, automaticVercelMonitors: false },
+});

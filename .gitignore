@@ -9,3 +9,4 @@ tsconfig.tsbuildinfo
 /blob-report
 firebase-debug.log
 firestore-debug.log
+/.lighthouseci
