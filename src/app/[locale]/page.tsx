@@ -1,5 +1,6 @@
 import Image from "next/image";
 import { Link } from "@/i18n/navigation";
+import { getTranslations } from "next-intl/server";
 import nextDynamic from "next/dynamic";
 import {
   ArrowRight,
@@ -61,31 +62,32 @@ const iconMap = {
 };
 
 const categories = [
-  { icon: Heart, label: "Love & Relationships", note: "Understand the heart's timing", query: "relationship" },
-  { icon: Users, label: "Marriage", note: "Compatibility & muhurat", query: "marriage" },
-  { icon: BriefcaseBusiness, label: "Career & Business", note: "Growth cycles & timing", query: "career" },
-  { icon: HeartPulse, label: "Health & Wellness", note: "Vitality through the chart", query: "health" },
-  { icon: Home, label: "Family & Home", note: "Harmony & remedies", query: "vastu" },
-  { icon: GraduationCap, label: "Education", note: "Focus & academic timing", query: "education" },
+  { icon: Heart, key: "relationship" as const, query: "relationship" },
+  { icon: Users, key: "marriage" as const, query: "marriage" },
+  { icon: BriefcaseBusiness, key: "career" as const, query: "career" },
+  { icon: HeartPulse, key: "health" as const, query: "health" },
+  { icon: Home, key: "vastu" as const, query: "vastu" },
+  { icon: GraduationCap, key: "education" as const, query: "education" },
 ];
 
 const freeTools = [
-  { icon: Sun, label: "Daily Horoscope", note: "Today's forecast by your sign", href: "/horoscope" },
-  { icon: MessageCircle, label: "Ask Live a Question", note: "Instant answer, one question", href: "/ask" },
-  { icon: Hand, label: "Palm Reading", note: "Pandit Trilochan Shashtri · ₹99", href: "/palm-reading" },
-  { icon: Layers, label: "Tarot Reading", note: "Tarot Mystic Divya · ₹149", href: "/tarot-reading" },
-  { icon: ScanFace, label: "Face Reading", note: "Acharya Devraj Bhardwaj · ₹129", href: "/face-reading" },
-  { icon: Compass, label: "Vastu Consultation", note: "Vastu Shastri Ramesh Chaturvedi · ₹249", href: "/vastu-consultation" },
-  { icon: BookOpen, label: "Lal Kitab Reading", note: "Pandit Girish Trivedi · ₹179", href: "/lal-kitab-reading" },
-  { icon: Gem, label: "Gemstone Match", note: "Free Live recommendation", href: "/gemstones/recommend" },
-  { icon: HeartHandshake, label: "Kundli Matching", note: "Free compatibility reading", href: "/kundli-matching" },
-  { icon: CalendarDays, label: "Panchang Today", note: "Tithi, nakshatra & muhurat", href: "/panchang" },
-  { icon: CalendarClock, label: "Muhurat Concierge", note: "Best days for your decision", href: "/muhurat" },
-  { icon: Hash, label: "Numerology", note: "Life Path & Destiny numbers", href: "/numerology" },
-  { icon: ScrollText, label: "Full Kundli Report", note: "Your complete birth chart", href: "/kundli" },
+  { icon: Sun, key: "horoscope" as const, href: "/horoscope" },
+  { icon: MessageCircle, key: "ask" as const, href: "/ask" },
+  { icon: Hand, key: "palm" as const, href: "/palm-reading" },
+  { icon: Layers, key: "tarot" as const, href: "/tarot-reading" },
+  { icon: ScanFace, key: "face" as const, href: "/face-reading" },
+  { icon: Compass, key: "vastu" as const, href: "/vastu-consultation" },
+  { icon: BookOpen, key: "lalKitab" as const, href: "/lal-kitab-reading" },
+  { icon: Gem, key: "gemstoneMatch" as const, href: "/gemstones/recommend" },
+  { icon: HeartHandshake, key: "kundliMatching" as const, href: "/kundli-matching" },
+  { icon: CalendarDays, key: "panchang" as const, href: "/panchang" },
+  { icon: CalendarClock, key: "muhurat" as const, href: "/muhurat" },
+  { icon: Hash, key: "numerology" as const, href: "/numerology" },
+  { icon: ScrollText, key: "kundli" as const, href: "/kundli" },
 ];
 
 export default async function HomePage() {
+  const t = await getTranslations("Home");
   const defaultSign = ZODIAC_SIGNS[0];
   const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope, hero] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null), getHomeHeroContent()]);
   const seniorMain = seniorAstrologers.slice(0, 2);
@@ -121,7 +123,7 @@ export default async function HomePage() {
               <div className="avatar-stack" aria-hidden="true">
                 {liveExperts.slice(0, 3).map((expert) => <span key={expert.id}>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>)}
               </div>
-              <div><strong>{stats.averageRating || "—"}</strong> <span className="stars">★★★★★</span><small>{stats.consultationsDelivered >= 100 ? `Trusted by ${stats.consultationsDelivered}+ seekers` : "Trusted by a growing community"}</small></div>
+              <div><strong>{stats.averageRating || "—"}</strong> <span className="stars">★★★★★</span><small>{stats.consultationsDelivered >= 100 ? t("hero.trustedByCount", { count: stats.consultationsDelivered }) : t("hero.trustedByGrowing")}</small></div>
             </div>
           </div>
 
@@ -136,27 +138,27 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <section className="trust-strip" aria-label="Jyotish highlights">
+      <section className="trust-strip" aria-label={t("aria.trustStrip")}>
         <div className="shell trust-grid">
-          <div><strong>{stats.consultationsDelivered >= 100 ? <><StatCounter value={stats.consultationsDelivered} />+</> : <StatCounter value={stats.consultationsDelivered} />}</strong><span>Consultations delivered</span></div>
-          <div><strong><StatCounter value={stats.practitionerCount} /></strong><span>Vedic astrologers</span></div>
-          <div><strong>{stats.averageRating ? <><StatCounter value={stats.averageRating} decimals={1} />/5</> : "—/5"}</strong><span>Average reading</span></div>
-          <div><strong><StatCounter value={100} suffix="%" /></strong><span>Private & personal</span></div>
+          <div><strong>{stats.consultationsDelivered >= 100 ? <><StatCounter value={stats.consultationsDelivered} />+</> : <StatCounter value={stats.consultationsDelivered} />}</strong><span>{t("trustStrip.consultations")}</span></div>
+          <div><strong><StatCounter value={stats.practitionerCount} /></strong><span>{t("trustStrip.astrologers")}</span></div>
+          <div><strong>{stats.averageRating ? <><StatCounter value={stats.averageRating} decimals={1} />/5</> : "—/5"}</strong><span>{t("trustStrip.avgRating")}</span></div>
+          <div><strong><StatCounter value={100} suffix="%" /></strong><span>{t("trustStrip.privatePersonal")}</span></div>
         </div>
       </section>
 
-      <section className="category-strip shell" aria-label="Browse by concern">
+      <section className="category-strip shell" aria-label={t("aria.categories")}>
         <div className="section-heading reveal">
-          <div><p className="eyebrow"><span /> Browse by concern</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>What&apos;s on your<br /><em>mind today?</em></h2></div>
+          <div><p className="eyebrow"><span /> {t("categories.eyebrow")}</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>{t("categories.headline")}<br /><em>{t("categories.headlineEm")}</em></h2></div>
         </div>
         <div className="category-grid">
-          {categories.map(({ icon: Icon, label, note, query }) => (
-            <div className="reveal" key={label}>
+          {categories.map(({ icon: Icon, key, query }) => (
+            <div className="reveal" key={key}>
               <TiltCard>
                 <Link href={`/astrologers?q=${encodeURIComponent(query)}`} className="category-tile">
                   <span><Icon size={21} strokeWidth={1.4} /></span>
-                  <strong>{label}</strong>
-                  <small>{note}</small>
+                  <strong>{t(`categories.${key}.label`)}</strong>
+                  <small>{t(`categories.${key}.note`)}</small>
                 </Link>
               </TiltCard>
             </div>
@@ -165,9 +167,9 @@ export default async function HomePage() {
       </section>
 
       {seniorMain.length > 0 && (
-        <section className="senior-strip shell" aria-label="Our most senior astrologers">
+        <section className="senior-strip shell" aria-label={t("aria.seniors")}>
           <div className="section-heading reveal">
-            <div><p className="eyebrow"><span /> Our most senior astrologers</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Decades of wisdom,<br /><em>ready to guide you.</em></h2></div>
+            <div><p className="eyebrow"><span /> {t("seniors.eyebrow")}</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>{t("seniors.headline")}<br /><em>{t("seniors.headlineEm")}</em></h2></div>
           </div>
           <div className="senior-main-grid">
             {seniorMain.map((expert) => (
@@ -176,13 +178,13 @@ export default async function HomePage() {
                   <article className="senior-main-card">
                     <div className="senior-main-card__photo">
                       <AvatarImage src={expert.photoUrl} alt={expert.name} fallback={<span>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>} />
-                      {expert.verified && <em><CheckCircle2 size={13} /> Verified</em>}
+                      {expert.verified && <em><CheckCircle2 size={13} /> {t("seniors.verified")}</em>}
                     </div>
                     <div className="senior-main-card__body">
                       <p className="senior-main-card__title">{expert.title}</p>
                       <h3>{expert.name}</h3>
                       <div className="senior-main-card__meta">
-                        <span>{expert.experienceYears}+ years experience</span>
+                        <span>{t("seniors.yearsExperience", { years: expert.experienceYears })}</span>
                         <span>₹{expert.chatRatePerMinute}/min</span>
                       </div>
                       <p className="senior-main-card__bio">{expert.bio}</p>
@@ -190,8 +192,8 @@ export default async function HomePage() {
                         {expert.specialties.split(",").slice(0, 7).map((tag) => <span key={tag}>{tag.trim()}</span>)}
                       </div>
                       <div className="senior-main-card__actions">
-                        <Link href={`/astrologers/${expert.slug}`} className="button">View profile <ArrowRight size={15} /></Link>
-                        <Link href={`/book?practitioner=${expert.id}`} className="button button--ghost">Book consultation</Link>
+                        <Link href={`/astrologers/${expert.slug}`} className="button">{t("seniors.viewProfile")} <ArrowRight size={15} /></Link>
+                        <Link href={`/book?practitioner=${expert.id}`} className="button button--ghost">{t("seniors.bookConsultation")}</Link>
                       </div>
                     </div>
                   </article>
@@ -208,7 +210,7 @@ export default async function HomePage() {
                   </div>
                   <strong>{expert.name}</strong>
                   <span>{expert.title}</span>
-                  <small>{expert.experienceYears} yrs · ₹{expert.chatRatePerMinute}/min</small>
+                  <small>{t("seniors.yrsShort", { years: expert.experienceYears })} · ₹{expert.chatRatePerMinute}/min</small>
                 </Link>
               ))}
             </div>
@@ -217,13 +219,13 @@ export default async function HomePage() {
       )}
 
       {liveExperts.length > 0 && (
-        <section className="live-strip shell" aria-label="Astrologers online now">
+        <section className="live-strip shell" aria-label={t("aria.live")}>
           <div className="live-strip__head reveal">
             <div>
-              <p className="live-pulse"><i /> {onlineCount} astrologer{onlineCount === 1 ? "" : "s"} online now</p>
-              <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>Talk to a guide<br /><em style={{ color: "var(--copper)" }}>right now.</em></h2>
+              <p className="live-pulse"><i /> {t("live.onlineNow", { count: onlineCount })}</p>
+              <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>{t("live.headline")}<br /><em style={{ color: "var(--copper)" }}>{t("live.headlineEm")}</em></h2>
             </div>
-            <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>Chat instantly, pay only for the minutes you use. Every guide below is studio-reviewed.</p>
+            <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>{t("live.subhead")}</p>
           </div>
           <div className="live-grid">
             {liveExperts.map((expert) => (
@@ -235,17 +237,17 @@ export default async function HomePage() {
                   </div>
                   <div className="live-card__name">
                     <strong>{expert.name}</strong>
-                    <span>{expert.online ? "Online now" : "Offline"}</span>
+                    <span>{expert.online ? t("live.isOnline") : t("live.isOffline")}</span>
                   </div>
                 </div>
-                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating?.toFixed(1) ?? "New"}</strong><small>{expert.reviewCount} review{expert.reviewCount === 1 ? "" : "s"} · {expert.experienceYears} yrs</small></div>
+                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating?.toFixed(1) ?? "New"}</strong><small>{t("live.reviews", { count: expert.reviewCount })} · {t("seniors.yrsShort", { years: expert.experienceYears })}</small></div>
                 <div className="live-card__tags">{expert.specialties.split(",").slice(0, 3).map((tag, tagIndex) => <span key={tag} className={tagIndex === 0 ? "primary-specialty" : undefined}>{tag.trim()}</span>)}</div>
                 <div className="live-card__foot">
                   <div className="live-card__price">{expert.reviewDiscountPercent > 0 ? (
                     <strong><s style={{ opacity: .5, fontSize: 12 }}>₹{expert.chatRatePerMinute}</s> ₹{expert.discountedRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong>
                   ) : (
                     <strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong>
-                  )}<small>Chat now</small></div>
+                  )}<small>{t("live.chatNow")}</small></div>
                   <div className="live-card__actions">
                     <Link href={`/astrologers/${expert.slug}`} className="primary" aria-label={`Chat with ${expert.name}`}><MessageCircle size={15} /></Link>
                   </div>
@@ -253,34 +255,34 @@ export default async function HomePage() {
               </article>
             ))}
           </div>
-          <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">View all astrologers <ArrowRight size={16} /></Link></div>
+          <div className="live-strip__more"><Link href="/astrologers" className="button button--ghost">{t("live.viewAll")} <ArrowRight size={16} /></Link></div>
         </section>
       )}
 
       <div className="shell" style={{ paddingBlock: "10px 20px" }}>
         <div className="cta-banner cta-banner--dark reveal">
           <div className="cta-banner__copy">
-            <strong>Or ask Shree Santram Shashtri instantly.</strong>
-            <span>Our Live Jyotish guide answers one focused question in under a minute. Your first reading is free.</span>
+            <strong>{t("ctaAsk.title")}</strong>
+            <span>{t("ctaAsk.body")}</span>
           </div>
-          <Link href="/ask" className="button button--light">Ask now <ArrowRight size={16} /></Link>
+          <Link href="/ask" className="button button--light">{t("ctaAsk.cta")} <ArrowRight size={16} /></Link>
         </div>
       </div>
 
       <div className="shell" style={{ paddingBlock: "10px 20px" }}>
         <div className="cta-banner reveal">
           <div className="cta-banner__copy">
-            <strong>Wear what the sky recommends.</strong>
-            <span>Shop certified, natural Vedic gemstones — chosen for your zodiac sign and planetary influence.</span>
+            <strong>{t("ctaGemstones.title")}</strong>
+            <span>{t("ctaGemstones.body")}</span>
           </div>
-          <Link href="/gemstones" className="button button--light">Buy Gemstones <ArrowRight size={16} /></Link>
+          <Link href="/gemstones" className="button button--light">{t("ctaGemstones.cta")} <ArrowRight size={16} /></Link>
         </div>
       </div>
 
-      <section className="section shell" id="services">
+      <section className="section shell" id="services" aria-label={t("aria.services")}>
         <div className="section-heading reveal">
-          <div><p className="eyebrow"><span /> Find your clarity</p><h2>Guidance for every<br /><em>chapter of life.</em></h2></div>
-          <p>Every reading combines classical Jyotish principles with warm, grounded guidance you can put into practice.</p>
+          <div><p className="eyebrow"><span /> {t("services.eyebrow")}</p><h2>{t("services.headline")}<br /><em>{t("services.headlineEm")}</em></h2></div>
+          <p>{t("services.subhead")}</p>
         </div>
         <div className="service-grid">
           {services.slice(0, 5).map((service, index) => {
@@ -294,25 +296,25 @@ export default async function HomePage() {
                 <p>{service.category} · {service.duration} min</p>
                 <h3>{service.title}</h3>
                 <p className="service-description">{service.description}</p>
-                <div className="service-card__footer"><span>From <strong>₹{service.price}</strong></span><Link href={`/book?service=${service.id}`} aria-label={`Book ${service.title}`}><ArrowRight size={18} /></Link></div>
+                <div className="service-card__footer"><span>{t("services.from")} <strong>₹{service.price}</strong></span><Link href={`/book?service=${service.id}`} aria-label={`Book ${service.title}`}><ArrowRight size={18} /></Link></div>
               </article>
             );
           })}
         </div>
       </section>
 
-      <section className="tools-strip shell" id="tools" aria-label="Free astrology tools">
+      <section className="tools-strip shell" id="tools" aria-label={t("aria.tools")}>
         <div className="tools-grid">
-          {freeTools.map(({ icon: Icon, label, note, href }) => (
-            <Link href={href} className="tool-card reveal" key={label}>
+          {freeTools.map(({ icon: Icon, key, href }) => (
+            <Link href={href} className="tool-card reveal" key={`${key}-${href}`}>
               <span><Icon size={19} strokeWidth={1.5} /></span>
-              <div><strong>{label}</strong><small>{note}</small></div>
+              <div><strong>{t(`tools.${key}.label`)}</strong><small>{t(`tools.${key}.note`)}</small></div>
             </Link>
           ))}
         </div>
       </section>
 
-      <section className="horoscope-strip shell" aria-label="Your daily horoscope">
+      <section className="horoscope-strip shell" aria-label={t("aria.horoscope")}>
         <div className="horoscope-banner reveal">
           <HeroVideo
             posterSrc="/images/horoscope-hero.jpg"
@@ -323,16 +325,16 @@ export default async function HomePage() {
           />
         </div>
         <div className="section-heading reveal">
-          <div><p className="eyebrow"><span /> Your daily horoscope</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Pick your sign,<br /><em>see today&rsquo;s sky.</em></h2></div>
+          <div><p className="eyebrow"><span /> {t("horoscopeStrip.eyebrow")}</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>{t("horoscopeStrip.headline")}<br /><em>{t("horoscopeStrip.headlineEm")}</em></h2></div>
           <div className="section-heading__cta-block">
-            <p>Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.</p>
-            <Link href="/horoscope" className="button button--small">See today&apos;s horoscope <ArrowRight size={14} /></Link>
+            <p>{t("horoscopeStrip.body")}</p>
+            <Link href="/horoscope" className="button button--small">{t("horoscopeStrip.cta")} <ArrowRight size={14} /></Link>
           </div>
         </div>
         <HomeHoroscopeTeaser
           signs={ZODIAC_SIGNS.map((entry) => ({ key: entry.key, name: entry.name, symbol: entry.symbol }))}
           initialSign={defaultSign.key}
-          initialContent={defaultHoroscope?.content ?? "Today's reading is not available right now. Please check back shortly."}
+          initialContent={defaultHoroscope?.content ?? t("horoscopeStrip.fallback")}
           initialDateLabel={new Date(`${defaultHoroscope?.date ?? new Date().toISOString().slice(0, 10)}T00:00:00`).toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric" })}
         />
       </section>
@@ -341,19 +343,19 @@ export default async function HomePage() {
         <div className="shell method-grid">
           <div className="method-visual reveal">
             <Image src="/images/orbital-system.jpg" alt="Celestial planetary system" fill sizes="(max-width: 800px) 90vw, 44vw" />
-            <div className="orbit-label orbit-label--one"><span /> Moon sign<br /><strong>Taurus</strong></div>
-            <div className="orbit-label orbit-label--two"><span /> Current dasha<br /><strong>Jupiter</strong></div>
+            <div className="orbit-label orbit-label--one"><span /> {t("method.moonSign")}<br /><strong>Taurus</strong></div>
+            <div className="orbit-label orbit-label--two"><span /> {t("method.currentDasha")}<br /><strong>Jupiter</strong></div>
           </div>
           <div className="method-copy reveal">
-            <p className="eyebrow"><span /> The Jyotish method</p>
-            <h2>Rooted in tradition.<br /><em>Made for today.</em></h2>
-            <p>We calculate your sidereal birth chart using the exact time and place you arrived, then place it in the hands of a trained Vedic guide.</p>
+            <p className="eyebrow"><span /> {t("method.eyebrow")}</p>
+            <h2>{t("method.headline")}<br /><em>{t("method.headlineEm")}</em></h2>
+            <p>{t("method.body")}</p>
             <ol className="method-list">
-              <li><span>01</span><div><strong>Map your sky</strong><p>Precise planetary positions reveal your natural patterns.</p></div></li>
-              <li><span>02</span><div><strong>Understand your season</strong><p>Dashas and transits show what is unfolding now.</p></div></li>
-              <li><span>03</span><div><strong>Move with clarity</strong><p>Leave with grounded guidance and practical next steps.</p></div></li>
+              <li><span>01</span><div><strong>{t("method.step1Title")}</strong><p>{t("method.step1Body")}</p></div></li>
+              <li><span>02</span><div><strong>{t("method.step2Title")}</strong><p>{t("method.step2Body")}</p></div></li>
+              <li><span>03</span><div><strong>{t("method.step3Title")}</strong><p>{t("method.step3Body")}</p></div></li>
             </ol>
-            <Link href="/dashboard" className="text-arrow">See your cosmic dashboard <ArrowRight size={16} /></Link>
+            <Link href="/dashboard" className="text-arrow">{t("method.dashboardCta")} <ArrowRight size={16} /></Link>
           </div>
         </div>
       </section>
@@ -361,24 +363,24 @@ export default async function HomePage() {
       <div className="shell" style={{ paddingTop: 70 }}>
         <div className="promo-banner reveal">
           <div className="promo-banner__copy">
-            <strong>Prefer a live guide?</strong>
-            <span>Chat instantly with an available astrologer — pay only for the minutes you use, no subscription required.</span>
+            <strong>{t("ctaGuide.title")}</strong>
+            <span>{t("ctaGuide.body")}</span>
           </div>
-          <Link href="/astrologers" className="button button--light">Find a guide <ArrowRight size={16} /></Link>
+          <Link href="/astrologers" className="button button--light">{t("ctaGuide.cta")} <ArrowRight size={16} /></Link>
         </div>
       </div>
 
       {testimonials.length > 0 && (
         <section className="section shell stories" id="stories">
           <div className="section-heading section-heading--center reveal">
-            <div><p className="eyebrow"><span /> From our community</p><h2>Clarity changes<br /><em>everything.</em></h2></div>
+            <div><p className="eyebrow"><span /> {t("stories.eyebrow")}</p><h2>{t("stories.headline")}<br /><em>{t("stories.headlineEm")}</em></h2></div>
           </div>
           <div className="story-grid">
             {testimonials.map((review, index) => (
               <blockquote className="story-card reveal" key={index}>
                 <Quote size={22} strokeWidth={1.2} />
                 <p>&ldquo;{review.body}&rdquo;</p>
-                <footer><span className="story-avatar">{review.reviewerName.charAt(0)}</span><div><strong>{review.reviewerName}</strong><small>{review.rating}/5 reading</small></div></footer>
+                <footer><span className="story-avatar">{review.reviewerName.charAt(0)}</span><div><strong>{review.reviewerName}</strong><small>{review.rating}{t("stories.ratingSuffix")}</small></div></footer>
               </blockquote>
             ))}
           </div>
@@ -387,19 +389,19 @@ export default async function HomePage() {
 
       <section className="referral-promo shell reveal">
         <div className="referral-promo__copy">
-          <p className="eyebrow"><span /> Invite &amp; earn</p>
-          <h2 style={{ fontSize: "clamp(30px,3.2vw,42px)" }}>Share the sky,<br /><em>earn wallet credit.</em></h2>
-          <p>Invite a friend to Adi Jyotish Guru. When they join and recharge their wallet, you get ₹{REFERRAL_REFERRER_REWARD} and they get ₹{REFERRAL_REFEREE_REWARD} — straight into your wallets.</p>
+          <p className="eyebrow"><span /> {t("referral.eyebrow")}</p>
+          <h2 style={{ fontSize: "clamp(30px,3.2vw,42px)" }}>{t("referral.headline")}<br /><em>{t("referral.headlineEm")}</em></h2>
+          <p>{t("referral.body", { referrerReward: REFERRAL_REFERRER_REWARD, refereeReward: REFERRAL_REFEREE_REWARD })}</p>
         </div>
-        <Link href="/dashboard/referrals" className="button">Get my referral link <ArrowRight size={17} /></Link>
+        <Link href="/dashboard/referrals" className="button">{t("referral.cta")} <ArrowRight size={17} /></Link>
       </section>
 
       <section className="cta shell reveal">
         <div className="cta-zodiac" aria-hidden="true">✦</div>
-        <p className="eyebrow"><span /> Begin with your birth chart</p>
-        <h2>The sky remembers<br /><em>the moment you arrived.</em></h2>
-        <p>Discover what it has to say about where you are going.</p>
-        <Link href="/book" className="button button--light">Begin your reading <ArrowRight size={17} /></Link>
+        <p className="eyebrow"><span /> {t("finalCta.eyebrow")}</p>
+        <h2>{t("finalCta.headline")}<br /><em>{t("finalCta.headlineEm")}</em></h2>
+        <p>{t("finalCta.body")}</p>
+        <Link href="/book" className="button button--light">{t("finalCta.cta")} <ArrowRight size={17} /></Link>
       </section>
 
       <SiteFooter />

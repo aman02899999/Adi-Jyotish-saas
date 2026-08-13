@@ -1,27 +1,28 @@
+import { getTranslations } from "next-intl/server";
 import { Link } from "@/i18n/navigation";
 import { BrandMark } from "@/components/brand-mark";
 import { getFooterContent } from "@/lib/site-content";
 
 export async function SiteFooter() {
-  const footer = await getFooterContent();
+  const [footer, t] = await Promise.all([getFooterContent(), getTranslations("Footer")]);
   return (
     <footer className="footer shell">
       <BrandMark />
       <p>{footer.blurb.split("\n").map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
       <div className="footer__links">
-        <Link href="/astrologers">Practitioners</Link>
-        <Link href="/blog">Journal</Link>
-        <Link href="/pricing">Pricing</Link>
-        <Link href="/dashboard">Dashboard</Link>
+        <Link href="/astrologers">{t("practitioners")}</Link>
+        <Link href="/blog">{t("journal")}</Link>
+        <Link href="/pricing">{t("pricing")}</Link>
+        <Link href="/dashboard">{t("dashboard")}</Link>
       </div>
-      <small>© {new Date().getFullYear()} Adi Jyotish Guru</small>
+      <small>{t("copyright", { year: new Date().getFullYear() })}</small>
       <div className="footer__legal">
-        <Link href="/terms">Terms of Service</Link>
-        <Link href="/privacy">Privacy Policy</Link>
-        <Link href="/refund-policy">Refund &amp; Cancellation</Link>
-        <Link href="/practitioner/login">Practitioner sign in</Link>
-        <Link href="/admin/login">Studio admin</Link>
-        <span>Readings are offered for guidance and self-reflection. They are not a substitute for medical, legal, or financial advice, and no specific outcome is guaranteed.</span>
+        <Link href="/terms">{t("terms")}</Link>
+        <Link href="/privacy">{t("privacy")}</Link>
+        <Link href="/refund-policy">{t("refundPolicy")}</Link>
+        <Link href="/practitioner/login">{t("practitionerSignIn")}</Link>
+        <Link href="/admin/login">{t("studioAdmin")}</Link>
+        <span>{t("disclaimer")}</span>
       </div>
     </footer>
   );

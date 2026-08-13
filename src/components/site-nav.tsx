@@ -2,21 +2,22 @@
 
 import { Link, usePathname } from "@/i18n/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ArrowUpRight, Menu, ShoppingBag } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
 const NAV_ITEMS = [
-  { href: "/gemstones", label: "Gemstones" },
-  { href: "/astrologers", label: "Practitioners" },
-  { href: "/#services", label: "Readings" },
-  { href: "/#method", label: "Our method" },
-  { href: "/ask", label: "Ask Live" },
-  { href: "/palm-reading", label: "Palm Reading" },
-  { href: "/tarot-reading", label: "Tarot Reading" },
-  { href: "/horoscope", label: "Horoscope" },
-  { href: "/blog", label: "Journal" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/book", label: "Book" },
+  { href: "/gemstones", key: "gemstones" as const },
+  { href: "/astrologers", key: "practitioners" as const },
+  { href: "/#services", key: "readings" as const },
+  { href: "/#method", key: "ourMethod" as const },
+  { href: "/ask", key: "askLive" as const },
+  { href: "/palm-reading", key: "palmReading" as const },
+  { href: "/tarot-reading", key: "tarotReading" as const },
+  { href: "/horoscope", key: "horoscope" as const },
+  { href: "/blog", key: "journal" as const },
+  { href: "/pricing", key: "pricing" as const },
+  { href: "/book", key: "book" as const },
 ];
 
 const CART_STORAGE_KEY = "jyotish_gem_cart_v1";
@@ -39,6 +40,7 @@ function isNavItemActive(pathname: string, href: string) {
 }
 
 export function SiteNav({ signedInName }: { signedInName: string | null }) {
+  const t = useTranslations("Nav");
   const pathname = usePathname();
   const [cartCount, setCartCount] = useState(0);
   const [menuOpen, setMenuOpen] = useState(false);
@@ -84,17 +86,17 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
     <>
       <nav className="desktop-nav" aria-label="Primary navigation">
         {NAV_ITEMS.map((item) => (
-          <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{item.label}</Link>
+          <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{t(item.key)}</Link>
         ))}
       </nav>
       <div className="header-actions">
         <LanguageSwitcher compact />
-        <Link href={signedInName ? "/dashboard" : "/account"} className="text-link">{signedInName ?? "Sign in"}</Link>
+        <Link href={signedInName ? "/dashboard" : "/account"} className="text-link">{signedInName ?? t("signIn")}</Link>
         <Link href={signedInName ? "/dashboard" : "/account?mode=register"} className="button button--small">
-          {signedInName ? "Open your chart" : "Create your chart"} <ArrowUpRight size={15} />
+          {signedInName ? t("openYourChart") : t("createYourChart")} <ArrowUpRight size={15} />
         </Link>
       </div>
-      <Link href="/gemstones/cart" className="header-cart" aria-label={`View cart${cartCount ? ` (${cartCount} item${cartCount === 1 ? "" : "s"})` : ""}`}>
+      <Link href="/gemstones/cart" className="header-cart" aria-label={t("cart", { count: cartCount })}>
         <ShoppingBag size={19} />
         {cartCount > 0 && <span className="header-cart__badge">{cartCount > 99 ? "99+" : cartCount}</span>}
       </Link>
@@ -104,9 +106,9 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
         {menuOpen && (
           <nav>
             {NAV_ITEMS.map((item) => (
-              <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{item.label}</Link>
+              <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{t(item.key)}</Link>
             ))}
-            <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? "My account" : "Sign in"}</Link>
+            <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? t("myAccount") : t("signIn")}</Link>
             <LanguageSwitcher />
           </nav>
         )}
