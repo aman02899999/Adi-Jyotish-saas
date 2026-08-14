@@ -263,11 +263,19 @@ async function replaceProductImages(productId: string, images: ImageInput[]) {
   await batch.commit();
 }
 
-async function replaceProductVariants(productId: string, variants: VariantInput[]) {
+/** Returns which wishlist-relevant changes this save produced (a price cut, or a 0→available
+ * restock) by comparing each matched variant's prior price/stockQuantity against the incoming
+ * values before they're overwritten — the caller uses this to trigger wishlist notifications
+ * without gemstones.ts itself depending on the wishlist module. */
+async function replaceProductVariants(productId: string, variants: VariantInput[]): Promise<{ priceDropped: boolean; backInStock: boolean }> {
   if (!variants.length) throw new GemstoneError("Every product needs at least one weight/price variant.");
   const col = variantsCol(productId);
   const existingSnap = await col.get();
+  const existingById = new Map(existingSnap.docs.map((doc) => [doc.id, doc.data() as { price?: number; stockQuantity?: number }]));
   const keepIds = new Set(variants.filter((variant) => variant.id).map((variant) => variant.id!));
+
+  let priceDropped = false;
+  let backInStock = false;
 
   const batch = db.batch();
   existingSnap.docs.forEach((doc) => {
@@ -286,6 +294,11 @@ async function replaceProductVariants(productId: string, variants: VariantInput[
       sku: variant.sku.trim(),
       active: variant.active ?? true,
     };
+    const prior = variant.id ? existingById.get(variant.id) : undefined;
+    if (prior) {
+      if (typeof prior.price === "number" && values.price < prior.price) priceDropped = true;
+      if ((prior.stockQuantity ?? 0) <= 0 && values.stockQuantity > 0) backInStock = true;
+    }
     if (variant.id) {
       batch.update(col.doc(variant.id), { ...values, updatedAt: FieldValue.serverTimestamp() });
     } else {
@@ -293,6 +306,7 @@ async function replaceProductVariants(productId: string, variants: VariantInput[
     }
   }
   await batch.commit();
+  return { priceDropped, backInStock };
 }
 
 /* ---------------------------------- admin product CRUD ---------------------------------- */
@@ -447,11 +461,11 @@ export async function updateProduct(id: string, payload: ProductPayload) {
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  if (payload.variants) await replaceProductVariants(id, payload.variants);
+  const wishlistTrigger = payload.variants ? await replaceProductVariants(id, payload.variants) : null;
   if (payload.images) await replaceProductImages(id, payload.images);
 
   const updated = await ref.get();
-  return fromProductDoc(updated);
+  return { product: fromProductDoc(updated), wishlistTrigger };
 }
 
 export async function duplicateProduct(id: string) {

@@ -6,11 +6,44 @@ import { getPlanById, type MembershipPlan } from "@/lib/plans";
 import { splitGstInclusive } from "@/lib/gst";
 import { sendBookingNotification } from "@/lib/messaging";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
+import { createNotification } from "@/lib/notifications";
 import { getSiteUrl } from "@/lib/site-url";
 import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import { processReferralReward } from "@/lib/referrals";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { rechargeWallet } from "@/lib/wallet";
+
+// Razorpay statuses that mean a renewal charge is stuck (failed retries exhausted, or the
+// subscription got paused) — the member needs to act, so this is the one subscription-status
+// transition worth interrupting them for instead of just updating a record silently.
+const DUNNING_STATUSES = new Set(["halted", "paused"]);
+
+async function sendDunningNotice(memberId: string, planName: string) {
+  const memberSnap = await db.collection("members").doc(memberId).get();
+  const member = memberSnap.data() as { name?: string; email?: string } | undefined;
+  if (!member?.email) return;
+
+  const billingUrl = new URL("/dashboard/billing", getSiteUrl()).toString();
+  await createNotification({
+    recipientType: "member",
+    recipientId: memberId,
+    type: "subscription_payment_issue",
+    title: "Your membership renewal needs attention",
+    body: `We couldn't renew your ${planName} membership. Update your payment details to keep your benefits.`,
+    link: "/dashboard/billing",
+  });
+  await sendEmail({
+    to: member.email,
+    subject: "Action needed: your membership renewal failed",
+    html: genericNotificationEmailHtml({
+      title: "Your membership renewal needs attention",
+      name: member.name ?? "there",
+      body: `We weren't able to renew your ${planName} membership — this usually means the card on file was declined. Update your payment details to keep your discounts and benefits active.`,
+      ctaLabel: "Update payment details",
+      ctaUrl: billingUrl,
+    }),
+  }).catch((error) => console.error("Dunning email failed", error));
+}
 
 export const dynamic = "force-dynamic";
 
@@ -272,5 +305,9 @@ async function handleSubscriptionStatus(subscription?: RazorpayWebhookSubscripti
     await syncMemberPlanLabel(found.memberId, "free");
   } else if (subscription.status === "active") {
     await syncMemberPlanLabel(found.memberId, found.plan.key);
+  }
+
+  if (DUNNING_STATUSES.has(subscription.status)) {
+    await sendDunningNotice(found.memberId, found.plan.name).catch((error) => console.error("Dunning notice failed", error));
   }
 }

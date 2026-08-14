@@ -1,9 +1,14 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Check, Crown, Edit3, Mail, Plus, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, Check, Crown, Edit3, Mail, Plus, ShieldCheck, Trash2, Users, X } from "lucide-react";
 import { AvatarImage } from "@/components/avatar-image";
 import type { Practitioner } from "@/lib/scheduling";
+
+// verificationFlag is computed server-side (computeVerificationFlags in practitioner-portal.ts)
+// and attached alongside each row by the admin practitioners API — not part of the base
+// Practitioner shape since it's derived, not stored on the practitioner doc itself.
+type PractitionerRow = Practitioner & { verificationFlag?: string | null };
 
 type FormState = {
   name: string; email: string; title: string; bio: string; specialties: string; languages: string;
@@ -17,7 +22,7 @@ const emptyForm: FormState = {
   featured: false, active: false,
 };
 
-export function AdminPractitioners({ initialPractitioners }: { initialPractitioners: Practitioner[] }) {
+export function AdminPractitioners({ initialPractitioners }: { initialPractitioners: PractitionerRow[] }) {
   const [items, setItems] = useState(initialPractitioners);
   const [editing, setEditing] = useState<Practitioner | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -123,7 +128,10 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
             <div className="service-table__row" role="row" key={person.id}>
               <div className="table-service">
                 <span className="table-service__icon"><AvatarImage src={person.photoUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} fallback={<Users size={17} />} /></span>
-                <div><strong>{person.name}</strong><small>{person.email} · {person.hasPortalAccess ? "Portal linked" : "Not yet invited"}</small></div>
+                <div>
+                  <strong>{person.name}{person.verificationFlag && <AlertTriangle size={13} color="#c0392b" style={{ marginLeft: 6, verticalAlign: "-1px" }} aria-label={person.verificationFlag} />}</strong>
+                  <small>{person.email} · {person.hasPortalAccess ? "Portal linked" : "Not yet invited"}{person.verificationFlag ? ` · ${person.verificationFlag}` : ""}</small>
+                </div>
               </div>
               <strong>{person.experienceYears} yrs</strong>
               <strong>₹{person.chatRatePerMinute}/min</strong>

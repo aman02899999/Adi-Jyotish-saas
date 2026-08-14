@@ -10,6 +10,7 @@ import { getStudioSettings } from "@/lib/studio-settings";
 import { splitGstInclusive } from "@/lib/gst";
 import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
+import { shouldRunNow } from "@/lib/automation-state";
 
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
@@ -537,6 +538,47 @@ export async function getLowStockVariants(threshold = 5) {
       productSlug: product?.slug ?? "",
     };
   });
+}
+
+const LOW_STOCK_ALERT_COOLDOWN_MS = 3 * 24 * 60 * 60 * 1000;
+
+/** Daily-gated sweep (piggybacks on the 15-minute housekeeping cron via shouldRunNow): the
+ * low-stock count already existed as a passive admin-dashboard stat (getGemstoneAdminStats) that
+ * nobody sees unless they happen to open that page — this pushes the same signal to admins as a
+ * notification instead. Re-alerts at most once every 3 days per variant so a persistently
+ * low/out-of-stock item doesn't spam the same notification every 15 minutes. */
+export async function sendLowStockAlerts(threshold = 5) {
+  if (!(await shouldRunNow("low-stock-sweep", 24 * 60 * 60 * 1000))) return { skipped: true as const };
+
+  let snap;
+  try {
+    snap = await db.collectionGroup("variants").where("active", "==", true).where("stockQuantity", "<=", threshold).get();
+  } catch (error) {
+    console.error("sendLowStockAlerts query failed (likely a missing Firestore index)", error);
+    return { checked: 0, alerted: 0 };
+  }
+  if (snap.empty) return { checked: 0, alerted: 0 };
+
+  const adminIds = await getAdminIdsWithPermission("gemstones");
+  if (!adminIds.length) return { checked: snap.size, alerted: 0 };
+
+  let alerted = 0;
+  for (const doc of snap.docs) {
+    const data = doc.data() as { productId: string; label: string; stockQuantity: number; lowStockAlertedAt?: Timestamp };
+    if (data.lowStockAlertedAt && Date.now() - data.lowStockAlertedAt.toMillis() < LOW_STOCK_ALERT_COOLDOWN_MS) continue;
+
+    const productSnap = await productsCol.doc(data.productId).get();
+    const product = productSnap.data() as { name?: string } | undefined;
+    await notifyAdmins(adminIds, {
+      type: "low_stock",
+      title: `Low stock: ${product?.name ?? "a gemstone"} — ${data.label}`,
+      body: data.stockQuantity === 0 ? "Out of stock. Restock to avoid losing sales." : `Only ${data.stockQuantity} left. Consider restocking soon.`,
+      link: "/admin/gemstones",
+    });
+    await doc.ref.update({ lowStockAlertedAt: FieldValue.serverTimestamp() });
+    alerted++;
+  }
+  return { checked: snap.size, alerted };
 }
 
 export async function memberHasPurchasedProduct(memberId: string, productId: string) {

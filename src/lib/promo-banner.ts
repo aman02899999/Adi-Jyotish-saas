@@ -8,6 +8,13 @@ export type PromoBanner = {
   message: string;
   ctaLabel: string | null;
   ctaHref: string | null;
+  // "manual" once an admin has ever saved the banner through the admin UI — the festival
+  // auto-scheduler (see lifecycle-automation.ts) treats that as a permanent opt-out and never
+  // touches the banner again, even to turn it off. "auto" (or unset) means the automation still
+  // owns it. festivalKey tracks which festival the automation currently has live, so it knows
+  // exactly when to turn itself back off.
+  source: "manual" | "auto";
+  festivalKey: string | null;
   updatedAt: Date;
 };
 
@@ -16,6 +23,8 @@ const defaults: Omit<PromoBanner, "updatedAt"> = {
   message: "",
   ctaLabel: null,
   ctaHref: null,
+  source: "auto",
+  festivalKey: null,
 };
 
 const ref = db.collection("promoBanner").doc("main");

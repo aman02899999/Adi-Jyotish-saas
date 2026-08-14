@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { createPractitionerAdmin, getPractitionerDirectory, PractitionerAdminError } from "@/lib/scheduling";
+import { computeVerificationFlags } from "@/lib/practitioner-portal";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,8 @@ export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "practitioners")) return Response.json({ error: "Practitioners permission required." }, { status: 403 });
-  const rows = await getPractitionerDirectory(false, true);
-  return Response.json(rows.map(({ rules, timeOff, ...person }) => person));
+  const [rows, verificationFlags] = await Promise.all([getPractitionerDirectory(false, true), computeVerificationFlags()]);
+  return Response.json(rows.map(({ rules, timeOff, ...person }) => ({ ...person, verificationFlag: verificationFlags.get(person.id) ?? null })));
 }
 
 export async function POST(request: Request) {

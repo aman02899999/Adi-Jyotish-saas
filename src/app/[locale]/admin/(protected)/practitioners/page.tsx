@@ -2,13 +2,14 @@ import { AdminPractitioners } from "@/components/admin-practitioners";
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
 import { getPractitionerDirectory } from "@/lib/scheduling";
+import { computeVerificationFlags } from "@/lib/practitioner-portal";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminPractitionersPage() {
   await requireAdminPage("practitioners");
-  const directory = await getPractitionerDirectory(false, true);
-  const practitioners = directory.map(({ rules, timeOff, ...person }) => person);
+  const [directory, verificationFlags] = await Promise.all([getPractitionerDirectory(false, true), computeVerificationFlags()]);
+  const practitioners = directory.map(({ rules, timeOff, ...person }) => ({ ...person, verificationFlag: verificationFlags.get(person.id) ?? null }));
   return (
     <AdminShell active="Practitioners">
       <div className="admin-content">
