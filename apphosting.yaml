@@ -10,17 +10,21 @@
 #      then grant the backend access when prompted (or via
 #        firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
 #      ).
-#   4. Optional integrations (Razorpay, Resend, Gemini, Ably, payout
-#      encryption, Turnstile, Sentry, a custom NEXT_PUBLIC_SITE_URL, etc.)
-#      are deliberately NOT declared below — the app gracefully disables
-#      each feature when its env vars are unset, matching .env.example.
-#      Add any of them back here, one at a time, once its secret exists
-#      AND is confirmed granted (see point 5) — a single misconfigured
-#      secret blocks the *entire* build, not just that feature.
+#   4. Sentry and the Meta Pixel are the only integrations still deliberately
+#      NOT declared below — the app gracefully disables each when its env
+#      vars are unset, matching .env.example. Add them the same way once
+#      wanted.
 #   5. Every `secret:` entry below needs Secret Manager Secret Accessor
 #      granted to firebase-app-hosting-compute@<project>.iam.gserviceaccount.com
 #      for the *build* to even start (App Hosting resolves all secrets at
 #      the preparer step, not just the ones marked RUNTIME).
+#   6. IMPORTANT — every new `secret:` entry added below is a placeholder
+#      reference only. Before this file is deployed, you MUST create each
+#      one for real and grant backend access, or the *entire* build fails:
+#        firebase apphosting:secrets:set SECRET_NAME
+#        firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
+#      Also replace every "REPLACE_ME…" plain value below with your real
+#      domain / bucket name before deploying.
 
 runConfig:
   minInstances: 0
@@ -75,5 +79,95 @@ env:
   # via `firebase apphosting:secrets:set GEMINI_API_KEY --project=ask-astrologer-2c5b5`.
   - variable: GEMINI_API_KEY
     secret: GEMINI_API_KEY
+    availability:
+      - RUNTIME
+
+  # ── Cloudflare Turnstile (CAPTCHA on registration, kundli-matching,
+  #    numerology, gemstone-recommendation) ──────────────────────────
+  # Without TURNSTILE_SECRET_KEY, the app fails CLOSED in production (not
+  # open) — every request to those 4 endpoints returns 403 until this is
+  # set. Get both keys from the Cloudflare dashboard → Turnstile.
+  - variable: NEXT_PUBLIC_TURNSTILE_SITE_KEY
+    value: "REPLACE_ME_turnstile_site_key"
+    availability:
+      - BUILD
+      - RUNTIME
+  - variable: TURNSTILE_SECRET_KEY
+    secret: TURNSTILE_SECRET_KEY
+    availability:
+      - RUNTIME
+
+  # ── Scheduled housekeeping (.github/workflows/cron.yml) ────────────
+  # Must match the CRON_SECRET GitHub Actions repo secret exactly, or the
+  # scheduled cleanup/lifecycle-email sweep silently never runs (401s every
+  # 15 minutes instead). Generate with: openssl rand -base64 32
+  - variable: CRON_SECRET
+    secret: CRON_SECRET
+    availability:
+      - RUNTIME
+
+  # ── Razorpay payments ───────────────────────────────────────────────
+  # Live key pair from Razorpay Dashboard → Settings → API Keys.
+  # RAZORPAY_WEBHOOK_SECRET comes from Settings → Webhooks — create a
+  # webhook there pointing at https://<your-domain>/api/webhooks/razorpay
+  # first, then paste the secret it generates.
+  - variable: RAZORPAY_MODE
+    value: "live"
+    availability:
+      - RUNTIME
+  - variable: RAZORPAY_LIVE_KEY_ID
+    secret: RAZORPAY_LIVE_KEY_ID
+    availability:
+      - RUNTIME
+  - variable: RAZORPAY_LIVE_KEY_SECRET
+    secret: RAZORPAY_LIVE_KEY_SECRET
+    availability:
+      - RUNTIME
+  - variable: RAZORPAY_WEBHOOK_SECRET
+    secret: RAZORPAY_WEBHOOK_SECRET
+    availability:
+      - RUNTIME
+
+  # ── Practitioner payout bank/UPI encryption ────────────────────────
+  # 32-byte key, base64-encoded. Generate with: openssl rand -base64 32
+  # Required before practitioners can save bank/UPI payout details.
+  - variable: PAYOUT_ENCRYPTION_KEY
+    secret: PAYOUT_ENCRYPTION_KEY
+    availability:
+      - RUNTIME
+
+  # ── Transactional email (Resend) ────────────────────────────────────
+  - variable: RESEND_API_KEY
+    secret: RESEND_API_KEY
+    availability:
+      - RUNTIME
+  # Resend's shared sandbox address — replace with a "Name <you@yourdomain.com>"
+  # once you've verified a sending domain in the Resend dashboard.
+  - variable: RESEND_FROM_EMAIL
+    value: "Jyotish Studio <onboarding@resend.dev>"
+    availability:
+      - RUNTIME
+
+  # ── Realtime instant chat (Ably) ────────────────────────────────────
+  - variable: ABLY_API_KEY
+    secret: ABLY_API_KEY
+    availability:
+      - RUNTIME
+
+  # ── Site URL ─────────────────────────────────────────────────────────
+  # Used to build absolute links in emails and metadata. Replace with your
+  # real App Hosting domain (Firebase Console → App Hosting → backend) or
+  # custom domain.
+  - variable: NEXT_PUBLIC_SITE_URL
+    value: "REPLACE_ME_https://your-domain.com"
+    availability:
+      - BUILD
+      - RUNTIME
+
+  # ── Firebase Storage bucket ─────────────────────────────────────────
+  # Exact bucket name from Firebase Console → Storage (shown at the top of
+  # the Files tab, e.g. ask-astrologer-2c5b5.firebasestorage.app).
+  - variable: FIREBASE_STORAGE_BUCKET
+    value: "REPLACE_ME_your-project.firebasestorage.app"
     availability:
       - RUNTIME
