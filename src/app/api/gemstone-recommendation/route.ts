@@ -5,7 +5,7 @@ import { verifyTurnstileToken } from "@/lib/turnstile";
 
 export const dynamic = "force-dynamic";
 
-type Payload = { name?: string; birthDate?: string; concern?: string; turnstileToken?: string };
+type Payload = { name?: string; birthDate?: string; birthTime?: string; birthPlace?: string; concern?: string; turnstileToken?: string };
 
 export async function POST(request: Request) {
   const member = await getCurrentMember();
@@ -20,13 +20,17 @@ export async function POST(request: Request) {
   }
   const name = body.name?.trim().slice(0, 120) ?? "";
   const birthDate = body.birthDate?.trim() ?? "";
+  const birthTime = body.birthTime?.trim() ?? "";
+  const birthPlace = body.birthPlace?.trim().slice(0, 180) ?? "";
   const concern = body.concern?.trim().slice(0, 300) ?? "";
 
   if (!name) return Response.json({ error: "Please share your name." }, { status: 400 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return Response.json({ error: "Please choose a valid birth date." }, { status: 400 });
+  if (!/^\d{2}:\d{2}$/.test(birthTime)) return Response.json({ error: "Please enter a valid birth time." }, { status: 400 });
+  if (birthPlace.length < 2) return Response.json({ error: "Please enter your birth place." }, { status: 400 });
 
   try {
-    const { recommendation, sign, products } = await createGemstoneRecommendation({ memberId: member?.id ?? null, name, birthDate, concern });
+    const { recommendation, sign, products } = await createGemstoneRecommendation({ memberId: member?.id ?? null, name, birthDate, birthTime, birthPlace, concern });
     return Response.json({
       narrative: recommendation.narrative,
       sign: { name: sign.name, symbol: sign.symbol },

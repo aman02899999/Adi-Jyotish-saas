@@ -136,6 +136,26 @@ export function sunriseSunset(date: Date, lat: number, lon: number) {
   return { sunrise: sunrise?.date ?? null, sunset: sunset?.date ?? null };
 }
 
+const RETROGRADE_SAMPLE_DAYS = 1;
+
+/**
+ * Whether a graha appears retrograde (apparent backward motion through the zodiac) at the given
+ * moment — interpretively significant in Jyotish, and previously omitted entirely from this
+ * engine. The Sun and Moon never appear retrograde from Earth by definition (geocentric, so this
+ * is a real astronomical fact, not a simplification); Rahu/Ketu are computed here as the mean
+ * lunar node, which regresses through the zodiac continuously, so they're always retrograde.
+ * Everything else is measured directly: sample the longitude a day either side of the date and
+ * check whether it moved backward (handling the 360°/0° wrap).
+ */
+export function isRetrograde(date: Date, graha: GrahaKey): boolean {
+  if (graha === "sun" || graha === "moon") return false;
+  if (graha === "rahu" || graha === "ketu") return true;
+  const before = siderealLongitudeOf(new Date(date.getTime() - RETROGRADE_SAMPLE_DAYS * 86_400_000), graha);
+  const after = siderealLongitudeOf(new Date(date.getTime() + RETROGRADE_SAMPLE_DAYS * 86_400_000), graha);
+  const delta = ((after - before + 180) % 360 + 360) % 360 - 180;
+  return delta < 0;
+}
+
 export type GrahaPosition = {
   graha: GrahaKey;
   longitude: number;
@@ -143,6 +163,7 @@ export type GrahaPosition = {
   degreeInRashi: number;
   nakshatraIndex: number;
   pada: number;
+  isRetrograde: boolean;
 };
 
 export function computeGrahaPositions(date: Date): GrahaPosition[] {
@@ -155,6 +176,7 @@ export function computeGrahaPositions(date: Date): GrahaPosition[] {
       degreeInRashi: degreeWithinRashi(longitude),
       nakshatraIndex: nakshatraIndexOf(longitude),
       pada: nakshatraPadaOf(longitude),
+      isRetrograde: isRetrograde(date, graha),
     };
   });
 }

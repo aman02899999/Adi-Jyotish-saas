@@ -5,6 +5,12 @@ import { Check, KeyRound, ShieldCheck, ShieldOff, X } from "lucide-react";
 
 type Stage = "idle" | "enrolling" | "backup-codes";
 
+const LOGIN_PATH_BY_PREFIX: Record<string, string> = {
+  "/api/member/2fa": "/account",
+  "/api/practitioner/2fa": "/practitioner/login",
+  "/api/admin/2fa": "/admin/login",
+};
+
 export function TwoFactorSettings({ apiPrefix, initialEnabled, description }: { apiPrefix: string; initialEnabled: boolean; description: string }) {
   const [enabled, setEnabled] = useState(initialEnabled);
   const [stage, setStage] = useState<Stage>("idle");
@@ -62,6 +68,13 @@ export function TwoFactorSettings({ apiPrefix, initialEnabled, description }: { 
     });
     const data = await response.json();
     if (response.ok) {
+      if (data.sessionRevoked) {
+        // Disabling 2FA revokes every session, including this one, as a precaution — the
+        // current page is signed out too, so send the user back to sign in rather than leave
+        // them looking at a settings page whose session just went invalid.
+        window.location.assign(`${LOGIN_PATH_BY_PREFIX[apiPrefix] ?? "/"}?notice=2fa-disabled`);
+        return;
+      }
       setEnabled(false);
       setDisabling(false);
       setDisableCode("");

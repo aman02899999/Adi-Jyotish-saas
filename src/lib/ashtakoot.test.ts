@@ -28,6 +28,26 @@ describe("computeAshtakoot", () => {
     expect(result.bhakootDosha).toBe(false);
   });
 
+  it("cancels Nadi Dosha for the classical same-nakshatra-different-pada exception", () => {
+    const withoutException = computeAshtakoot({ brideMoonRashi: 0, brideMoonNakshatra: 5, groomMoonRashi: 3, groomMoonNakshatra: 5 });
+    expect(withoutException.nadiDosha).toBe(true);
+    const withException = computeAshtakoot({ brideMoonRashi: 0, brideMoonNakshatra: 5, groomMoonRashi: 3, groomMoonNakshatra: 5, bridePada: 1, groomPada: 3 });
+    expect(withException.breakdown.nadi).toBe(0); // score is unchanged — only the dosha flag is exempted
+    expect(withException.nadiDosha).toBe(false);
+  });
+
+  it("does not cancel Nadi Dosha when the pada also matches (no exception applies)", () => {
+    const result = computeAshtakoot({ brideMoonRashi: 0, brideMoonNakshatra: 5, groomMoonRashi: 3, groomMoonNakshatra: 5, bridePada: 2, groomPada: 2 });
+    expect(result.nadiDosha).toBe(true);
+  });
+
+  it("cancels Bhakoot Dosha when both Moon signs share the same ruling planet", () => {
+    // Mesha (0) and Vrishchika (7) are both Mars-ruled and sit at a 6-8 distance (dosha distance 8).
+    const result = computeAshtakoot({ brideMoonRashi: 0, brideMoonNakshatra: 0, groomMoonRashi: 7, groomMoonNakshatra: 0 });
+    expect(result.breakdown.bhakoot).toBe(0); // score is unchanged — only the dosha flag is exempted
+    expect(result.bhakootDosha).toBe(false);
+  });
+
   it("is direction-sensitive, matching classical Varna ranking rules (swapping bride/groom can change the score)", () => {
     // This documents real Ashtakoot behavior: Varna compares ranks asymmetrically, so the
     // total is not simply symmetric under a bride/groom swap — a regression here would be a bug.

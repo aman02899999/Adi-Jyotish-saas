@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Gem, LoaderCircle, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, Gem, LoaderCircle, MapPin, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
 import { GemstoneProductCard } from "@/components/gemstone-product-card";
 import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
 import type { ProductListItem } from "@/lib/gemstones";
@@ -11,6 +11,8 @@ type Result = { narrative: string; sign: { name: string; symbol: string }; produ
 export function GemstoneRecommendationForm({ prefillName }: { prefillName: string }) {
   const [name, setName] = useState(prefillName);
   const [birthDate, setBirthDate] = useState("");
+  const [birthTime, setBirthTime] = useState("");
+  const [birthPlace, setBirthPlace] = useState("");
   const [concern, setConcern] = useState("");
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
@@ -19,14 +21,14 @@ export function GemstoneRecommendationForm({ prefillName }: { prefillName: strin
 
   async function submit() {
     setError("");
-    if (!name.trim() || !birthDate) { setError("Please share your name and birth date."); return; }
+    if (!name.trim() || !birthDate || !birthTime || !birthPlace.trim()) { setError("Please share your name and exact birth date, time, and place — your real chart needs all three."); return; }
     if (isTurnstileEnabled() && !turnstileToken) { setError("Please complete the verification check above."); return; }
     setLoading(true);
     try {
       const response = await fetch("/api/gemstone-recommendation", {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, birthDate, concern, turnstileToken }),
+        body: JSON.stringify({ name, birthDate, birthTime, birthPlace, concern, turnstileToken }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Your recommendation could not be prepared.");
@@ -62,8 +64,11 @@ export function GemstoneRecommendationForm({ prefillName }: { prefillName: strin
       <div className="booking-fields">
         <label><span>Your name</span><div><UserRound size={16} /><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
+        <label><span>Birth time</span><div><Clock3 size={16} /><input type="time" value={birthTime} onChange={(event) => setBirthTime(event.target.value)} /></div></label>
+        <label><span>Birth place</span><div><MapPin size={16} /><input value={birthPlace} onChange={(event) => setBirthPlace(event.target.value.slice(0, 180))} placeholder="City, country" /></div></label>
         <label className="wide"><span>What would you like to improve? <i>optional</i></span><div><MessageCircleQuestion size={16} /><input value={concern} onChange={(event) => setConcern(event.target.value.slice(0, 300))} placeholder="Career, relationships, confidence…" /></div></label>
       </div>
+      <p className="legal-note">Your exact birth time and place matter here — they&apos;re what let us compute your real sidereal Moon sign instead of guessing from your birth date alone.</p>
       <TurnstileWidget onVerify={setTurnstileToken} />
       <button type="button" className="button ask-form-card__submit" disabled={loading} onClick={submit}>
         {loading ? <><LoaderCircle size={16} className="spin" /> Reading your chart…</> : <><Gem size={16} /> Get my recommendation</>}

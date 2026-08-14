@@ -61,13 +61,14 @@ function occupantsOfHouse(chart: KundliChart, house: number) {
   return chart.positions.filter((position) => position.rashiIndex === houseRashiIndex);
 }
 
-export type KundliHouse = { house: number; rashiIndex: number; occupants: GrahaKey[] };
+export type KundliHouseOccupant = { graha: GrahaKey; isRetrograde: boolean };
+export type KundliHouse = { house: number; rashiIndex: number; occupants: KundliHouseOccupant[] };
 
 /** The 12 houses (Lagna first) with the rashi and planets occupying each — the plain-data shape a chart diagram renders. */
 export function buildHouseGrid(chart: KundliChart): KundliHouse[] {
   return Array.from({ length: 12 }, (_, index) => {
     const house = index + 1;
-    return { house, rashiIndex: (chart.ascendantRashiIndex + index) % 12, occupants: occupantsOfHouse(chart, house).map((position) => position.graha) };
+    return { house, rashiIndex: (chart.ascendantRashiIndex + index) % 12, occupants: occupantsOfHouse(chart, house).map((position) => ({ graha: position.graha, isRetrograde: position.isRetrograde })) };
   });
 }
 
@@ -85,7 +86,8 @@ function describeOccupants(occupants: GrahaPosition[], emptyFallback: string) {
 }
 
 function placementLine(position: GrahaPosition) {
-  return `${GRAHA_LABELS[position.graha]} is in ${RASHIS[position.rashiIndex].name} (${formatDegree(position.longitude)}), ${NAKSHATRAS[position.nakshatraIndex]} nakshatra, pada ${position.pada}`;
+  const retrograde = position.isRetrograde ? " (retrograde)" : "";
+  return `${GRAHA_LABELS[position.graha]} is in ${RASHIS[position.rashiIndex].name} (${formatDegree(position.longitude)}), ${NAKSHATRAS[position.nakshatraIndex]} nakshatra, pada ${position.pada}${retrograde}`;
 }
 
 export function renderKundliReport(chart: KundliChart): string {

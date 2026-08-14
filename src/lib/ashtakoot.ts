@@ -148,6 +148,22 @@ function nadiPoints(brideNakshatra: number, groomNakshatra: number) {
   return NADI[brideNakshatra] === NADI[groomNakshatra] ? 0 : 8;
 }
 
+// The single most consistently-cited classical exception (parihara) for Nadi dosha: when both
+// people share the exact same nakshatra but land in a different pada (quarter), the dosha is
+// considered cancelled — it isn't the "same Nadi group from two different stars" case the dosha
+// is meant to flag. This doesn't change the mechanical 0/8 score (still the traditional 36-point
+// scale), only whether it's narrated to the couple as a real concern.
+function nadiDoshaCancelled(brideNakshatra: number, groomNakshatra: number, bridePada: number, groomPada: number) {
+  return brideNakshatra === groomNakshatra && bridePada !== groomPada;
+}
+
+// The most consistently-cited classical exception for Bhakoot dosha: when both Moon signs share
+// the same ruling planet, the dosha is considered cancelled. Same caveat as above — the score
+// itself is unchanged, only the interpretation.
+function bhakootDoshaCancelled(brideRashi: number, groomRashi: number) {
+  return RASHI_LORD[brideRashi] === RASHI_LORD[groomRashi];
+}
+
 export type AshtakootBreakdown = {
   varna: number; vashya: number; tara: number; yoni: number;
   grahaMaitri: number; gana: number; bhakoot: number; nadi: number;
@@ -163,11 +179,13 @@ export type AshtakootResult = {
   groomRashiName: string;
 };
 
-export function computeAshtakoot({ brideMoonRashi, brideMoonNakshatra, groomMoonRashi, groomMoonNakshatra }: {
+export function computeAshtakoot({ brideMoonRashi, brideMoonNakshatra, groomMoonRashi, groomMoonNakshatra, bridePada, groomPada }: {
   brideMoonRashi: number;
   brideMoonNakshatra: number;
   groomMoonRashi: number;
   groomMoonNakshatra: number;
+  bridePada?: number;
+  groomPada?: number;
 }): AshtakootResult {
   const breakdown: AshtakootBreakdown = {
     varna: varnaPoints(brideMoonRashi, groomMoonRashi),
@@ -181,12 +199,14 @@ export function computeAshtakoot({ brideMoonRashi, brideMoonNakshatra, groomMoon
   };
   const totalScore = Object.values(breakdown).reduce((sum, value) => sum + value, 0);
 
+  const nadiCancelled = bridePada != null && groomPada != null && nadiDoshaCancelled(brideMoonNakshatra, groomMoonNakshatra, bridePada, groomPada);
+
   return {
     totalScore,
     maxScore: 36,
     breakdown,
-    nadiDosha: breakdown.nadi === 0,
-    bhakootDosha: breakdown.bhakoot === 0,
+    nadiDosha: breakdown.nadi === 0 && !nadiCancelled,
+    bhakootDosha: breakdown.bhakoot === 0 && !bhakootDoshaCancelled(brideMoonRashi, groomMoonRashi),
     brideRashiName: RASHI_NAMES[brideMoonRashi],
     groomRashiName: RASHI_NAMES[groomMoonRashi],
   };

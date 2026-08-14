@@ -11,7 +11,7 @@ export class KundliMatchError extends Error {}
 
 function moonPlacement(utcInstant: Date) {
   const moon = computeGrahaPositions(utcInstant).find((position) => position.graha === "moon")!;
-  return { rashiIndex: moon.rashiIndex, nakshatraIndex: moon.nakshatraIndex };
+  return { rashiIndex: moon.rashiIndex, nakshatraIndex: moon.nakshatraIndex, pada: moon.pada };
 }
 
 function scoreTier(score: number) {
@@ -42,6 +42,11 @@ function buildNarrative({ nameA, nameB, result }: { nameA: string; nameB: string
   const strongKootas = entries.filter(([key, value]) => value === KOOTA_INFO[key].max).map(([key]) => KOOTA_INFO[key].name);
   const weakEntries = entries.filter(([, value]) => value === 0);
   const weakKootas = weakEntries.map(([key]) => KOOTA_INFO[key].name);
+  // A koota can score 0 mechanically but still not count as a real dosha — classical texts
+  // recognize specific exceptions (same nakshatra different pada for Nadi; matching rashi lords
+  // for Bhakoot) that cancel the concern without changing the raw point total.
+  const nadiExempt = result.breakdown.nadi === 0 && !result.nadiDosha;
+  const bhakootExempt = result.breakdown.bhakoot === 0 && !result.bhakootDosha;
 
   if (strongKootas.length) {
     const aboutList = entries.filter(([key, value]) => value === KOOTA_INFO[key].max).map(([key]) => KOOTA_INFO[key].about).join("; ");
@@ -56,6 +61,9 @@ function buildNarrative({ nameA, nameB, result }: { nameA: string; nameB: string
   } else {
     paragraphs.push("No koota scored zero — there's no single classical dosha standing out here.");
   }
+
+  if (nadiExempt) paragraphs.push("The Nadi koota scored zero mechanically, but classical texts exempt this specific case — same nakshatra, different pada — from being treated as a real dosha.");
+  if (bhakootExempt) paragraphs.push("The Bhakoot koota scored zero mechanically, but classical texts exempt this specific case — both Moon signs share the same ruling planet — from being treated as a real dosha.");
 
   paragraphs.push(tier.guidance);
   paragraphs.push("Guna Milan is one traditional input among many — it's not a substitute for the couple's own compatibility, values, and communication.");
@@ -99,6 +107,8 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     brideMoonNakshatra: moonA.nakshatraIndex,
     groomMoonRashi: moonB.rashiIndex,
     groomMoonNakshatra: moonB.nakshatraIndex,
+    bridePada: moonA.pada,
+    groomPada: moonB.pada,
   });
 
   const narrative = buildNarrative({ nameA, nameB, result });

@@ -5,6 +5,7 @@ import { Link } from "@/i18n/navigation";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { TwoFactorChallenge } from "@/components/two-factor-challenge";
+import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
 import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
 import { trackEvent } from "@/lib/track-event";
 
@@ -18,6 +19,7 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
   const [error, setError] = useState("");
   const [submitting, setSubmitting] = useState(false);
   const [challengeToken, setChallengeToken] = useState("");
+  const [turnstileToken, setTurnstileToken] = useState("");
 
   function afterSignIn(data: Record<string, unknown>) {
     if (mode === "register") trackEvent("sign_up", { method: "password" });
@@ -31,6 +33,7 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
     event.preventDefault();
     setError("");
     if (mode === "register" && password !== confirm) return setError("Passwords do not match.");
+    if (mode === "register" && isTurnstileEnabled() && !turnstileToken) return setError("Please complete the verification check below.");
     setSubmitting(true);
     try {
       const idToken = mode === "register"
@@ -39,7 +42,7 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
       const response = await fetch(`/api/member/${mode === "register" ? "register" : "login"}`, {
         method: "POST",
         headers: { "Content-Type": "application/json" },
-        body: JSON.stringify({ name, idToken, ref: mode === "register" ? refCode : undefined }),
+        body: JSON.stringify({ name, idToken, ref: mode === "register" ? refCode : undefined, turnstileToken: mode === "register" ? turnstileToken : undefined }),
       });
       const data = await response.json();
       if (!response.ok) throw new Error(data.error || "Your account could not be verified.");
@@ -69,6 +72,7 @@ export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login
         <label><span>Password</span><div><LockKeyhole size={16} /><input autoComplete={mode === "register" ? "new-password" : "current-password"} type={visible ? "text" : "password"} required minLength={mode === "register" ? 10 : undefined} maxLength={128} value={password} onChange={(event) => setPassword(event.target.value)} placeholder={mode === "register" ? "At least 10 characters" : "Your password"} /><button type="button" onClick={() => setVisible(!visible)} aria-label={visible ? "Hide password" : "Show password"}>{visible ? <EyeOff size={16} /> : <Eye size={16} />}</button></div></label>
         {mode === "register" && <label><span>Confirm password</span><div><ShieldCheck size={16} /><input autoComplete="new-password" type={visible ? "text" : "password"} required minLength={10} maxLength={128} value={confirm} onChange={(event) => setConfirm(event.target.value)} placeholder="Repeat your password" /></div></label>}
         {mode === "login" && <Link className="member-auth-forgot" href="/forgot-password?portal=member">Forgot your password?</Link>}
+        {mode === "register" && <TurnstileWidget onVerify={setTurnstileToken} />}
         {error && <p className="admin-auth-error" role="alert">{error}</p>}
         <button className="button admin-auth-submit" disabled={submitting}>{submitting ? "Opening your sky…" : mode === "register" ? "Create my chart" : "Open my dashboard"}<ArrowRight size={16} /></button>
       </form>

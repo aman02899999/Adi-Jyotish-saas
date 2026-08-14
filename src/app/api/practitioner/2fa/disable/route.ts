@@ -1,5 +1,5 @@
 import { db } from "@/lib/firestore";
-import { getCurrentPractitioner } from "@/lib/practitioner-auth";
+import { getCurrentPractitioner, revokePractitionerSession } from "@/lib/practitioner-auth";
 import { verifyTotpOrBackupCode } from "@/lib/two-factor";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 
@@ -28,5 +28,10 @@ export async function POST(request: Request) {
   await clearAuthFailures(throttle.keyHash);
 
   await ref.update({ totpEnabled: false, totpSecret: null, totpBackupCodes: null });
-  return Response.json({ ok: true });
+
+  // Turning off 2FA is exactly the moment a stolen-but-still-valid session becomes most
+  // dangerous — revoke every session (including this one) so anyone with a hijacked cookie,
+  // including the legitimate owner's other devices, has to sign back in.
+  await revokePractitionerSession();
+  return Response.json({ ok: true, sessionRevoked: true });
 }
