@@ -1,5 +1,6 @@
 import { DECISION_TYPES, decisionVaraNote, rankMuhurtaWindows, type DecisionType } from "@/lib/muhurat-concierge";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
 export const dynamic = "force-dynamic";
 
@@ -44,5 +45,6 @@ export async function POST(request: Request) {
   return Response.json({
     days,
     varaNote: decisionVaraNote(typedDecision),
+    referenceLocationLabel: REFERENCE_LOCATION_LABEL,
   }, { status: 200 });
 }

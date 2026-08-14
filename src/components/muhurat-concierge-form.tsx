@@ -25,7 +25,7 @@ type MuhurtaDay = {
   rahuKalaWindow: { start: string; end: string } | null;
 };
 
-type Result = { days: MuhurtaDay[]; varaNote: string };
+type Result = { days: MuhurtaDay[]; varaNote: string; referenceLocationLabel: string };
 
 const TIER_LABEL: Record<MuhurtaDay["tier"], string> = { excellent: "Excellent", good: "Good", workable: "Workable", avoid: "Avoid" };
 
@@ -80,6 +80,7 @@ export function MuhuratConciergeForm() {
       <div className="ask-answer">
         <div className="ask-answer__badge"><CalendarClock size={15} /> Best days found</div>
         <p className="timeline-intro">{result.varaNote}</p>
+        <p className="legal-note">Abhijit and Rahu Kaal clock times below are computed for {result.referenceLocationLabel} — sunrise/sunset shift by up to an hour across India, so treat these as a close estimate and confirm exact timing locally for a ceremony that depends on precise minutes.</p>
         <div className="muhurat-day-list">
           {result.days.map((day) => (
             <div key={day.date} className={`muhurat-day muhurat-day--${day.tier}`}>

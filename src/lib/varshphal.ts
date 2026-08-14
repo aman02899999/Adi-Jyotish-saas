@@ -2,6 +2,7 @@ import "server-only";
 
 import { computeGrahaPositions, GRAHA_LABELS, type GrahaKey, NAKSHATRAS, RASHIS, ascendantSiderealLongitude, formatDegree, siderealLongitudeOf } from "@/lib/astro-engine";
 import { PlaceNotFoundError, resolvePlaceToCoordinates } from "@/lib/geo";
+import { civilToUtc } from "@/lib/scheduling";
 
 export class VarshphalError extends Error {}
 export { PlaceNotFoundError };
@@ -50,12 +51,15 @@ export function buildVarshphalChart({ birthDate, birthTime, birthPlace, year }: 
   const [birthYear, birthMonth, birthDay] = birthDate.split("-").map(Number);
   if (!birthYear || !birthMonth || !birthDay) throw new VarshphalError("Your saved birth date looks invalid — please update your birth profile.");
 
-  // Natal Sun longitude anchors the search — computed from the actual birth moment, same as the
-  // core Kundli engine, so an approximate birth time still yields an accurate return (the Sun
-  // moves under 1° across an entire day, far inside the report's relevance).
-  const [hour, minute] = birthTime.split(":").map(Number);
-  const approxBirthUtc = new Date(Date.UTC(birthYear, birthMonth - 1, birthDay, hour ?? 12, minute ?? 0));
-  const natalSunLongitude = siderealLongitudeOf(approxBirthUtc, "sun");
+  // Natal Sun longitude anchors the search — computed from the actual birth moment (civil time
+  // converted through the birth place's real timezone, same as the core Kundli engine), not by
+  // treating the local clock time as if it were already UTC. The Sun moves under 1° across an
+  // entire day, so even a few hours of timezone error here shifts the search's seed only slightly
+  // — but the search converges on the Sun's *exact* longitude regardless, and it's the return
+  // instant (and therefore the return Lagna, which moves ~15°/hour) that inherits the same
+  // timezone error if the natal anchor itself is wrong.
+  const birthUtc = civilToUtc(birthDate, birthTime || "12:00", place.timezone);
+  const natalSunLongitude = siderealLongitudeOf(birthUtc, "sun");
 
   const returnMoment = findSolarReturnMoment(natalSunLongitude, birthMonth, birthDay, year);
   const positions = computeGrahaPositions(returnMoment);
