@@ -5,7 +5,6 @@ import {
   BookOpenText,
   BriefcaseBusiness,
   CalendarDays,
-  ChevronDown,
   CircleCheck,
   Coins,
   Gem,
@@ -17,7 +16,6 @@ import {
   Menu,
   MessageSquareText,
   NotebookPen,
-  Search,
   ShieldCheck,
   Sparkles,
   SunMedium,
@@ -29,6 +27,7 @@ import { BrandMark } from "@/components/brand-mark";
 import { FaqWidget } from "@/components/faq-widget";
 import { NotificationBell } from "@/components/notification-bell";
 import { ProfileMenu } from "@/components/profile-menu";
+import { QuickNavSearch } from "@/components/quick-nav-search";
 import { MEMBER_FAQ } from "@/lib/faq-data";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getMemberUnreadCount } from "@/lib/messaging";
@@ -87,7 +86,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
             <p className={groupIndex > 0 ? "app-nav__lower" : undefined}>{navGroup.group}</p>
             {navGroup.items.map(({ label, icon: Icon, href }) => {
               const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions") || (active === "Journal" && label === "Astro Journal");
-              return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span>{label === "Connections" && <ChevronDown size={13} />}</Link>;
+              return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span></Link>;
             })}
           </div>
         ))}
@@ -104,6 +103,12 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
   );
 }
 
+const searchItems = [
+  ...navGroups.flatMap((group) => group.items.map(({ label, href }) => ({ label, href }))),
+  { label: "Birth profile", href: "/onboarding" },
+  { label: "Security", href: "/dashboard/security" },
+];
+
 export async function MemberAppShell({ member, active, children }: { member: MemberIdentity; active: ActiveSection; children: ReactNode }) {
   const unreadCount = await getMemberUnreadCount(member.id);
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -119,7 +124,7 @@ export async function MemberAppShell({ member, active, children }: { member: Mem
           <header className="app-topbar">
             <nav><Link className={active === "Dashboard" ? "active" : ""} href="/dashboard">Dashboard</Link><Link className={active === "Consultations" ? "active" : ""} href="/dashboard/consultations">My consultations</Link><Link className={active === "AiReadings" ? "active" : ""} href="/dashboard/ai-readings">Live Answers</Link><Link className={active === "GemOrders" ? "active" : ""} href="/dashboard/gemstone-orders">Gem orders</Link><Link className={active === "Messages" ? "active" : ""} href="/dashboard/messages">Inbox</Link><Link className={active === "Wallet" ? "active" : ""} href="/dashboard/wallet">Wallet</Link><Link className={active === "Billing" ? "active" : ""} href="/dashboard/billing">Billing</Link><Link className={active === "Referrals" ? "active" : ""} href="/dashboard/referrals">Invite & earn</Link></nav>
             <div className="topbar-tools">
-              <label><Search size={16} /><input aria-label="Search dashboard" placeholder="Search" /></label>
+              <QuickNavSearch items={searchItems} placeholder="Search" ariaLabel="Search dashboard" />
               <Link className="notification-button" href="/dashboard/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <span />}</Link>
               <NotificationBell apiBase="/api/member/notifications" />
               <ProfileMenu initials={initials} name={member.name} subtitle={`${member.plan} plan`} logoutAction="/api/member/logout" redirectTo="/account" />

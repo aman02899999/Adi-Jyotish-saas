@@ -106,12 +106,12 @@ export function AdminRoleManager({ initialRoles, allPermissions }: { initialRole
         ))}
       </div>
 
-      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
+      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
 
       {creating && (
         <div className="modal-backdrop" onMouseDown={() => setCreating(false)}>
           <section className="admin-modal" onMouseDown={(event) => event.stopPropagation()}>
-            <div className="modal-header"><div><p>Custom role</p><h2>New role</h2></div><button onClick={() => setCreating(false)}><X size={20} /></button></div>
+            <div className="modal-header"><div><p>Custom role</p><h2>New role</h2></div><button onClick={() => setCreating(false)} aria-label="Close"><X size={20} /></button></div>
             <form onSubmit={createRole}>
               <label className="field field--full"><span>Role name</span><input required value={draft.name} onChange={(event) => setDraft({ ...draft, name: event.target.value })} placeholder="e.g. Finance" /></label>
               <label className="field field--full"><span>Slug</span><input required value={draft.slug} onChange={(event) => setDraft({ ...draft, slug: event.target.value.toLowerCase().replace(/[^a-z0-9_]/g, "") })} placeholder="e.g. finance" /><small>Lowercase letters, numbers, underscores only.</small></label>

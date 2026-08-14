@@ -91,9 +91,9 @@ export function AdminMembers({ initialMembers }: { initialMembers: AdminMember[]
         {!filtered.length&&<div className="empty-state"><Users size={25}/><h3>No members found</h3><p>Try a different search or filter.</p></div>}
       </div>
     </section>
-    {notice&&<div className="toast" role="status"><Check size={16}/>{notice}<button onClick={()=>setNotice("")}><X size={14}/></button></div>}
+    {notice&&<div className="toast" role="status"><Check size={16}/>{notice}<button onClick={()=>setNotice("")} aria-label="Dismiss"><X size={14}/></button></div>}
     {open&&<div className="modal-backdrop" onMouseDown={()=>setOpen(false)}><section className="admin-modal member-modal" role="dialog" aria-modal="true" onMouseDown={e=>e.stopPropagation()}>
-      <div className="modal-header"><div><p>{editing?"Customer relationship":"New customer account"}</p><h2>{editing?"Edit member":"Add member"}</h2></div><button onClick={()=>setOpen(false)}><X size={20}/></button></div>
+      <div className="modal-header"><div><p>{editing?"Customer relationship":"New customer account"}</p><h2>{editing?"Edit member":"Add member"}</h2></div><button onClick={()=>setOpen(false)} aria-label="Close"><X size={20}/></button></div>
       <form onSubmit={save}>
         <label className="field"><span>Full name</span><input required minLength={2} value={form.name} onChange={e=>setForm({...form,name:e.target.value})} placeholder="Member name"/></label>
         <label className="field"><span>Email address</span><div className="input-prefix icon-prefix"><Mail size={14}/><input required type="email" value={form.email} onChange={e=>setForm({...form,email:e.target.value})} placeholder="member@example.com"/></div></label>

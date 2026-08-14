@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import { CloudRain, Flame, LoaderCircle, Meh, Smile, Sparkles } from "lucide-react";
+import { CloudRain, Flame, LoaderCircle, Meh, NotebookPen, Smile, Sparkles } from "lucide-react";
 
 const MOODS = ["great", "good", "neutral", "low", "stressed"] as const;
 type Mood = (typeof MOODS)[number];
@@ -80,7 +80,7 @@ export function JournalWidget({ initialEntries, initialInsight }: { initialEntri
         </div>
       )}
 
-      {entries.length > 0 && (
+      {entries.length > 0 ? (
         <div className="journal-timeline">
           {entries.slice(0, 10).map((entry) => {
             const Icon = MOOD_ICONS[entry.mood];
@@ -96,6 +96,8 @@ export function JournalWidget({ initialEntries, initialInsight }: { initialEntri
             );
           })}
         </div>
+      ) : (
+        <div className="consultation-empty"><NotebookPen size={26} /><h3>No entries yet</h3><p>Log your first mood above to start your timeline — patterns show up after a few entries.</p></div>
       )}
     </div>
   );

@@ -95,7 +95,7 @@ export function PractitionerSchedule({ initialRules, initialTimeOff }: { initial
       </div>
 
       {error && <p className="admin-auth-error" role="alert">{error}</p>}
-      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
+      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
     </>
   );
 }

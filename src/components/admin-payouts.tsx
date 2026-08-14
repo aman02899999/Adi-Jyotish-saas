@@ -137,7 +137,7 @@ export function AdminPayouts({ initialPayouts }: { initialPayouts: AdminPayoutRo
         </div>
       </section>
 
-      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
+      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
     </>
   );
 }
