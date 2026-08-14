@@ -12,6 +12,7 @@ import {
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
 import { getAnalytics, parseReportRange } from "@/lib/analytics";
+import { getExperimentReport, listExperimentKeys } from "@/lib/experiments";
 
 export const dynamic = "force-dynamic";
 
@@ -21,7 +22,7 @@ export default async function AdminInsightsPage({ searchParams }: { searchParams
   await requireAdminPage("insights");
   const query = await searchParams;
   const range = parseReportRange(query.range);
-  const analytics = await getAnalytics(range);
+  const [analytics, experimentReports] = await Promise.all([getAnalytics(range), Promise.all(listExperimentKeys().map((key) => getExperimentReport(key)))]);
   const { metrics } = analytics;
   const maxRevenue = Math.max(1,...analytics.timeline.map(point=>point.revenue));
   const maxBookings = Math.max(1,...analytics.timeline.map(point=>point.bookings));
@@ -69,6 +70,25 @@ export default async function AdminInsightsPage({ searchParams }: { searchParams
         <div className="plan-highlight"><span>{metrics.onboardingRate}%</span><p><strong>Natal onboarding complete</strong><small>Members with a calculation-ready birth profile.</small></p></div>
       </section>
     </div>
+    <section className="insight-card-large experiment-report">
+      <header><div><p>Experiments</p><h2>A/B tests</h2></div></header>
+      {experimentReports.map((report) => (
+        <div className="experiment-report__block" key={report.key}>
+          <p className="experiment-report__desc">{report.description}</p>
+          <div className="experiment-report__variants">
+            {report.variants.map((variant) => (
+              <div key={variant.variant}>
+                <strong>{variant.variant}</strong>
+                <span>{variant.impressions} impressions · {variant.conversions} conversions</span>
+                <em>{(variant.conversionRate * 100).toFixed(1)}%</em>
+              </div>
+            ))}
+          </div>
+          <p className="experiment-report__recommendation">{report.recommendation}</p>
+        </div>
+      ))}
+    </section>
+
     <p className="report-generated">Generated {analytics.generatedAt.toLocaleString("en",{month:"long",day:"numeric",hour:"numeric",minute:"2-digit"})} · Payment revenue includes bookings marked paid.</p>
   </div></AdminShell>;
 }

@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
+import { getVariant, recordExperimentConversion } from "@/lib/experiments";
 
 export const dynamic = "force-dynamic";
 
@@ -26,6 +27,13 @@ export async function PUT(request: Request) {
     onboardingComplete: true,
     updatedAt: FieldValue.serverTimestamp(),
   });
+
+  // Only the transition into onboardingComplete counts as a conversion — a later edit to an
+  // already-complete profile isn't a new "completed onboarding" event.
+  if (!member.onboardingComplete) {
+    const ctaVariant = getVariant("dashboard-onboarding-cta", member.id);
+    recordExperimentConversion("dashboard-onboarding-cta", ctaVariant).catch(() => {});
+  }
 
   return Response.json({ ok: true, member: { id: member.id } });
 }

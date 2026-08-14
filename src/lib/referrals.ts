@@ -3,6 +3,9 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { creditWalletBonus } from "@/lib/wallet";
+import { createNotification } from "@/lib/notifications";
+
+const REFERRAL_MILESTONES = [5, 10, 25, 50, 100];
 
 // Placeholder reward amounts (INR) — easy to retune, not yet exposed in the admin UI.
 export const REFERRAL_REFERRER_REWARD = 150;
@@ -114,6 +117,18 @@ export async function processReferralReward(memberId: string, rechargeAmount: nu
       referenceType: "referral",
       referenceId: `referral_referrer_${memberId}`,
     });
+
+    const newRewardedTotal = rewardedCountSnap.data().count + 1;
+    if (REFERRAL_MILESTONES.includes(newRewardedTotal)) {
+      await createNotification({
+        recipientType: "member",
+        recipientId: referral.referrerId,
+        type: "referral_milestone",
+        title: `You've referred ${newRewardedTotal} friends!`,
+        body: `That's ${newRewardedTotal} successful referrals and counting — thank you for spreading the word. Keep inviting for more wallet credit.`,
+        link: "/dashboard/referrals",
+      }).catch((error) => console.error("Referral milestone notification failed", error));
+    }
   }
 
   await referralRef.update({ status: referrerCapped ? "capped" : "rewarded", rewardedAt: FieldValue.serverTimestamp() });

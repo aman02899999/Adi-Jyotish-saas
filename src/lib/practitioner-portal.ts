@@ -7,6 +7,7 @@ import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/k
 import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
+import { scanForContactInfo } from "@/lib/content-moderation";
 
 // A request at or below this amount, from a practitioner with at least one prior *paid* payout
 // and zero rejections ever, is auto-approved instead of sitting in the "requested" queue —
@@ -250,6 +251,23 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
   const ref = db.collection("practitioners").doc(practitionerId);
   await ref.update(patch);
   const updated = await ref.get();
+
+  if (typeof patch.bio === "string") {
+    const contactFlag = scanForContactInfo(patch.bio);
+    if (contactFlag) {
+      const bioForFlag = updated.data() as { name?: string } | undefined;
+      getAdminIdsWithPermission("practitioners").then(async (adminIds) => {
+        if (!adminIds.length) return;
+        await notifyAdmins(adminIds, {
+          type: "bio_contact_leak",
+          title: `Bio may contain ${contactFlag}`,
+          body: `${bioForFlag?.name ?? "A practitioner"}'s bio looks like it contains ${contactFlag} — worth a look before it stays visible on their public profile.`,
+          link: "/admin/practitioners",
+        });
+      }).catch((error) => console.error("Bio contact-leak flag failed", error));
+    }
+  }
+
   return { id: updated.id, ...updated.data() };
 }
 

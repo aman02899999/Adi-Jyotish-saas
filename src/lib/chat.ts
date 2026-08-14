@@ -16,6 +16,22 @@ export class ChatSessionConflictError extends Error {}
 export class ChatSessionNotFoundError extends Error {}
 export class ChatSessionEndedError extends Error {}
 
+/** When starting a chat fails because the requested practitioner is offline, this gives the
+ * member somewhere to go next instead of a dead-end error — a lightweight "smart suggestion"
+ * rather than full auto-routing, since silently starting a session with a different practitioner
+ * the member didn't choose would be presumptuous. */
+export async function getOnlinePractitionerAlternatives(excludePractitionerId: string, limit = 4) {
+  const snap = await db.collection("practitioners").where("active", "==", true).where("online", "==", true).limit(limit + 1).get();
+  return snap.docs
+    .filter((doc) => doc.id !== excludePractitionerId)
+    .filter((doc) => !(doc.data() as { isDemoAccount?: boolean }).isDemoAccount)
+    .slice(0, limit)
+    .map((doc) => {
+      const data = doc.data() as { name: string; slug: string; title: string; chatRatePerMinute: number };
+      return { id: doc.id, name: data.name, slug: data.slug, title: data.title, chatRatePerMinute: data.chatRatePerMinute };
+    });
+}
+
 export type ChatSession = {
   id: string;
   memberId: string;

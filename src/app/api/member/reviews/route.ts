@@ -3,6 +3,9 @@ import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { bookingFromDoc } from "@/app/api/bookings/route";
+import { scanForContactInfo } from "@/lib/content-moderation";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { notifyAdmins } from "@/lib/notifications";
 
 export async function POST(request:Request){
   const member=await getCurrentMember();
@@ -43,5 +46,19 @@ export async function POST(request:Request){
   } catch {
     return Response.json({error:"This consultation has already been reviewed."},{status:409});
   }
+
+  const contactFlag = scanForContactInfo(text);
+  if (contactFlag) {
+    getAdminIdsWithPermission("reviews").then(async (adminIds) => {
+      if (!adminIds.length) return;
+      await notifyAdmins(adminIds, {
+        type: "review_contact_leak",
+        title: `Review may contain ${contactFlag}`,
+        body: `${member.name}'s review on a practitioner profile looks like it contains ${contactFlag} — worth a look before it stays visible.`,
+        link: "/admin/reviews",
+      });
+    }).catch((error) => console.error("Review contact-leak flag failed", error));
+  }
+
   return Response.json({ id: ref.id, ...doc, createdAt: new Date(), updatedAt: new Date() },{status:201});
 }

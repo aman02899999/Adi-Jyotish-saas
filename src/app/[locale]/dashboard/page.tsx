@@ -23,6 +23,9 @@ import { getCosmicWeather } from "@/lib/transit-alerts";
 import { BADGE_MILESTONES, recordDailyVisit } from "@/lib/streaks";
 import { buildHouseGrid, buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
 import { formatDegree, NAKSHATRAS } from "@/lib/astro-engine";
+import { getVariant, recordExperimentImpression } from "@/lib/experiments";
+
+const ONBOARDING_CTA_LABEL: Record<string, string> = { control: "Complete birth profile", "get-my-chart": "Get my free chart" };
 
 export const dynamic = "force-dynamic";
 
@@ -69,18 +72,22 @@ export default async function DashboardPage() {
         <div className="today-pill"><SunMedium size={17} /><span><small>{location}</small>{today}</span></div>
       </div>
 
-      {!kundli && (
-        <section className="dashboard-onboarding">
-          <p className="eyebrow"><span /> Getting started</p>
-          <h2>Three steps to your first reading</h2>
-          <div className="dashboard-onboarding__steps">
-            <div><b>1</b><div><UserRound size={16} /><strong>Complete your birth profile</strong><small>Your exact date, time, and place of birth — this powers every chart on this page.</small></div></div>
-            <div><b>2</b><div><ScrollText size={16} /><strong>See your real birth chart</strong><small>Your Kundli, Cosmic Weather, and lucky numbers appear automatically once your profile is set.</small></div></div>
-            <div><b>3</b><div><MessageCircle size={16} /><strong>Ask a question or book a reading</strong><small>Get a live answer for free, or talk to a verified astrologer.</small></div></div>
-          </div>
-          <Link href="/onboarding" className="button">Complete birth profile <ArrowUpRight size={15} /></Link>
-        </section>
-      )}
+      {!kundli && (() => {
+        const ctaVariant = getVariant("dashboard-onboarding-cta", member.id);
+        recordExperimentImpression("dashboard-onboarding-cta", ctaVariant).catch(() => {});
+        return (
+          <section className="dashboard-onboarding">
+            <p className="eyebrow"><span /> Getting started</p>
+            <h2>Three steps to your first reading</h2>
+            <div className="dashboard-onboarding__steps">
+              <div><b>1</b><div><UserRound size={16} /><strong>Complete your birth profile</strong><small>Your exact date, time, and place of birth — this powers every chart on this page.</small></div></div>
+              <div><b>2</b><div><ScrollText size={16} /><strong>See your real birth chart</strong><small>Your Kundli, Cosmic Weather, and lucky numbers appear automatically once your profile is set.</small></div></div>
+              <div><b>3</b><div><MessageCircle size={16} /><strong>Ask a question or book a reading</strong><small>Get a live answer for free, or talk to a verified astrologer.</small></div></div>
+            </div>
+            <Link href="/onboarding" className="button">{ONBOARDING_CTA_LABEL[ctaVariant] ?? ONBOARDING_CTA_LABEL.control} <ArrowUpRight size={15} /></Link>
+          </section>
+        );
+      })()}
 
       <div className="cosmic-grid">
         <article className="glass-card kundli-card">

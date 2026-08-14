@@ -3,7 +3,19 @@ import { retryUnansweredReadings, sendPendingReadingReminders } from "@/lib/ai-r
 import { expireStaleChatSessions } from "@/lib/chat";
 import { expireStalePendingOrders, sendLowStockAlerts } from "@/lib/gemstone-orders";
 import { sendPendingReviewRequests } from "@/lib/marketplace";
-import { sendWinBackEmails, syncFestivalPromoBanner, sendPractitionerWeeklyDigest, flagReviewVelocityAbuse } from "@/lib/lifecycle-automation";
+import {
+  sendWinBackEmails,
+  syncFestivalPromoBanner,
+  sendPractitionerWeeklyDigest,
+  flagReviewVelocityAbuse,
+  sendRenewalReminders,
+  flagEarlyChurnRisk,
+  sendOnboardingDrip,
+  sendNotificationDigest,
+  flagPractitionerCancellationSpikes,
+  sendMonthlyGstSummary,
+} from "@/lib/lifecycle-automation";
+import { sendGiftCardExpiryReminders } from "@/lib/gift-cards";
 
 export const dynamic = "force-dynamic";
 
@@ -12,9 +24,9 @@ export const dynamic = "force-dynamic";
  * for hours on a quiet site. Meant to be called on a schedule (see .github/workflows/cron.yml)
  * rather than by end users, so it's gated by a shared secret instead of a user session.
  *
- * Daily/weekly-cadence sweeps (win-back, festival banner, practitioner digest, low-stock alerts)
- * ride along on this same 15-minute trigger rather than needing their own workflow + secrets —
- * each gates itself internally via shouldRunNow() so it only does real work on its own schedule. */
+ * Daily/weekly/monthly-cadence sweeps ride along on this same 15-minute trigger rather than
+ * needing their own workflow + secrets — each gates itself internally via shouldRunNow() so it
+ * only does real work on its own schedule. */
 function isAuthorized(request: Request) {
   const secret = process.env.CRON_SECRET;
   if (!secret) return false;
@@ -39,6 +51,13 @@ export async function POST(request: Request) {
     festivalBannerResult,
     practitionerDigestResult,
     reviewVelocityResult,
+    renewalReminderResult,
+    churnRiskResult,
+    onboardingDripResult,
+    notificationDigestResult,
+    cancellationSpikeResult,
+    gstSummaryResult,
+    giftCardExpiryResult,
   ] = await Promise.allSettled([
     expireStaleChatSessions(),
     expireStalePendingOrders(),
@@ -50,20 +69,36 @@ export async function POST(request: Request) {
     syncFestivalPromoBanner(),
     sendPractitionerWeeklyDigest(),
     flagReviewVelocityAbuse(),
+    sendRenewalReminders(),
+    flagEarlyChurnRisk(),
+    sendOnboardingDrip(),
+    sendNotificationDigest(),
+    flagPractitionerCancellationSpikes(),
+    sendMonthlyGstSummary(),
+    sendGiftCardExpiryReminders(),
   ]);
+
+  const asResult = (settled: PromiseSettledResult<unknown>) => (settled.status === "fulfilled" ? settled.value : String(settled.reason));
 
   return Response.json({
     ok: true,
     ranAt: new Date().toISOString(),
     chatSessions: chatResult.status === "fulfilled" ? "ok" : String(chatResult.reason),
     pendingOrders: ordersResult.status === "fulfilled" ? "ok" : String(ordersResult.reason),
-    readingReminders: readingRemindersResult.status === "fulfilled" ? readingRemindersResult.value : String(readingRemindersResult.reason),
-    unansweredReadings: unansweredReadingsResult.status === "fulfilled" ? unansweredReadingsResult.value : String(unansweredReadingsResult.reason),
-    reviewRequests: reviewRequestsResult.status === "fulfilled" ? reviewRequestsResult.value : String(reviewRequestsResult.reason),
-    lowStockAlerts: lowStockResult.status === "fulfilled" ? lowStockResult.value : String(lowStockResult.reason),
-    winBack: winBackResult.status === "fulfilled" ? winBackResult.value : String(winBackResult.reason),
-    festivalBanner: festivalBannerResult.status === "fulfilled" ? festivalBannerResult.value : String(festivalBannerResult.reason),
-    practitionerDigest: practitionerDigestResult.status === "fulfilled" ? practitionerDigestResult.value : String(practitionerDigestResult.reason),
-    reviewVelocity: reviewVelocityResult.status === "fulfilled" ? reviewVelocityResult.value : String(reviewVelocityResult.reason),
+    readingReminders: asResult(readingRemindersResult),
+    unansweredReadings: asResult(unansweredReadingsResult),
+    reviewRequests: asResult(reviewRequestsResult),
+    lowStockAlerts: asResult(lowStockResult),
+    winBack: asResult(winBackResult),
+    festivalBanner: asResult(festivalBannerResult),
+    practitionerDigest: asResult(practitionerDigestResult),
+    reviewVelocity: asResult(reviewVelocityResult),
+    renewalReminders: asResult(renewalReminderResult),
+    churnRisk: asResult(churnRiskResult),
+    onboardingDrip: asResult(onboardingDripResult),
+    notificationDigest: asResult(notificationDigestResult),
+    cancellationSpikes: asResult(cancellationSpikeResult),
+    gstSummary: asResult(gstSummaryResult),
+    giftCardExpiry: asResult(giftCardExpiryResult),
   });
 }
