@@ -74,7 +74,8 @@ export default async function AdminSettingsPage() {
         />
         <AdminPromoBanner initial={{ enabled: promoBanner.enabled, message: promoBanner.message, ctaLabel: promoBanner.ctaLabel, ctaHref: promoBanner.ctaHref }} />
         <TwoFactorSettings apiPrefix="/api/admin/2fa" initialEnabled={totpEnabled} description="Two-factor authentication is protecting your sign-in." />
-        <AdminDemoAccounts />
+        {/* Mints Owner-role admin logins — restricted to the same "roles" permission the API route requires, not just "settings". */}
+        {canManageRoles && <AdminDemoAccounts />}
       </div>
     </AdminShell>
   );

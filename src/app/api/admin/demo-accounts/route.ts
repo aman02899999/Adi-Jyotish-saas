@@ -30,7 +30,12 @@ const MEMBER_SEEDS = [1, 2, 3].map((n) => ({ email: `demo.member${n}@adijyotishg
 export async function POST() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
-  if (!hasAdminPermission(admin, "settings")) return Response.json({ error: "Settings permission required." }, { status: 403 });
+  // This mints (or resets) Owner-role admin accounts and hands back their password in cleartext —
+  // gating it on "settings" let any admin with that one low-sensitivity permission (e.g. a
+  // "manager" role meant for catalogue/reporting work) create themselves a full-access Owner
+  // login, sidestepping the self-role-escalation guards in admin-roles.ts entirely. "roles" is the
+  // narrowest permission whose sensitivity actually matches "can create an Owner account."
+  if (!hasAdminPermission(admin, "roles")) return Response.json({ error: "Roles & permissions access required." }, { status: 403 });
 
   const password = `Demo${randomBytes(9).toString("base64url")}!1`;
   const now = FieldValue.serverTimestamp();

@@ -13,7 +13,12 @@ const BATCH_SIZE = 450;
 export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
-  if (!hasAdminPermission(admin, "reviews")) return Response.json({ error: "Reviews permission required." }, { status: 403 });
+  // This fabricates a practitioner's public review history, not just moderates existing ones —
+  // "reviews" alone (meant for moderating real submissions) lets any admin holding it manufacture
+  // a practitioner's entire public reputation. Require "practitioners" too.
+  if (!hasAdminPermission(admin, "reviews") || !hasAdminPermission(admin, "practitioners")) {
+    return Response.json({ error: "Reviews and practitioners permission required." }, { status: 403 });
+  }
 
   const body = (await request.json()) as { practitionerId?: string; practitionerName?: string; isSenior?: boolean };
   const { practitionerId, practitionerName } = body;
