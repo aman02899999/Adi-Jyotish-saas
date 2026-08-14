@@ -191,7 +191,7 @@ export async function sendPendingReviewRequests() {
     await doc.ref.update({ reviewRequestedAt: FieldValue.serverTimestamp() });
     sent++;
   }
-  return { checked: snap.size, sent };
+  return { checked: snap.docs.length, sent };
 }
 
 export async function getAdminReviews() {

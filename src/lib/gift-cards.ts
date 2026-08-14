@@ -48,8 +48,7 @@ function giftCardFromSnap(snap: FirebaseFirestore.DocumentSnapshot): GiftCard {
 export async function createGiftCard({ buyerId, buyerName, amount, currency, recipientName, message, razorpayPaymentId }: {
   buyerId: string; buyerName: string; amount: number; currency: string; recipientName: string; message: string; razorpayPaymentId: string;
 }): Promise<GiftCard> {
-  const existing = await db.collection("giftCards").where("razorpayPaymentId", "==", razorpayPaymentId).limit(1).get();
-  if (!existing.empty) return giftCardFromSnap(existing.docs[0]);
+  const paymentIndexRef = db.collection("giftCardPaymentIndex").doc(razorpayPaymentId);
 
   let code = generateCode();
   for (let attempt = 0; attempt < 5; attempt++) {
@@ -59,18 +58,33 @@ export async function createGiftCard({ buyerId, buyerName, amount, currency, rec
   }
 
   const expiresAt = new Date(Date.now() + GIFT_CARD_VALIDITY_MS);
-  const doc = {
-    buyerId, buyerName, amount, currency,
-    recipientName: recipientName.trim().slice(0, 120) || "a friend",
-    message: message.trim().slice(0, 280),
-    status: "unclaimed" as const,
-    redeemedBy: null,
-    razorpayPaymentId,
-    expiresAt,
-    createdAt: FieldValue.serverTimestamp(),
-  };
-  await db.collection("giftCards").doc(code).set(doc);
-  return { code, buyerId, buyerName, amount, currency, recipientName: doc.recipientName, message: doc.message, status: "unclaimed", redeemedBy: null, expiresAt };
+  const recipientClean = recipientName.trim().slice(0, 120) || "a friend";
+  const messageClean = message.trim().slice(0, 280);
+
+  // The payment-id index doc is read and written inside the same transaction as the gift card
+  // itself, so two concurrent calls for the same payment (e.g. a redelivered webhook) can't both
+  // pass the "does a gift card already exist for this payment" check before either writes.
+  const resolvedCode = await db.runTransaction(async (tx) => {
+    const indexSnap = await tx.get(paymentIndexRef);
+    if (indexSnap.exists) return (indexSnap.data() as { code: string }).code;
+
+    tx.set(paymentIndexRef, { code, createdAt: FieldValue.serverTimestamp() });
+    tx.set(db.collection("giftCards").doc(code), {
+      buyerId, buyerName, amount, currency,
+      recipientName: recipientClean,
+      message: messageClean,
+      status: "unclaimed" as const,
+      redeemedBy: null,
+      razorpayPaymentId,
+      expiresAt,
+      createdAt: FieldValue.serverTimestamp(),
+    });
+    return code;
+  });
+
+  const created = await getGiftCard(resolvedCode);
+  if (!created) throw new Error("Gift card creation failed unexpectedly.");
+  return created;
 }
 
 export async function getGiftCard(code: string): Promise<GiftCard | null> {
@@ -150,5 +164,5 @@ export async function sendGiftCardExpiryReminders() {
     await doc.ref.update({ expiryReminderSentAt: FieldValue.serverTimestamp() });
     sent++;
   }
-  return { checked: snap.size, sent };
+  return { checked: snap.docs.length, sent };
 }

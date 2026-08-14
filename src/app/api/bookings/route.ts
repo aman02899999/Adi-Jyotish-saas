@@ -22,6 +22,7 @@ type BookingPayload = {
   serviceId?: string;
   practitionerId?: string;
   bookingDate?: string;
+  clientName?: string;
   clientPhone?: string;
   birthDate?: string;
   birthTime?: string;
@@ -112,7 +113,12 @@ export async function POST(request: Request) {
   const serviceId = body.serviceId?.trim() ?? "";
   const practitionerId = body.practitionerId?.trim() ?? "";
   const bookingDate = body.bookingDate?.trim() ?? "";
-  const clientName = member.name;
+  // The booking-for-family-member picker (booking-flow.tsx) submits the family member's name here
+  // — falling back to the account owner's name keeps this backward compatible for the "myself"
+  // case and any older client that never sends the field. The account's own email is always used
+  // regardless of who the reading is for, since the booking still belongs to the paying/logged-in
+  // member (confirmation, discount eligibility, dashboard listing all key off it).
+  const clientName = clean(body.clientName, 200) || member.name;
   const clientEmail = member.email;
   const clientPhone = clean(body.clientPhone, 40);
   const birthDate = clean(body.birthDate, 10);

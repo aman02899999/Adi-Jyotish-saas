@@ -32,7 +32,7 @@ export async function PUT(request: Request) {
   // already-complete profile isn't a new "completed onboarding" event.
   if (!member.onboardingComplete) {
     const ctaVariant = getVariant("dashboard-onboarding-cta", member.id);
-    recordExperimentConversion("dashboard-onboarding-cta", ctaVariant).catch(() => {});
+    await recordExperimentConversion("dashboard-onboarding-cta", ctaVariant).catch((error) => console.error("Experiment conversion tracking failed", error));
   }
 
   return Response.json({ ok: true, member: { id: member.id } });

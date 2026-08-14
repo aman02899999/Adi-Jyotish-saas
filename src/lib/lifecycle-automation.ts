@@ -226,7 +226,7 @@ export async function sendRenewalReminders() {
     await doc.ref.update({ renewalReminderSentAt: FieldValue.serverTimestamp() });
     sent++;
   }
-  return { checked: snap.size, sent };
+  return { checked: snap.docs.length, sent };
 }
 
 const CHURN_PRIOR_WINDOW_MS = 120 * 24 * 60 * 60 * 1000;

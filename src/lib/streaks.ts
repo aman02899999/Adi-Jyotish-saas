@@ -25,8 +25,13 @@ export type StreakStatus = {
   justEarned: BadgeKey | null;
 };
 
+// Streak days are calendar days for an India-based audience, not UTC days — without the IST
+// offset, a visit between midnight and 5:30am IST reads as the previous UTC date, which can
+// wrongly reset or extend a streak for anyone visiting in that window.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 function daysBetween(earlierIso: string, laterIso: string) {

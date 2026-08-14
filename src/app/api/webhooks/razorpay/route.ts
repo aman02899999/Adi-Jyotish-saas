@@ -19,10 +19,20 @@ import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 // transition worth interrupting them for instead of just updating a record silently.
 const DUNNING_STATUSES = new Set(["halted", "paused"]);
 
+// Razorpay retries webhook delivery until it gets a 2xx, so the same "halted"/"paused" event can
+// arrive more than once for one dunning episode — guard on a per-member flag (cleared once the
+// subscription becomes active again) instead of relying on webhook delivery being exactly-once.
+const DUNNING_NOTICE_COOLDOWN_MS = 20 * 60 * 60 * 1000;
+
 async function sendDunningNotice(memberId: string, planName: string) {
-  const memberSnap = await db.collection("members").doc(memberId).get();
-  const member = memberSnap.data() as { name?: string; email?: string } | undefined;
+  const memberRef = db.collection("members").doc(memberId);
+  const memberSnap = await memberRef.get();
+  const member = memberSnap.data() as { name?: string; email?: string; dunningNoticeSentAt?: FirebaseFirestore.Timestamp } | undefined;
   if (!member?.email) return;
+
+  const lastSentMs = member.dunningNoticeSentAt?.toMillis() ?? 0;
+  if (Date.now() - lastSentMs < DUNNING_NOTICE_COOLDOWN_MS) return;
+  await memberRef.update({ dunningNoticeSentAt: FieldValue.serverTimestamp() });
 
   const billingUrl = new URL("/dashboard/billing", getSiteUrl()).toString();
   await createNotification({
@@ -285,6 +295,9 @@ async function handleSubscriptionCharged(subscription?: RazorpayWebhookSubscript
     status: "active",
     currentPeriodStart: periodStart,
     currentPeriodEnd: periodEnd,
+    // A successful renewal charge starts a fresh billing period, so the reminder for the
+    // period that just ended needs to be able to fire again ahead of the next one.
+    renewalReminderSentAt: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 

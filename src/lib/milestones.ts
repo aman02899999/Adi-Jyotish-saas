@@ -7,6 +7,10 @@ import { notifyAdmins } from "@/lib/notifications";
 
 const BOOKING_MILESTONES = [100, 250, 500, 1000, 2500, 5000, 10000];
 
+function isAlreadyExists(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
+}
+
 export type Milestone = { id: string; type: "bookings"; value: number; achievedAt: Date };
 
 /** Called after a booking transitions to "completed" (see /api/bookings/[id]). Recomputes the
@@ -25,8 +29,9 @@ export async function checkBookingCompletionMilestone() {
   const ref = db.collection("milestones").doc(id);
   try {
     await ref.create({ type: "bookings", value: total, achievedAt: FieldValue.serverTimestamp() });
-  } catch {
-    return null;
+  } catch (error) {
+    if (isAlreadyExists(error)) return null;
+    throw error;
   }
 
   const adminIds = await getAdminIdsWithPermission("settings");
