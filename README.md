@@ -2,7 +2,8 @@
 
 A premium Vedic astrology platform: a verified practitioner marketplace with instant wallet-metered
 chat, scheduled bookings, a suite of deterministic astrology tools (Kundli, matching, Panchang,
-numerology, horoscopes), AI-assisted readings (palm, tarot, face, Vastu, Lal Kitab), and a certified
+numerology, horoscopes, Muhurat Concierge, Varshphal annual reports), AI-assisted readings (palm,
+tarot, face, Vastu, Lal Kitab, plus a roster of free-form AI persona chats at `/ai`), and a certified
 gemstone store — built on Next.js and Firebase.
 
 [![CI](https://github.com/aman02899999/Adi-Jyotish-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/aman02899999/Adi-Jyotish-saas/actions/workflows/ci.yml)
@@ -59,8 +60,10 @@ To do the same for `npm run dev`, set `NEXT_PUBLIC_USE_EMULATOR=true` and start
 (typecheck, lint, unit tests, build), `e2e` (the full Playwright suite against the emulator), and
 `lighthouse` (a non-blocking performance/accessibility/best-practices/SEO budget via Lighthouse CI —
 see `lighthouserc.js`). `.github/workflows/cron.yml` runs scheduled housekeeping (expiring stale
-wallet holds and abandoned gemstone orders); `.github/workflows/firestore-deploy.yml` deploys
-`firestore.rules`/`firestore.indexes.json` on changes to either file.
+wallet holds and abandoned gemstone orders) plus a synthetic uptime check against the site's key
+routes (`/`, `/pricing`, `/book`, `/astrologers`); `.github/workflows/firestore-deploy.yml` deploys
+`firestore.rules`/`firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml`
+runs a daily Firestore export to Cloud Storage.
 
 ## Project structure
 
