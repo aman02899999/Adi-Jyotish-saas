@@ -98,7 +98,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Ask Shree Santram Shashtri · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },

@@ -83,7 +83,7 @@ export function VastuReadingForm({ member, price, currency, onlinePaymentsAvaila
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Vastu Shastri Ramesh Chaturvedi · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },

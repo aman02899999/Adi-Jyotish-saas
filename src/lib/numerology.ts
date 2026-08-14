@@ -25,6 +25,21 @@ export function computeDestinyNumber(name: string) {
   return reduceNumber(sum || 1);
 }
 
+/** The numerology "theme of this calendar year" number — birth month + birth day + the current
+ * year, reduced the same way as Life Path. Used for the dashboard's "Focus" figure so it's an
+ * actual per-member, per-year computation rather than a static placeholder. */
+export function computePersonalYearNumber(birthDate: string, referenceDate: Date = new Date()) {
+  const [, month, day] = birthDate.split("-");
+  const digits = `${month}${day}${referenceDate.getFullYear()}`.replace(/\D/g, "");
+  const sum = digits.split("").reduce((total, digit) => total + Number(digit), 0);
+  return reduceNumber(sum);
+}
+
+export const LUCKY_COLOR_BY_NUMBER: Record<number, string> = {
+  1: "Red", 2: "Cream", 3: "Yellow", 4: "Green", 5: "Turquoise", 6: "Blue",
+  7: "Violet", 8: "Indigo", 9: "Rose", 11: "Silver", 22: "Gold", 33: "Amber",
+};
+
 const LIFE_PATH_MEANINGS: Record<number, string> = {
   1: "Life Path 1 is the number of the starter — independent, driven, and most alive when you're building something that's genuinely yours. Your growth edge is learning that leading doesn't mean doing everything alone.",
   2: "Life Path 2 is the number of the diplomat — sensitive, cooperative, and gifted at reading a room. You do your best work in partnership, and your growth edge is trusting your own judgment as much as you weigh everyone else's.",

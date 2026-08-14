@@ -24,6 +24,7 @@ import { BADGE_MILESTONES, recordDailyVisit } from "@/lib/streaks";
 import { buildHouseGrid, buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
 import { formatDegree, NAKSHATRAS } from "@/lib/astro-engine";
 import { getVariant, recordExperimentImpression } from "@/lib/experiments";
+import { computeLifePathNumber, computeDestinyNumber, computePersonalYearNumber, LUCKY_COLOR_BY_NUMBER } from "@/lib/numerology";
 
 const ONBOARDING_CTA_LABEL: Record<string, string> = { control: "Complete birth profile", "get-my-chart": "Get my free chart" };
 
@@ -69,6 +70,11 @@ export default async function DashboardPage() {
   if (onboardingCtaVariant) {
     await recordExperimentImpression("dashboard-onboarding-cta", onboardingCtaVariant).catch((error) => console.error("Experiment impression tracking failed", error));
   }
+
+  const lifePathNumber = member.birthDate ? computeLifePathNumber(member.birthDate) : null;
+  const destinyNumber = computeDestinyNumber(member.name);
+  const personalYearNumber = member.birthDate ? computePersonalYearNumber(member.birthDate) : null;
+  const luckyColor = lifePathNumber ? LUCKY_COLOR_BY_NUMBER[lifePathNumber] : null;
 
   return (
     <MemberAppShell member={member} active="Dashboard">
@@ -120,10 +126,17 @@ export default async function DashboardPage() {
 
         <article className="glass-card lucky-card">
           <div className="card-heading"><div><p>Numerology</p><h2>Lucky numbers</h2></div><span className="mini-tag">Live</span></div>
-          <div className="line-chart" aria-label="Lucky number trend chart">
-            <svg viewBox="0 0 440 110" role="img"><defs><linearGradient id="chartFill" x1="0" y1="0" x2="0" y2="1"><stop offset="0" stopColor="#a85b3a" stopOpacity=".2"/><stop offset="1" stopColor="#a85b3a" stopOpacity="0"/></linearGradient></defs><path className="chart-fill" d="M5,89 C30,82 35,31 70,52 S112,91 140,63 S181,30 210,57 S259,93 281,32 S331,21 347,45 S385,77 435,10 L435,108 L5,108Z"/><path className="chart-line" d="M5,89 C30,82 35,31 70,52 S112,91 140,63 S181,30 210,57 S259,93 281,32 S331,21 347,45 S385,77 435,10"/><g>{["5,89","70,52","140,63","210,57","281,32","347,45","435,10"].map((point) => { const [cx,cy]=point.split(","); return <circle key={point} cx={cx} cy={cy} r="3.5" />; })}</g></svg>
-          </div>
-          <div className="number-row"><span><small>Core</small><strong>17</strong></span><span><small>Power</small><strong>3</strong></span><span><small>Focus</small><strong>81</strong></span><span><small>Color</small><strong>Gold</strong></span></div>
+          {lifePathNumber ? (
+            <>
+              <div className="number-row"><span><small>Life Path</small><strong>{lifePathNumber}</strong></span><span><small>Destiny</small><strong>{destinyNumber}</strong></span><span><small>This year</small><strong>{personalYearNumber}</strong></span><span><small>Color</small><strong>{luckyColor}</strong></span></div>
+              <Link href="/numerology" className="button button--small">Get your full reading <ArrowUpRight size={14} /></Link>
+            </>
+          ) : (
+            <div className="kundli-empty">
+              <p>Add your exact birth date to see your real Life Path, Destiny, and yearly focus numbers — not a placeholder.</p>
+              <Link href="/onboarding" className="button button--small">Complete birth profile <ArrowUpRight size={14} /></Link>
+            </div>
+          )}
         </article>
 
         <article className="glass-card weather-card" id="cosmic-weather">

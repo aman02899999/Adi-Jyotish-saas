@@ -123,7 +123,7 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Acharya Devraj Bhardwaj · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },

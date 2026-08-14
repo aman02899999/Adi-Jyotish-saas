@@ -10,6 +10,10 @@ import { captureHold as captureWalletHold, createHold as createWalletHold, getAc
 const MAX_HOLD_MINUTES = 30;
 const MIN_HOLD_MINUTES = 1;
 
+function isAlreadyExists(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
+}
+
 export class InsufficientBalanceError extends Error {}
 export class PractitionerUnavailableError extends Error {}
 export class ChatSessionConflictError extends Error {}
@@ -140,10 +144,26 @@ export async function startChatSession(memberId: string, practitionerId: string)
     throw new PractitionerUnavailableError("This practitioner is not available for instant chat right now.");
   }
 
-  const existing = await getMemberActiveSession(memberId);
-  if (existing) throw new ChatSessionConflictError("You already have an active chat. Finish it before starting another.");
+  await expireStaleChatSessions().catch((error) => console.error("Stale chat session sweep failed", error));
+  // Doc id == memberId, so Firestore's own create-fails-if-exists guarantee is the lock — two
+  // concurrent start-session calls (double-click, client retry, two tabs) can no longer both pass
+  // an "is there an active session" query before either commits; only one claims the lock, and the
+  // rest fail immediately here instead of each reserving their own wallet hold.
+  const lockRef = db.collection("chatActiveLocks").doc(memberId);
+  try {
+    await lockRef.create({ claimedAt: FieldValue.serverTimestamp() });
+  } catch (error) {
+    if (isAlreadyExists(error)) throw new ChatSessionConflictError("You already have an active chat. Finish it before starting another.");
+    throw error;
+  }
 
-  const wallet = await getOrCreateWallet(memberId);
+  let wallet;
+  try {
+    wallet = await getOrCreateWallet(memberId);
+  } catch (error) {
+    await lockRef.delete().catch(() => {});
+    throw error;
+  }
   // Mirrors the discounted price shown on the practitioner's marketplace card (see
   // getMarketplacePractitioners in marketplace.ts) — new/unreviewed practitioners are discounted
   // to encourage first bookings, and that discount stacks with the member's own plan discount.
@@ -154,6 +174,7 @@ export async function startChatSession(memberId: string, practitionerId: string)
   const rate = Math.max(1, applyDiscount(baseRate, discountPercent));
   const affordableMinutes = Math.floor(wallet.balance / rate);
   if (affordableMinutes < MIN_HOLD_MINUTES) {
+    await lockRef.delete().catch(() => {});
     throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${rate} to your wallet to start this chat.`);
   }
 
@@ -162,6 +183,7 @@ export async function startChatSession(memberId: string, practitionerId: string)
   try {
     hold = await createWalletHold({ memberId, amount: rate * holdMinutes, referenceType: "chat_session" });
   } catch (error) {
+    await lockRef.delete().catch(() => {});
     if (error instanceof WalletInsufficientBalanceError) throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${rate} to your wallet to start this chat.`);
     throw error;
   }
@@ -185,12 +207,13 @@ export async function startChatSession(memberId: string, practitionerId: string)
     // The hold already reserved real wallet balance — release it back rather than leaving funds
     // stuck against a session that was never created.
     await releaseWalletHold({ memberId, holdId: hold.id, referenceType: "chat_session" }).catch(() => {});
+    await lockRef.delete().catch(() => {});
     throw error;
   }
 
   await messagesCollection(sessionRef.id).add({
     senderType: "system",
-    senderName: "Jyotish Studio",
+    senderName: "Adi Jyotish Guru",
     body: `Chat started with ${practitioner.name}. Up to ${holdMinutes} minutes available at ${wallet.currency} ${rate}/min.`,
     createdAt: now,
   });
@@ -238,8 +261,9 @@ export async function endChatSession(sessionId: string, endedBy: "member" | "pra
   await captureWalletHold({ memberId: session.memberId, holdId: session.walletHoldId, capturedAmount, referenceType: "chat_session" });
 
   await sessionsCollection.doc(sessionId).update({ status: "ended", endedAt: FieldValue.serverTimestamp(), capturedAmount, updatedAt: FieldValue.serverTimestamp() });
-  await messagesCollection(sessionId).add({ senderType: "system", senderName: "Jyotish Studio", body: "Chat ended. Thank you for connecting with Jyotish Studio.", createdAt: FieldValue.serverTimestamp() });
+  await messagesCollection(sessionId).add({ senderType: "system", senderName: "Adi Jyotish Guru", body: "Chat ended. Thank you for connecting with Adi Jyotish Guru.", createdAt: FieldValue.serverTimestamp() });
   await publishChatEvent(sessionId, "session-ended", { endedBy });
+  await db.collection("chatActiveLocks").doc(session.memberId).delete().catch(() => {});
 
   const updatedSnap = await sessionsCollection.doc(sessionId).get();
   return toSession(updatedSnap);

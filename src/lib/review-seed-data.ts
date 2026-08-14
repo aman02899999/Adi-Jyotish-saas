@@ -90,7 +90,7 @@ const MIDDLES_POSITIVE_HI = [
 const CLOSERS_POSITIVE_EN = [
   "Highly recommend booking a session if you're confused about your path.",
   "Will definitely book again for a follow-up.",
-  "Worth every rupee, thank you Jyotish Studio.",
+  "Worth every rupee, thank you Adi Jyotish Guru.",
   "Five stars, exactly what I needed to hear.",
   "Already told my family to book a session too.",
   "Thank you so much, feeling much more at peace now.",

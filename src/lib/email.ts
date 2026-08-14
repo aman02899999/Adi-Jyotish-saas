@@ -11,7 +11,7 @@ export async function sendEmail({ to, subject, html }: { to: string; subject: st
     return { sent: false as const };
   }
 
-  const from = process.env.RESEND_FROM_EMAIL || "Jyotish Studio <onboarding@resend.dev>";
+  const from = process.env.RESEND_FROM_EMAIL || "Adi Jyotish Guru <onboarding@resend.dev>";
   const response = await fetch("https://api.resend.com/emails", {
     method: "POST",
     headers: { Authorization: `Bearer ${apiKey}`, "Content-Type": "application/json" },
@@ -41,7 +41,7 @@ export function genericNotificationEmailHtml({ title, name, body, ctaLabel, ctaU
     <p>Hi ${escapeHtml(name)},</p>
     <p>${escapeHtml(body)}</p>
     ${ctaUrl ? `<p><a href="${escapeHtml(ctaUrl)}" style="display:inline-block;padding:12px 22px;background:#a95838;color:#fff;text-decoration:none;border-radius:8px;">${escapeHtml(ctaLabel ?? "View details")}</a></p>` : ""}
-    <p style="margin-top:24px;font-size:12px;color:#aa9d90;">Jyotish Studio</p>
+    <p style="margin-top:24px;font-size:12px;color:#aa9d90;">Adi Jyotish Guru</p>
   </div>`;
 }
 
@@ -68,6 +68,6 @@ export function orderConfirmationEmailHtml({ orderNumber, customerName, items, s
       <tr><td>Shipping</td><td style="text-align:right;">${shippingFee ? `${currency} ${shippingFee}` : "Free"}</td></tr>
       <tr><td style="font-weight:bold;padding-top:8px;">Total</td><td style="text-align:right;font-weight:bold;padding-top:8px;">${currency} ${total}</td></tr>
     </table>
-    <p style="margin-top:24px;font-size:12px;color:#aa9d90;">Jyotish Studio · Genuine Vedic Gemstones</p>
+    <p style="margin-top:24px;font-size:12px;color:#aa9d90;">Adi Jyotish Guru · Genuine Vedic Gemstones</p>
   </div>`;
 }

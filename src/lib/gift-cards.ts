@@ -15,6 +15,10 @@ const GIFT_CARD_VALIDITY_MS = 90 * 24 * 60 * 60 * 1000;
 
 export class GiftCardError extends Error {}
 
+function isAlreadyExists(error: unknown) {
+  return Boolean(error && typeof error === "object" && "code" in error && (error as { code: unknown }).code === 6);
+}
+
 export const GIFT_AMOUNTS = [500, 1000, 2000, 5000] as const;
 
 const CODE_CHARS = "ABCDEFGHJKLMNPQRSTUVWXYZ23456789"; // no 0/O/1/I — avoids typos when read aloud
@@ -49,38 +53,42 @@ export async function createGiftCard({ buyerId, buyerName, amount, currency, rec
   buyerId: string; buyerName: string; amount: number; currency: string; recipientName: string; message: string; razorpayPaymentId: string;
 }): Promise<GiftCard> {
   const paymentIndexRef = db.collection("giftCardPaymentIndex").doc(razorpayPaymentId);
-
-  let code = generateCode();
-  for (let attempt = 0; attempt < 5; attempt++) {
-    const codeSnap = await db.collection("giftCards").doc(code).get();
-    if (!codeSnap.exists) break;
-    code = generateCode();
-  }
-
   const expiresAt = new Date(Date.now() + GIFT_CARD_VALIDITY_MS);
   const recipientClean = recipientName.trim().slice(0, 120) || "a friend";
   const messageClean = message.trim().slice(0, 280);
 
   // The payment-id index doc is read and written inside the same transaction as the gift card
   // itself, so two concurrent calls for the same payment (e.g. a redelivered webhook) can't both
-  // pass the "does a gift card already exist for this payment" check before either writes.
-  const resolvedCode = await db.runTransaction(async (tx) => {
-    const indexSnap = await tx.get(paymentIndexRef);
-    if (indexSnap.exists) return (indexSnap.data() as { code: string }).code;
+  // pass the "does a gift card already exist for this payment" check before either writes. The
+  // gift card doc itself is `tx.create`d, not `tx.set`, so a code collision (astronomically
+  // unlikely at 33^8, but not impossible) throws instead of silently overwriting someone else's
+  // already-issued gift card — the outer loop just tries again with a fresh code.
+  let resolvedCode: string | null = null;
+  for (let attempt = 0; attempt < 5 && resolvedCode === null; attempt++) {
+    const code = generateCode();
+    try {
+      resolvedCode = await db.runTransaction(async (tx) => {
+        const indexSnap = await tx.get(paymentIndexRef);
+        if (indexSnap.exists) return (indexSnap.data() as { code: string }).code;
 
-    tx.set(paymentIndexRef, { code, createdAt: FieldValue.serverTimestamp() });
-    tx.set(db.collection("giftCards").doc(code), {
-      buyerId, buyerName, amount, currency,
-      recipientName: recipientClean,
-      message: messageClean,
-      status: "unclaimed" as const,
-      redeemedBy: null,
-      razorpayPaymentId,
-      expiresAt,
-      createdAt: FieldValue.serverTimestamp(),
-    });
-    return code;
-  });
+        tx.set(paymentIndexRef, { code, createdAt: FieldValue.serverTimestamp() });
+        tx.create(db.collection("giftCards").doc(code), {
+          buyerId, buyerName, amount, currency,
+          recipientName: recipientClean,
+          message: messageClean,
+          status: "unclaimed" as const,
+          redeemedBy: null,
+          razorpayPaymentId,
+          expiresAt,
+          createdAt: FieldValue.serverTimestamp(),
+        });
+        return code;
+      });
+    } catch (error) {
+      if (!isAlreadyExists(error)) throw error;
+    }
+  }
+  if (resolvedCode === null) throw new Error("Could not generate a unique gift card code.");
 
   const created = await getGiftCard(resolvedCode);
   if (!created) throw new Error("Gift card creation failed unexpectedly.");

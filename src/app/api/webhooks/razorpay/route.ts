@@ -174,6 +174,10 @@ export async function POST(request: Request) {
     else if (["subscription.cancelled", "subscription.completed", "subscription.halted", "subscription.paused", "subscription.pending"].includes(body.event)) await handleSubscriptionStatus(body.payload?.subscription?.entity);
   } catch (error) {
     console.error(`Razorpay webhook handling failed for ${body.event}`, error instanceof Error ? error.message : "unknown error");
+    // The dedup doc was created before the handler ran to lock out concurrent duplicate
+    // deliveries — but on genuine failure it has to come back out, or Razorpay's retry of this
+    // same event will be deduped away as "already processed" when it never actually completed.
+    await eventRef.delete().catch(() => {});
     return Response.json({ error: "Webhook processing failed." }, { status: 500 });
   }
 

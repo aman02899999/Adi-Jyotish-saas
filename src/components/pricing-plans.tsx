@@ -36,7 +36,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
       await openRazorpayCheckout({
         key: data.key,
         subscription_id: data.subscriptionId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `${plan.name} membership · ${interval}`,
         prefill: member ? { name: member.name, email: member.email } : undefined,
         theme: { color: "#a95838" },

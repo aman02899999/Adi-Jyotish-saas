@@ -17,7 +17,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: "Your Sun sign is who you're becoming. Your Moon sign is who you already are underneath it — the part of your chart that governs instinct, comfort, and how you actually feel.",
     cover: "/images/blog/blog-moon-signs.jpg",
     category: "Foundations",
-    author: "Jyotish Studio",
+    author: "Adi Jyotish Guru",
     readMinutes: 6,
     publishedAt: "2026-06-02",
     body: [
@@ -55,7 +55,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: "Saturn takes roughly 29.5 years to complete one orbit — which means almost everyone hits a Saturn return around age 27-30. Here's what Vedic astrology says is actually happening.",
     cover: "/images/blog/blog-saturn-return.jpg",
     category: "Transits",
-    author: "Jyotish Studio",
+    author: "Adi Jyotish Guru",
     readMinutes: 7,
     publishedAt: "2026-06-14",
     body: [
@@ -87,7 +87,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: "Vedic astrology treats timing as something you can actively work with — not just observe. Muhurat is the practice of finding windows when the sky itself supports what you're trying to do.",
     cover: "/images/blog/blog-muhurat-timing.jpg",
     category: "Practice",
-    author: "Jyotish Studio",
+    author: "Adi Jyotish Guru",
     readMinutes: 5,
     publishedAt: "2026-06-21",
     body: [
@@ -119,7 +119,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: "If your birth chart is a map, Dasha is the itinerary. It's the system Vedic astrologers use to answer the question every client eventually asks: not just what, but when.",
     cover: "/images/blog/blog-dashas-explained.jpg",
     category: "Foundations",
-    author: "Jyotish Studio",
+    author: "Adi Jyotish Guru",
     readMinutes: 8,
     publishedAt: "2026-07-03",
     body: [
@@ -151,7 +151,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: "Guna Milan, the traditional Vedic compatibility system, checks 36 points across eight distinct categories — a far more granular approach than comparing two Sun signs.",
     cover: "/images/blog/blog-compatibility.jpg",
     category: "Relationships",
-    author: "Jyotish Studio",
+    author: "Adi Jyotish Guru",
     readMinutes: 6,
     publishedAt: "2026-07-11",
     body: [
@@ -183,7 +183,7 @@ export const blogPosts: BlogPost[] = [
     excerpt: "\"Mercury retrograde\" has become internet shorthand for chaos. Vedic astrology treats retrogrades with far more nuance — and in some cases, as genuinely favorable.",
     cover: "/images/blog/blog-retrogrades.jpg",
     category: "Transits",
-    author: "Jyotish Studio",
+    author: "Adi Jyotish Guru",
     readMinutes: 5,
     publishedAt: "2026-07-19",
     body: [

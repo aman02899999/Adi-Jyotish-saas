@@ -15,6 +15,7 @@ import { scanForContactInfo } from "@/lib/content-moderation";
 // marked "paid" (see updatePayoutStatus's ALLOWED_PAYOUT_TRANSITIONS below), so this only removes
 // the low-risk triage step, never the money-movement step itself.
 const AUTO_APPROVE_MAX_AMOUNT = 5000;
+const PAYOUT_DESTINATION_COOLDOWN_MS = 72 * 60 * 60 * 1000;
 
 export class PayoutError extends Error {}
 export class KundliSummaryError extends Error {}
@@ -291,9 +292,16 @@ export async function requestPayout(practitionerId: string, amount: number, note
   if (!Number.isInteger(amount) || amount < 100) throw new PayoutError("Enter an amount of at least ₹100.");
 
   const practitionerSnap = await db.collection("practitioners").doc(practitionerId).get();
-  if (practitionerSnap.data()?.isDemoAccount) {
+  const practitionerData = practitionerSnap.data() as { isDemoAccount?: boolean; payoutDetailsUpdatedAt?: FirebaseFirestore.Timestamp } | undefined;
+  if (practitionerData?.isDemoAccount) {
     throw new PayoutError("Demo accounts can't request payouts.");
   }
+  // A payout destination changed inside the cooldown window hasn't had a chance to be reviewed —
+  // without this, a compromised or malicious account could swap in a new bank/UPI destination and
+  // immediately auto-cash-out against an otherwise-clean payout history earned under the old one.
+  const payoutDestinationRecentlyChanged = practitionerData?.payoutDetailsUpdatedAt
+    ? Date.now() - practitionerData.payoutDetailsUpdatedAt.toMillis() < PAYOUT_DESTINATION_COOLDOWN_MS
+    : false;
 
   // totalEarned only grows via paid bookings and ended chat sessions, not this action, so it's
   // safe to read outside the transaction — but paidOut/pendingOut come from the payouts
@@ -327,7 +335,7 @@ export async function requestPayout(practitionerId: string, amount: number, note
     const availableBalance = Math.max(0, totalEarned - paidOut - pendingOut);
     if (amount > availableBalance) throw new PayoutError(`You can request up to ₹${availableBalance} right now.`);
 
-    const autoApprove = amount <= AUTO_APPROVE_MAX_AMOUNT && hasPriorPaid && !hasRejection;
+    const autoApprove = amount <= AUTO_APPROVE_MAX_AMOUNT && hasPriorPaid && !hasRejection && !payoutDestinationRecentlyChanged;
     tx.set(ref, {
       practitionerId,
       amount,
@@ -336,7 +344,11 @@ export async function requestPayout(practitionerId: string, amount: number, note
       payoutMethod: "bank_transfer",
       transactionRef: null,
       notes: notes?.trim().slice(0, 500) || null,
-      adminNotes: autoApprove ? `Auto-approved: ₹${amount} is under the ₹${AUTO_APPROVE_MAX_AMOUNT} threshold and this practitioner has a clean payout history. Still needs a real transfer + reference to be marked paid.` : null,
+      adminNotes: autoApprove
+        ? `Auto-approved: ₹${amount} is under the ₹${AUTO_APPROVE_MAX_AMOUNT} threshold and this practitioner has a clean payout history. Still needs a real transfer + reference to be marked paid.`
+        : payoutDestinationRecentlyChanged
+          ? "Held for manual review: payout destination (bank/UPI) changed recently."
+          : null,
       processedBy: autoApprove ? "system:auto-approval" : null,
       requestedAt: now,
       processedAt: autoApprove ? now : null,

@@ -18,7 +18,7 @@ export function MemberBilling({invoices,onlinePaymentsAvailable,checkoutState,me
         amount:data.amount,
         currency:data.currency,
         order_id:data.orderId,
-        name:"Jyotish Studio",
+        name:"Adi Jyotish Guru",
         description,
         prefill:{name:member.name,email:member.email},
         theme:{color:"#a95838"},

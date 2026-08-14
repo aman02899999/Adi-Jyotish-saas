@@ -52,7 +52,7 @@ export default async function PrivacyPage() {
           <li><strong>Pusher / Ably</strong> — powers real-time chat delivery.</li>
           <li><strong>Firebase (Google)</strong> — if you choose to sign in with Google, authenticates that sign-in.</li>
         </ul>
-        <p>We may also disclose information if required by law, or to protect the rights, safety, and property of Jyotish Studio, our users, or the public.</p>
+        <p>We may also disclose information if required by law, or to protect the rights, safety, and property of Adi Jyotish Guru, our users, or the public.</p>
 
         <h2>4. Data retention</h2>
         <p>We retain your account and birth details for as long as your account is active, so your charts and history remain available to you. If you delete your account, we remove or anonymize your personal data within a reasonable period, except where we&rsquo;re required to retain transaction records for accounting or legal purposes.</p>

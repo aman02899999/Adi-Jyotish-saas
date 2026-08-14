@@ -89,7 +89,7 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
         amount: order.amount,
         currency: order.currency,
         order_id: order.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Tarot Mystic Divya · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },

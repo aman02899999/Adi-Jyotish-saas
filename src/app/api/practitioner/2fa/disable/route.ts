@@ -1,6 +1,7 @@
 import { db } from "@/lib/firestore";
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { verifyTotpOrBackupCode } from "@/lib/two-factor";
+import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 
 export const dynamic = "force-dynamic";
 
@@ -16,10 +17,15 @@ export async function POST(request: Request) {
   const secret = snap.data()?.totpSecret as string | undefined;
   if (!secret || snap.data()?.totpEnabled !== true) return Response.json({ error: "Two-factor authentication is not enabled." }, { status: 409 });
 
+  const throttle = await checkAuthThrottle("practitioner-2fa-disable", practitioner.id, request);
+  if (!throttle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(throttle.retryAfter) } });
+
   const body = (await request.json()) as { code?: string };
   if (!(await verifyTotpOrBackupCode(ref, secret, body.code ?? ""))) {
+    await recordAuthFailure(throttle.keyHash);
     return Response.json({ error: "That code is incorrect." }, { status: 401 });
   }
+  await clearAuthFailures(throttle.keyHash);
 
   await ref.update({ totpEnabled: false, totpSecret: null, totpBackupCodes: null });
   return Response.json({ ok: true });

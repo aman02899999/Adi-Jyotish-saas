@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomBytes } from "node:crypto";
 import { AggregateField, FieldValue, Timestamp } from "firebase-admin/firestore";
-import { db, withIndexFallback } from "@/lib/firestore";
+import { db } from "@/lib/firestore";
 import { validateCoupon } from "@/lib/gemstone-coupons";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
@@ -11,6 +11,7 @@ import { splitGstInclusive } from "@/lib/gst";
 import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
 import { shouldRunNow } from "@/lib/automation-state";
+import { getRazorpay } from "@/lib/razorpay";
 
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
@@ -21,6 +22,15 @@ const FLAT_SHIPPING_FEE = 99;
 const ordersCol = db.collection("gemstoneOrders");
 const productsCol = db.collection("gemstoneProducts");
 const couponsCol = db.collection("gemstoneCoupons");
+const couponCustomerUsageCol = db.collection("gemstoneCouponCustomerUsage");
+
+function couponCustomerIdentifier(memberId: string | null, guestEmail?: string | null): string | null {
+  return memberId || guestEmail?.trim().toLowerCase() || null;
+}
+
+function couponCustomerUsageRef(couponCode: string, identifier: string) {
+  return couponCustomerUsageCol.doc(`${couponCode}_${identifier}`);
+}
 
 function variantRef(productId: string, variantId: string) {
   return productsCol.doc(productId).collection("variants").doc(variantId);
@@ -225,22 +235,12 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
 
   let discount = 0;
   let appliedCouponCode: string | null = null;
+  let couponPerCustomerLimit: number | null = null;
   if (couponCode?.trim()) {
     const { coupon, discountAmount } = await validateCoupon(couponCode, subtotal);
-    if (coupon.perCustomerLimit != null) {
-      let usedQuery = ordersCol.where("couponCode", "==", coupon.code).where("paymentStatus", "==", "paid");
-      if (memberId) usedQuery = usedQuery.where("memberId", "==", memberId);
-      else if (guestEmail?.trim()) usedQuery = usedQuery.where("guestEmail", "==", guestEmail.trim());
-      // Fails open (treats as "not yet used") if the composite index is still building on a fresh
-      // deploy, same fallback philosophy used elsewhere in this codebase — better to let one order
-      // through under-checked than 500 every checkout attempt.
-      const usedCount = await withIndexFallback(async () => (await usedQuery.count().get()).data().count, 0);
-      if (usedCount >= coupon.perCustomerLimit) {
-        throw new CartValidationError("You've already used this coupon the maximum number of times.");
-      }
-    }
     discount = discountAmount;
     appliedCouponCode = coupon.code;
+    couponPerCustomerLimit = coupon.perCustomerLimit;
   }
 
   const shippingFee = computeShippingFee(subtotal - discount);
@@ -254,11 +254,14 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
   // the same atomic stock-check-and-decrement guarantee the old `pg_advisory_xact_lock` provided.
   const orderRef = ordersCol.doc();
   const couponRef = appliedCouponCode ? couponsCol.doc(appliedCouponCode) : null;
+  const couponCustomerIdent = appliedCouponCode ? couponCustomerIdentifier(memberId, guestEmail) : null;
+  const couponCustomerRef = appliedCouponCode && couponCustomerIdent ? couponCustomerUsageRef(appliedCouponCode, couponCustomerIdent) : null;
   await db.runTransaction(async (tx) => {
     const variantRefs = items.map((item) => variantRef(item.productId, item.variantId));
-    const [variantSnaps, couponSnap] = await Promise.all([
+    const [variantSnaps, couponSnap, couponCustomerSnap] = await Promise.all([
       Promise.all(variantRefs.map((ref) => tx.get(ref))),
       couponRef ? tx.get(couponRef) : Promise.resolve(null),
+      couponCustomerRef ? tx.get(couponCustomerRef) : Promise.resolve(null),
     ]);
 
     for (let index = 0; index < items.length; index += 1) {
@@ -281,6 +284,17 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
         throw new CartValidationError("This coupon has reached its usage limit.");
       }
       tx.update(couponRef, { usageCount: FieldValue.increment(1), updatedAt: FieldValue.serverTimestamp() });
+    }
+
+    // Same reservation pattern as the usageLimit check above, but keyed per customer — the old
+    // check queried already-*paid* orders before this transaction even started, so two concurrent
+    // checkouts with the same "once per customer" coupon could both pass it before either paid.
+    if (couponCustomerRef && couponPerCustomerLimit != null) {
+      const usedCount = (couponCustomerSnap?.exists ? (couponCustomerSnap.data() as { count?: number }).count : 0) ?? 0;
+      if (usedCount >= couponPerCustomerLimit) {
+        throw new CartValidationError("You've already used this coupon the maximum number of times.");
+      }
+      tx.set(couponCustomerRef, { count: usedCount + 1, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     }
 
     tx.set(orderRef, {
@@ -423,6 +437,26 @@ const CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
 
 export async function updateOrderStatus(orderId: string, status: string) {
   const ref = ordersCol.doc(orderId);
+
+  // Money moves before Firestore says it moved: marking an order "refunded" without actually
+  // calling Razorpay leaves the order looking settled while the customer never gets their money
+  // back, and there's no other trigger anywhere in this codebase that would issue the refund.
+  if (status === "refunded") {
+    const snap = await ref.get();
+    if (!snap.exists) throw new OrderNotFoundError("Order not found.");
+    const existing = fromOrderDoc(snap);
+    if (existing.paymentStatus !== "paid") throw new CartValidationError("Only paid orders can be refunded.");
+    if (existing.status !== "refunded") {
+      if (!existing.razorpayPaymentId) throw new CartValidationError("No payment record was found to refund for this order.");
+      const razorpay = getRazorpay();
+      if (!razorpay) throw new CartValidationError("Razorpay refund is unavailable right now.");
+      await razorpay.payments.refund(existing.razorpayPaymentId, {
+        amount: Math.round(existing.total * 100),
+        notes: { orderId: existing.id, orderNumber: existing.orderNumber },
+      });
+    }
+  }
+
   const updated = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new OrderNotFoundError("Order not found.");
@@ -452,6 +486,8 @@ export async function updateOrderStatus(orderId: string, status: string) {
       // usage limit or the customer's per-customer limit, since the reservation happened at
       // order-creation time (see createPendingOrder), not at payment.
       tx.update(couponsCol.doc(existing.couponCode), { usageCount: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() });
+      const customerIdent = couponCustomerIdentifier(existing.memberId, existing.guestEmail);
+      if (customerIdent) tx.set(couponCustomerUsageRef(existing.couponCode, customerIdent), { count: FieldValue.increment(-1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
     }
 
     if (willRestoreStock) {

@@ -86,7 +86,7 @@ export function LalKitabReadingForm({ member, price, currency, onlinePaymentsAva
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Pandit Girish Trivedi · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },

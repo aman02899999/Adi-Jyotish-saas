@@ -17,8 +17,8 @@ export type StudioSettings = {
 };
 
 const defaults: Omit<StudioSettings, "updatedAt"> = {
-  studioName: "Jyotish Studio",
-  supportEmail: "support@jyotish.studio",
+  studioName: "Adi Jyotish Guru",
+  supportEmail: "support@adijyotishguru.com",
   timezone: "Asia/Kolkata",
   currency: "INR",
   cancellationHours: 24,
