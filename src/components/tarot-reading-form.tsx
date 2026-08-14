@@ -166,6 +166,7 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
           {paying ? "Taiyaar ho raha hai…" : `Pay ${currency} ${price} & poori reading paayein`}
         </button>
         {!onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments abhi configure ho rahe hain — kripya thodi der baad try karein.</p>}
+        {onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — aapse sirf confirm karne ke baad hi charge hoga.</p>}
         {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
       </div>
     );

@@ -174,6 +174,7 @@ export function AiPersonaReadingForm({ slug, name, member, price, currency, onli
         {loading ? "Preparing…" : price > 0 ? `Pay ${currency} ${price} & get my reading` : "Get my free reading"}
       </button>
       {price > 0 && !onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments are being configured — please try again shortly.</p>}
+      {price > 0 && onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — you&apos;ll only be charged after confirming.</p>}
       {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
     </div>
   );

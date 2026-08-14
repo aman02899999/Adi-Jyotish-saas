@@ -173,6 +173,7 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
         {loading ? "Opening payment…" : `Pay ${currency} ${price} & get my report`}
       </button>
       {!onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments are being configured — please check back shortly.</p>}
+      {onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — you&apos;ll only be charged after confirming.</p>}
       {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
     </div>
   );

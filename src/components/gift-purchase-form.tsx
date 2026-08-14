@@ -87,6 +87,7 @@ export function GiftPurchaseForm({ onlinePaymentsAvailable, member }: {
         {loading ? <><LoaderCircle size={16} className="spin" /> Opening…</> : <><Gift size={16} /> Buy ₹{amount} gift</>}
       </button>
       {!onlinePaymentsAvailable && <p className="legal-note">Online payments are being configured — check back shortly.</p>}
+      {onlinePaymentsAvailable && <p className="legal-note">Secured by Razorpay — you&apos;ll only be charged after confirming.</p>}
       {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
     </div>
   );

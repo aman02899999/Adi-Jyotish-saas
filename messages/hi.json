@@ -26,6 +26,11 @@
     "cart": "{count, plural, =0 {Cart dekhein} one {Cart dekhein (# item)} other {Cart dekhein (# items)}}"
   },
   "Footer": {
+    "about": "About us",
+    "contact": "Contact us",
+    "trustSecure": "Secure Razorpay payments",
+    "trustReviewed": "Team-reviewed astrologers",
+    "trustPrivate": "Aapka birth data, protected",
     "practitioners": "Astrologers",
     "journal": "Journal",
     "pricing": "Pricing",

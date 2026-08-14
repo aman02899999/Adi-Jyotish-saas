@@ -67,6 +67,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
       </div>
 
       {!razorpayConfigured && <div className="finance-config-note pricing-config-note"><Sparkles size={18} /><div><strong>Memberships open soon</strong><span>Online billing is being configured. Check back shortly to subscribe.</span></div></div>}
+      {razorpayConfigured && <p className="legal-note">Billing is handled securely by Razorpay — cancel anytime from your dashboard.</p>}
 
       <p className="pricing-recommend">
         <strong>Not sure which to pick?</strong> New here — start on <strong>Free</strong>, no commitment, browse and book anytime. Booking more than once a month — look for the <strong>“Most chosen”</strong> badge below; for most members it pays for itself by the second session&rsquo;s discount.

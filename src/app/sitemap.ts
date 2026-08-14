@@ -39,6 +39,8 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     { url: new URL("/numerology", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.7 },
     { url: new URL("/blog", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 0.7 },
     { url: new URL("/pricing", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.6 },
+    { url: new URL("/about", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.5 },
+    { url: new URL("/contact", site).toString(), lastModified: updated, changeFrequency: "monthly", priority: 0.4 },
     { url: new URL("/privacy", site).toString(), lastModified: updated, changeFrequency: "yearly", priority: 0.3 },
     { url: new URL("/terms", site).toString(), lastModified: updated, changeFrequency: "yearly", priority: 0.3 },
     { url: new URL("/refund-policy", site).toString(), lastModified: updated, changeFrequency: "yearly", priority: 0.3 },
