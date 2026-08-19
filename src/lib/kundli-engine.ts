@@ -1,6 +1,7 @@
 import "server-only";
 
 import { computeGrahaPositions, ascendantSiderealLongitude, GRAHA_LABELS, GrahaKey, GrahaPosition, NAKSHATRAS, RASHIS, formatDegree } from "@/lib/astro-engine";
+import { detectDoshas } from "@/lib/dosha-engine";
 import { PlaceNotFoundError, resolveBirthMoment } from "@/lib/geo";
 
 export class KundliEngineError extends Error {}
@@ -123,10 +124,36 @@ export function renderKundliReport(chart: KundliChart): string {
     `A grounded next step: revisit this chart with a practitioner for a full dasha (planetary period) reading — the houses above set the stage, but timing is where Jyotish gets specific.`,
   ].join("\n\n");
 
+  const doshas = renderDoshaSection(chart);
+
   const positionsTable = chart.positions.map(placementLine).join("\n");
   const positionsSection = [`Planetary Positions:`, positionsTable].join("\n\n");
 
-  return [overview, career, relationships, health, wealth, positionsSection].join("\n\n");
+  return [overview, career, relationships, health, wealth, doshas, positionsSection].join("\n\n");
+}
+
+function renderDoshaSection(chart: KundliChart): string {
+  const { mangal, kaalSarp, sadeSati } = detectDoshas(chart);
+
+  const mangalLine = mangal.present
+    ? mangal.cancelled
+      ? `Mangal Dosha (Manglik): present but classically cancelled — Mars is in house ${mangal.houseFromLagna} from Lagna, and ${mangal.cancellationReason}`
+      : `Mangal Dosha (Manglik): present — Mars is in house ${mangal.houseFromLagna} from Lagna${mangal.presentFromMoon && mangal.houseFromMoon !== mangal.houseFromLagna ? ` (and house ${mangal.houseFromMoon} from Moon)` : ""}. Traditionally weighed in marriage matching. Only the own-sign/exaltation cancellation is checked here — other classical cancellation conditions exist, so treat this as a starting point, not a final word.`
+    : `Mangal Dosha (Manglik): not present — Mars does not occupy a Mangal Dosha house from Lagna or Moon.`;
+
+  const kaalSarpLine = kaalSarp.present
+    ? `Kaal Sarp Dosha: present (${kaalSarp.name}) — all seven classical planets fall on one side of the Rahu-Ketu axis.`
+    : `Kaal Sarp Dosha: not present — the seven classical planets are not fully hemmed between Rahu and Ketu.`;
+
+  const sadeSatiLine = sadeSati.active
+    ? `Sade Sati: currently active, ${sadeSati.phase === "rising" ? "rising phase (first phase)" : sadeSati.phase === "peak" ? "peak phase (second phase)" : "setting phase (third phase)"} — transiting Saturn is in ${sadeSati.currentSaturnRashi}, relative to your natal Moon in ${sadeSati.natalMoonRashi}.`
+    : `Sade Sati: not currently active — transiting Saturn (${sadeSati.currentSaturnRashi}) is not in the 12th, 1st, or 2nd house from your natal Moon (${sadeSati.natalMoonRashi}).`;
+
+  return [
+    `Doshas:`,
+    [mangalLine, kaalSarpLine, sadeSatiLine].join("\n\n"),
+    `This is traditional Parashari guidance calculated from your actual chart, not a scientific or guaranteed prediction — for major life decisions, always cross-check with a qualified practitioner.`,
+  ].join("\n\n");
 }
 
 function ordinalSuffix(n: number) {
