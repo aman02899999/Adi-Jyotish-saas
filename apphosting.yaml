@@ -81,6 +81,16 @@ env:
     secret: GEMINI_API_KEY
     availability:
       - RUNTIME
+  # Hard ceiling on Gemini calls per UTC day, across every reading type combined (see
+  # claimGeminiBudget() in src/lib/gemini.ts) — a circuit breaker independent of any bug
+  # elsewhere in the retry/cron logic. 100/day comfortably covers real paying traffic at
+  # this stage (each reading uses at most 3 calls total, thanks to the aiAttempts cap) while
+  # putting a hard, predictable ceiling on worst-case daily spend. Raise it here — plain
+  # number, not a secret — as real volume grows.
+  - variable: GEMINI_DAILY_CALL_LIMIT
+    value: "100"
+    availability:
+      - RUNTIME
 
   # ── Cloudflare Turnstile (CAPTCHA on registration, kundli-matching,
   #    numerology, gemstone-recommendation) ──────────────────────────
