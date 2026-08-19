@@ -4,7 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
-import { shouldRunNow } from "@/lib/automation-state";
+import { shouldRunForKey, shouldRunNow } from "@/lib/automation-state";
 import { FESTIVALS } from "@/lib/festivals";
 import { getPromoBanner, updatePromoBanner } from "@/lib/promo-banner";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
@@ -444,11 +444,15 @@ export async function flagPractitionerCancellationSpikes() {
  * subtotal/taxAmount from splitGstInclusive). Filters status in memory rather than in the query
  * so this doesn't need two new composite indexes for a job that runs once a month. */
 export async function sendMonthlyGstSummary() {
-  if (!(await shouldRunNow("gst-summary-sweep", 20 * 24 * 60 * 60 * 1000))) return { skipped: true as const };
-
   const now = new Date();
   const monthStart = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth() - 1, 1));
   const monthEnd = new Date(Date.UTC(now.getUTCFullYear(), now.getUTCMonth(), 1));
+
+  // Gated on the calendar month being summarized, not a rolling time interval — a ~20-day
+  // interval can otherwise fire twice inside one UTC month (e.g. first run on the 8th, second
+  // eligible run on the 28th, both still summarizing the same prior month) and double-send.
+  const monthKey = monthStart.toISOString().slice(0, 7);
+  if (!(await shouldRunForKey("gst-summary-sweep", monthKey))) return { skipped: true as const };
 
   const [bookingInvoicesSnap, subscriptionInvoicesSnap] = await Promise.all([
     db.collection("invoices").where("paidAt", ">=", monthStart).where("paidAt", "<", monthEnd).get(),

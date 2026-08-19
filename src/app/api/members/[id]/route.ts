@@ -2,6 +2,7 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
+import { cancelMemberSubscription, getMemberSubscription } from "@/lib/subscriptions";
 
 export const dynamic = "force-dynamic";
 
@@ -66,6 +67,25 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const snap = await ref.get();
   if (!snap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
   const email = (snap.data() as { email: string }).email;
+
+  // Deleting a member with money still on the books used to just orphan it: a live Razorpay
+  // subscription kept auto-renewing with no admin or user surface left to cancel it, and a wallet
+  // balance had nowhere to go. Mirrors the block-or-resolve-first pattern already used for
+  // gemstone products/practitioners/personas with outstanding references.
+  const walletSnap = await db.collection("wallets").doc(id).get();
+  const walletBalance = (walletSnap.data() as { balance?: number } | undefined)?.balance ?? 0;
+  if (walletBalance > 0) {
+    return Response.json({ error: `This member has a wallet balance of ₹${walletBalance}. Refund or zero it out before deleting the account.` }, { status: 409 });
+  }
+
+  const subscription = await getMemberSubscription(id);
+  if (subscription?.razorpaySubscriptionId && !["cancelled", "completed", "expired"].includes(subscription.status)) {
+    try {
+      await cancelMemberSubscription(id, true);
+    } catch (error) {
+      return Response.json({ error: `Could not cancel this member's active subscription before deleting: ${error instanceof Error ? error.message : "unknown error"}` }, { status: 502 });
+    }
+  }
 
   await ref.delete();
   try {

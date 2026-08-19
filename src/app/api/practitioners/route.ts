@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
-import { getPractitionerDirectory } from "@/lib/scheduling";
+import { getPractitionerDirectory, sanitizeMediaUrl } from "@/lib/scheduling";
 import { toSlug } from "@/lib/services";
 
 export const dynamic = "force-dynamic";
@@ -35,7 +35,7 @@ export async function POST(request:Request){
   const email=body.email?.trim().toLowerCase().slice(0,180)??"";
   const bio=body.bio?.trim().slice(0,1200)??"";
   if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||bio.length<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
-  const photoUrl=body.photoUrl?.trim();
+  const photoUrl=sanitizeMediaUrl(body.photoUrl);
 
   const existing = await db.collection("practitioners").where("email","==",email).limit(1).get();
   if(!existing.empty) return Response.json({error:"A practitioner with this email already exists."},{status:409});
@@ -54,7 +54,7 @@ export async function POST(request:Request){
     experienceYears:Math.max(0,Number(body.experienceYears)||0),
     verified:body.verified??false,
     verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
-    photoUrl:photoUrl?photoUrl.slice(0,500):null,
+    photoUrl,
     online:body.online??false,
     chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||15),
     active:body.active??true,

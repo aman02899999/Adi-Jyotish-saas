@@ -8,6 +8,7 @@ import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
 import { scanForContactInfo } from "@/lib/content-moderation";
+import { sanitizeMediaUrl } from "@/lib/scheduling";
 
 // A request at or below this amount, from a practitioner with at least one prior *paid* payout
 // and zero rejections ever, is auto-approved instead of sitting in the "requested" queue —
@@ -246,8 +247,8 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
   if (input.specialties !== undefined) patch.specialties = input.specialties.trim().slice(0, 400);
   if (input.languages !== undefined) patch.languages = input.languages.trim().slice(0, 240) || "English, Hindi";
   if (input.consultationModes !== undefined) patch.consultationModes = input.consultationModes.trim().slice(0, 160) || "Video, Audio, Chat";
-  if (input.photoUrl !== undefined) patch.photoUrl = input.photoUrl?.trim() || null;
-  if (input.videoUrl !== undefined) patch.videoUrl = input.videoUrl?.trim() || null;
+  if (input.photoUrl !== undefined) patch.photoUrl = sanitizeMediaUrl(input.photoUrl);
+  if (input.videoUrl !== undefined) patch.videoUrl = sanitizeMediaUrl(input.videoUrl);
 
   const ref = db.collection("practitioners").doc(practitionerId);
   await ref.update(patch);

@@ -259,8 +259,8 @@ export async function verifySubscriptionCheckout(member: MemberIdentity, subscri
   }
 }
 
-export async function cancelMemberSubscription(member: MemberIdentity, immediately: boolean): Promise<void> {
-  const record = await getMemberSubscription(member.id);
+export async function cancelMemberSubscription(memberId: string, immediately: boolean): Promise<void> {
+  const record = await getMemberSubscription(memberId);
   if (!record || !record.razorpaySubscriptionId) throw new Error("No active membership to cancel.");
   if (["cancelled", "completed", "expired"].includes(record.status)) throw new Error("This membership is already cancelled.");
 
@@ -269,12 +269,12 @@ export async function cancelMemberSubscription(member: MemberIdentity, immediate
   const cancelled = await razorpay.subscriptions.cancel(record.razorpaySubscriptionId, !immediately);
 
   const now = new Date();
-  await subscriptionsCollection().doc(member.id).update({
+  await subscriptionsCollection().doc(memberId).update({
     status: cancelled.status,
     cancelAtPeriodEnd: !immediately,
     cancelledAt: immediately ? now : null,
     updatedAt: FieldValue.serverTimestamp(),
   });
 
-  if (immediately) await syncMemberPlanLabel(member.id, "free");
+  if (immediately) await syncMemberPlanLabel(memberId, "free");
 }

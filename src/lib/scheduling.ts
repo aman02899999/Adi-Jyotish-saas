@@ -4,6 +4,21 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, isIndexBuildingError } from "@/lib/firestore";
 import { getStudioSettings } from "@/lib/studio-settings";
 
+/** Same allowlist as notifications.ts's sanitizeLink: a site-relative path, or an https:// URL —
+ * never javascript:/data:/vbscript:. Practitioner photoUrl/videoUrl previously stored whatever
+ * string was submitted with only length trimming, unlike every other user-suppliable
+ * link/URL field in the codebase. */
+export function sanitizeMediaUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed.slice(0, 500);
+  try {
+    return new URL(trimmed).protocol === "https:" ? trimmed.slice(0, 500) : null;
+  } catch {
+    return null;
+  }
+}
+
 export type Practitioner = {
   id: string; // Firestore doc ID == slug
   name: string;

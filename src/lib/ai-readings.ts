@@ -537,23 +537,38 @@ const PERMANENT_FAILURE_MESSAGE = "This reading could not be generated after sev
  * was never going to succeed. aiAttempts now caps that at MAX_AI_ATTEMPTS: past the cap the reading
  * moves to a terminal "failed" status (which the cron's `status == "paid"` query no longer
  * matches, so it stops being picked up at all) and an admin is notified once instead of the cron
- * quietly retrying it forever. */
+ * quietly retrying it forever.
+ *
+ * Runs as a Firestore transaction rather than a plain read-then-write: the cron sweep, a member's
+ * manual retry, and the post-payment verify route can all call this for the same reading at
+ * nearly the same time, and a non-transactional increment let concurrent calls read the same
+ * stale aiAttempts and both write back the same value — silently letting a reading exceed
+ * MAX_AI_ATTEMPTS. The transaction also checks the live status (not the possibly-stale `reading`
+ * argument) so a reading that another concurrent call already flipped to "failed" is left alone
+ * instead of notifying admins a second time. */
 async function recordFailedAttempt(reading: AiReading, error: unknown) {
-  const attempts = reading.aiAttempts + 1;
   const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
   const ref = collection.doc(reading.id);
-  if (attempts >= MAX_AI_ATTEMPTS) {
-    await ref.update({ status: "failed", aiAttempts: attempts, lastAiError: message });
-    const adminIds = await getAdminIdsWithPermission("ai_personas");
-    await notifyAdmins(adminIds, {
-      type: "ai_reading_failed",
-      title: `AI reading permanently failed: ${reading.readingType}`,
-      body: `${reading.clientName}'s ${reading.readingType} reading failed ${attempts} times and stopped retrying. Last error: ${message}`,
-      link: "/admin/insights",
-    }).catch((notifyError) => console.error("Failed to notify admins of a permanently failed AI reading", notifyError));
-  } else {
-    await ref.update({ aiAttempts: attempts, lastAiError: message });
-  }
+
+  const { attempts, shouldNotify } = await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    const data = snap.data() as AiReadingDoc | undefined;
+    if (data?.status === "failed") return { attempts: data.aiAttempts ?? MAX_AI_ATTEMPTS, shouldNotify: false };
+
+    const next = (data?.aiAttempts ?? 0) + 1;
+    const crossesCap = next >= MAX_AI_ATTEMPTS;
+    transaction.update(ref, crossesCap ? { status: "failed", aiAttempts: next, lastAiError: message } : { aiAttempts: next, lastAiError: message });
+    return { attempts: next, shouldNotify: crossesCap };
+  });
+
+  if (!shouldNotify) return;
+  const adminIds = await getAdminIdsWithPermission("insights");
+  await notifyAdmins(adminIds, {
+    type: "ai_reading_failed",
+    title: `AI reading permanently failed: ${reading.readingType}`,
+    body: `${reading.clientName}'s ${reading.readingType} reading failed ${attempts} times and stopped retrying. Last error: ${message}`,
+    link: "/admin/insights",
+  }).catch((notifyError) => console.error("Failed to notify admins of a permanently failed AI reading", notifyError));
 }
 
 /** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays

@@ -9,7 +9,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json().catch(() => ({}))) as { immediately?: boolean };
   try {
-    await cancelMemberSubscription(member, Boolean(body.immediately));
+    await cancelMemberSubscription(member.id, Boolean(body.immediately));
     return Response.json({ ok: true });
   } catch (error) {
     return Response.json({ error: error instanceof Error ? error.message : "Membership could not be cancelled." }, { status: 400 });

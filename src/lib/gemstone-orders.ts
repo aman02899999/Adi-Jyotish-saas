@@ -441,18 +441,31 @@ export async function updateOrderStatus(orderId: string, status: string) {
   // Money moves before Firestore says it moved: marking an order "refunded" without actually
   // calling Razorpay leaves the order looking settled while the customer never gets their money
   // back, and there's no other trigger anywhere in this codebase that would issue the refund.
+  //
+  // The "check status, then call Razorpay" read happens outside a transaction, so two concurrent
+  // requests (a double-click, or a retried request after a slow response) could both read
+  // status !== "refunded" before either write landed and both fire a real refund. Claim a
+  // refundClaimedAt marker transactionally first — mirroring the refund_processing claim already
+  // used in the invoice refund flow (src/app/api/invoices/[id]/route.ts) — so only the request
+  // that wins the claim ever calls Razorpay.
   if (status === "refunded") {
-    const snap = await ref.get();
-    if (!snap.exists) throw new OrderNotFoundError("Order not found.");
-    const existing = fromOrderDoc(snap);
-    if (existing.paymentStatus !== "paid") throw new CartValidationError("Only paid orders can be refunded.");
-    if (existing.status !== "refunded") {
-      if (!existing.razorpayPaymentId) throw new CartValidationError("No payment record was found to refund for this order.");
+    const claim = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      if (!snap.exists) throw new OrderNotFoundError("Order not found.");
+      const existing = fromOrderDoc(snap);
+      if (existing.paymentStatus !== "paid") throw new CartValidationError("Only paid orders can be refunded.");
+      const alreadyClaimed = existing.status === "refunded" || Boolean((snap.data() as { refundClaimedAt?: unknown } | undefined)?.refundClaimedAt);
+      if (!alreadyClaimed) tx.update(ref, { refundClaimedAt: FieldValue.serverTimestamp() });
+      return { alreadyClaimed, existing };
+    });
+
+    if (!claim.alreadyClaimed) {
+      if (!claim.existing.razorpayPaymentId) throw new CartValidationError("No payment record was found to refund for this order.");
       const razorpay = getRazorpay();
       if (!razorpay) throw new CartValidationError("Razorpay refund is unavailable right now.");
-      await razorpay.payments.refund(existing.razorpayPaymentId, {
-        amount: Math.round(existing.total * 100),
-        notes: { orderId: existing.id, orderNumber: existing.orderNumber },
+      await razorpay.payments.refund(claim.existing.razorpayPaymentId, {
+        amount: Math.round(claim.existing.total * 100),
+        notes: { orderId: claim.existing.id, orderNumber: claim.existing.orderNumber },
       });
     }
   }
@@ -605,12 +618,16 @@ export async function sendLowStockAlerts(threshold = 5) {
 
     const productSnap = await productsCol.doc(data.productId).get();
     const product = productSnap.data() as { name?: string } | undefined;
+    // Guarded like the sweep's sibling notifyAdmins calls (flagReviewVelocityAbuse,
+    // flagPractitionerCancellationSpikes in lifecycle-automation.ts) — this one previously wasn't,
+    // so a single transient notification failure aborted the whole sweep and, since shouldRunNow
+    // already claimed the run, blocked any retry for a full 24h.
     await notifyAdmins(adminIds, {
       type: "low_stock",
       title: `Low stock: ${product?.name ?? "a gemstone"} — ${data.label}`,
       body: data.stockQuantity === 0 ? "Out of stock. Restock to avoid losing sales." : `Only ${data.stockQuantity} left. Consider restocking soon.`,
       link: "/admin/gemstones",
-    });
+    }).catch((error) => console.error("Failed to notify admins of low stock", error));
     await doc.ref.update({ lowStockAlertedAt: FieldValue.serverTimestamp() });
     alerted++;
   }

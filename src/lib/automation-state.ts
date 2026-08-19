@@ -21,3 +21,19 @@ export async function shouldRunNow(jobKey: string, minIntervalMs: number): Promi
     return true;
   });
 }
+
+/** Like shouldRunNow, but gates on an arbitrary string key (e.g. a "YYYY-MM" calendar month)
+ * instead of a minimum time interval — for jobs that must run exactly once per period rather than
+ * "at least N ms apart." A rolling interval can land twice inside the same period if the first run
+ * happens early in it (e.g. a ~20-day interval firing twice within one calendar month); this
+ * doesn't have that failure mode since it only compares against the last key it actually ran for. */
+export async function shouldRunForKey(jobKey: string, key: string): Promise<boolean> {
+  const ref = runsCollection().doc(jobKey);
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const lastKey = snap.exists ? (snap.data() as { lastKey?: string }).lastKey : undefined;
+    if (lastKey === key) return false;
+    tx.set(ref, { jobKey, lastKey: key, lastRunAt: FieldValue.serverTimestamp() }, { merge: true });
+    return true;
+  });
+}
