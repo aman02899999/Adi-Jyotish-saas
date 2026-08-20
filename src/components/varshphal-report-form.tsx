@@ -150,6 +150,7 @@ export function VarshphalReportForm({ member, price, currency, onlinePaymentsAva
         </div>
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">View in your dashboard</Link>
+          {reportId && <a href={`/api/ai-readings/${reportId}/varshphal-pdf`} className="button">Download PDF</a>}
         </div>
       </div>
     );
