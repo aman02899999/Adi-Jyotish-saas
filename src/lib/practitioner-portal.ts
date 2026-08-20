@@ -576,3 +576,27 @@ export async function getChatMemberKundliSummary(sessionId: string, practitioner
   await sessionRef.update({ kundliSummary: summary, kundliGeneratedAt: FieldValue.serverTimestamp() });
   return { kundliSummary: summary };
 }
+
+/** Same lookup/auth as getChatMemberKundliSummary, but returns the structured KundliChart instead
+ * of the rendered text — for the PDF download route, which needs the raw chart data (planetary
+ * positions, houses) to build tables, not just prose. */
+export async function getChatMemberKundliChart(sessionId: string, practitionerId: string) {
+  const sessionSnap = await db.collection("chatSessions").doc(sessionId).get();
+  if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
+  const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string };
+  if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+
+  const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
+  if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
+  const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Kundli can't be generated.");
+  }
+
+  try {
+    return buildKundliChart({ name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace });
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}

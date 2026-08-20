@@ -7,7 +7,7 @@ import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
-const SECTION_HEADINGS = ["Overview", "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance", "Planetary Positions"];
+const SECTION_HEADINGS = ["Overview", "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance", "Doshas", "Planetary Positions"];
 
 function parseSections(text: string): Array<{ heading: string | null; paragraphs: string[] }> {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -144,6 +144,7 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
         </div>
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">View in your dashboard</Link>
+          {reportId && <a href={`/api/ai-readings/${reportId}/pdf`} className="button">Download PDF</a>}
         </div>
       </div>
     );
