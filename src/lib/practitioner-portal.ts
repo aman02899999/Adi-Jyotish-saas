@@ -545,6 +545,24 @@ export async function getBookingKundliSummary(bookingId: string, practitionerId:
   return { ...booking, kundliSummary: summary, kundliGeneratedAt: new Date() };
 }
 
+/** Same lookup/auth as getBookingKundliSummary, but returns the structured KundliChart instead of
+ * the rendered text — for the PDF download route, which needs the raw chart data (planetary
+ * positions, houses) to build tables, not just prose. */
+export async function getBookingKundliChart(bookingId: string, practitionerId: string) {
+  const ref = db.collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new KundliSummaryError("Booking not found.");
+  const booking = bookingFromDoc(snap);
+  if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+
+  try {
+    return buildKundliChart({ name: booking.clientName, birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace });
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
 /** Same idea as getBookingKundliSummary, but for an instant-chat session — a scheduled booking
  * captures birth details as part of checkout, but a chat session doesn't, so this reads them off
  * the client's own member profile instead (populated during onboarding). Scoped to sessions the

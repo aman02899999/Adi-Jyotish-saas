@@ -71,9 +71,12 @@ export function PractitionerBookings({ initialBookings }: { initialBookings: Pra
                     </div>
                   )}
                   {booking.kundliSummary ? (
-                    <div className="kundli-report">
-                      {booking.kundliSummary.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-                    </div>
+                    <>
+                      <div className="kundli-report">
+                        {booking.kundliSummary.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                      </div>
+                      <a href={`/api/practitioner/bookings/${booking.id}/kundli/pdf`} className="button button--small button--ghost">Download PDF</a>
+                    </>
                   ) : (
                     <button type="button" className="button button--small" disabled={loadingId === booking.id} onClick={() => generateKundli(booking.id)}>
                       {loadingId === booking.id ? <><LoaderCircle size={14} className="spin" /> Generating…</> : <><ScrollText size={14} /> Generate Kundli summary</>}
