@@ -65,6 +65,41 @@ routes (`/`, `/pricing`, `/book`, `/astrologers`); `.github/workflows/firestore-
 `firestore.rules`/`firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml`
 runs a daily Firestore export to Cloud Storage.
 
+## Deploying to production
+
+The app deploys to **Firebase App Hosting** — a Next.js-native hosting product that builds and runs
+this repo directly, no separate server or container config needed. `apphosting.yaml` is the full
+build/run configuration (instance limits, every env var, which ones are secrets); its inline comments
+are the authoritative runbook, summarized here:
+
+1. **Firebase Console → Build → App Hosting → Create backend.** Connect this GitHub repo and pick the
+   branch to deploy (`main` for production, or a feature branch for a preview backend).
+2. **Create every secret** referenced in `apphosting.yaml` (marked `secret:`) before the first deploy —
+   the build fails otherwise:
+   ```bash
+   firebase apphosting:secrets:set SECRET_NAME
+   firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
+   ```
+   Secrets needed: `FIREBASE_SERVICE_ACCOUNT_KEY`, `GEMINI_API_KEY`, `TURNSTILE_SECRET_KEY`,
+   `CRON_SECRET`, `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`,
+   `PAYOUT_ENCRYPTION_KEY`, `RESEND_API_KEY`, `ABLY_API_KEY`.
+3. **Replace the three `REPLACE_ME…` placeholder values** in `apphosting.yaml` with real ones before
+   deploying: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (Cloudflare Turnstile dashboard), `NEXT_PUBLIC_SITE_URL`
+   (your production domain), `FIREBASE_STORAGE_BUCKET` (Firebase Console → Storage).
+4. **Razorpay webhook**: create it at Settings → Webhooks pointing to
+   `https://<your-domain>/api/webhooks/razorpay`, then set `RAZORPAY_WEBHOOK_SECRET` to the secret it
+   generates. `RAZORPAY_MODE` is `live` in `apphosting.yaml` — real payments process once deployed.
+5. **Resend**: verify a sending domain in the Resend dashboard and update `RESEND_FROM_EMAIL`
+   (defaults to Resend's shared sandbox address, which will not deliver to arbitrary inboxes).
+6. **Optional, currently undeclared**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`,
+   `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`) and the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`) — the app
+   gracefully runs without either; add them to `apphosting.yaml` the same way once wanted.
+7. `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
+   automatically on push to `main` — no manual step needed for those.
+
+Every one of these requires access to the live Firebase project, Razorpay account, and other
+third-party dashboards — steps only a project owner can complete.
+
 ## Project structure
 
 ```
