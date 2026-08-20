@@ -143,6 +143,62 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
   };
 }
 
+export type KundliMatchRecord = {
+  id: string;
+  nameA: string; birthDateA: string; birthTimeA: string; birthPlaceA: string;
+  nameB: string; birthDateB: string; birthTimeB: string; birthPlaceB: string;
+  narrative: string;
+  timeline: TimelineMonth[];
+};
+
+/** Owner-scoped fetch of a saved match, for the PDF download route — unlike
+ * getShareableKundliMatch (deliberately public and birth-detail-free for the social share
+ * card), this returns full birth details, so it's gated to the member who created the match.
+ * Anonymous matches (memberId null) have no owner to check against and can never be fetched
+ * here, matching how every other paid/personal PDF in this codebase is scoped.
+ * Ashtakoot recomputed fresh from the stored birth data rather than trusting cached derived
+ * fields — consistent with this app's deterministic-and-reproducible philosophy, and avoids
+ * needing a schema migration since the moon-placement labels were never persisted. */
+export async function getKundliMatchById(id: string, memberId: string): Promise<{
+  record: KundliMatchRecord;
+  result: AshtakootResult;
+  moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string;
+} | null> {
+  const snap = await db.collection("kundliMatches").doc(id).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as {
+    memberId: string | null;
+    personAName: string; personABirthDate: string; personABirthTime: string; personABirthPlace: string;
+    personBName: string; personBBirthDate: string; personBBirthTime: string; personBBirthPlace: string;
+    narrative: string; timeline: TimelineMonth[];
+  };
+  if (!data.memberId || data.memberId !== memberId) return null;
+
+  const momentA = resolveBirthMoment({ birthDate: data.personABirthDate, birthTime: data.personABirthTime, birthPlace: data.personABirthPlace });
+  const momentB = resolveBirthMoment({ birthDate: data.personBBirthDate, birthTime: data.personBBirthTime, birthPlace: data.personBBirthPlace });
+  const moonA = moonPlacement(momentA.utcInstant);
+  const moonB = moonPlacement(momentB.utcInstant);
+  const result = computeAshtakoot({
+    brideMoonRashi: moonA.rashiIndex, brideMoonNakshatra: moonA.nakshatraIndex,
+    groomMoonRashi: moonB.rashiIndex, groomMoonNakshatra: moonB.nakshatraIndex,
+    bridePada: moonA.pada, groomPada: moonB.pada,
+  });
+
+  return {
+    record: {
+      id: snap.id,
+      nameA: data.personAName, birthDateA: data.personABirthDate, birthTimeA: data.personABirthTime, birthPlaceA: data.personABirthPlace,
+      nameB: data.personBName, birthDateB: data.personBBirthDate, birthTimeB: data.personBBirthTime, birthPlaceB: data.personBBirthPlace,
+      narrative: data.narrative, timeline: data.timeline,
+    },
+    result,
+    moonARashi: RASHIS[moonA.rashiIndex].name, moonANakshatra: NAKSHATRAS[moonA.nakshatraIndex],
+    moonBRashi: RASHIS[moonB.rashiIndex].name, moonBNakshatra: NAKSHATRAS[moonB.nakshatraIndex],
+  };
+}
+
+export { scoreTier };
+
 /** Public, share-safe summary of a saved match — deliberately omits birth date/time/place,
  * which the full match document stores but a shared social card should never expose. */
 export type ShareableKundliMatch = { id: string; nameA: string; nameB: string; score: number; maxScore: number; tierLabel: string };

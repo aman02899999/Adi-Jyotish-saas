@@ -52,6 +52,9 @@ export type BookingRecord = {
   paymentStatus: string;
   kundliSummary: string | null;
   kundliGeneratedAt: Date | null;
+  varshphalSummary: string | null;
+  varshphalYear: number | null;
+  varshphalGeneratedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -85,6 +88,9 @@ export function bookingFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fi
     paymentStatus: data.paymentStatus as string,
     kundliSummary: (data.kundliSummary as string | null) ?? null,
     kundliGeneratedAt: (data.kundliGeneratedAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? null,
+    varshphalSummary: (data.varshphalSummary as string | null) ?? null,
+    varshphalYear: (data.varshphalYear as number | null) ?? null,
+    varshphalGeneratedAt: (data.varshphalGeneratedAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? null,
     createdAt: (data.createdAt as FirebaseFirestore.Timestamp)?.toDate() ?? new Date(),
     updatedAt: (data.updatedAt as FirebaseFirestore.Timestamp)?.toDate() ?? new Date(),
   };
@@ -203,6 +209,9 @@ export async function POST(request: Request) {
         paymentStatus: "unpaid",
         kundliSummary: null,
         kundliGeneratedAt: null,
+        varshphalSummary: null,
+        varshphalYear: null,
+        varshphalGeneratedAt: null,
         createdAt: now,
         updatedAt: now,
       });
@@ -227,6 +236,9 @@ export async function POST(request: Request) {
         paymentStatus: "unpaid",
         kundliSummary: null,
         kundliGeneratedAt: null,
+        varshphalSummary: null,
+        varshphalYear: null,
+        varshphalGeneratedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       } satisfies BookingRecord;

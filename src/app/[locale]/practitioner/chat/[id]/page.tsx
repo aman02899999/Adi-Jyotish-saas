@@ -1,6 +1,7 @@
 import { notFound } from "next/navigation";
 import { ChatRoom } from "@/components/chat-room";
 import { PractitionerChatKundli } from "@/components/practitioner-chat-kundli";
+import { PractitionerChatVarshphal } from "@/components/practitioner-chat-varshphal";
 import { PractitionerShell } from "@/components/practitioner-shell";
 import { requirePractitionerPage } from "@/lib/practitioner-auth";
 import { ChatSessionNotFoundError, getSessionForPractitioner, listSessionMessages } from "@/lib/chat";
@@ -44,6 +45,7 @@ export default async function PractitionerChatSessionPage({ params }: { params: 
           senderName={practitioner.name}
         />
         <PractitionerChatKundli sessionId={session.id} />
+        <PractitionerChatVarshphal sessionId={session.id} />
       </div>
     </PractitionerShell>
   );

@@ -1,7 +1,9 @@
 "use client";
 
 import { useState } from "react";
-import { ChevronDown, FileText, LoaderCircle, MessageCircleQuestion, ScrollText } from "lucide-react";
+import { CalendarClock, ChevronDown, FileText, LoaderCircle, MessageCircleQuestion, ScrollText } from "lucide-react";
+
+const CURRENT_YEAR = new Date().getFullYear();
 
 export type PractitionerBooking = {
   id: string;
@@ -17,12 +19,15 @@ export type PractitionerBooking = {
   scheduledAt: string | Date;
   notes: string | null;
   kundliSummary: string | null;
+  varshphalSummary: string | null;
+  varshphalYear: number | null;
 };
 
 export function PractitionerBookings({ initialBookings }: { initialBookings: PractitionerBooking[] }) {
   const [bookings, setBookings] = useState(initialBookings);
   const [openId, setOpenId] = useState<string | null>(null);
   const [loadingId, setLoadingId] = useState<string | null>(null);
+  const [varshphalLoadingId, setVarshphalLoadingId] = useState<string | null>(null);
   const [error, setError] = useState("");
 
   async function generateKundli(id: string) {
@@ -37,6 +42,21 @@ export function PractitionerBookings({ initialBookings }: { initialBookings: Pra
       setError(caught instanceof Error ? caught.message : "The Kundli summary could not be generated.");
     } finally {
       setLoadingId(null);
+    }
+  }
+
+  async function generateVarshphal(id: string) {
+    setVarshphalLoadingId(id);
+    setError("");
+    try {
+      const response = await fetch(`/api/practitioner/bookings/${id}/varshphal`, { method: "POST" });
+      const data = await response.json();
+      if (!response.ok) throw new Error(data.error || "The Varshphal summary could not be generated.");
+      setBookings((current) => current.map((booking) => (booking.id === id ? { ...booking, varshphalSummary: data.varshphalSummary, varshphalYear: data.varshphalYear } : booking)));
+    } catch (caught) {
+      setError(caught instanceof Error ? caught.message : "The Varshphal summary could not be generated.");
+    } finally {
+      setVarshphalLoadingId(null);
     }
   }
 
@@ -80,6 +100,19 @@ export function PractitionerBookings({ initialBookings }: { initialBookings: Pra
                   ) : (
                     <button type="button" className="button button--small" disabled={loadingId === booking.id} onClick={() => generateKundli(booking.id)}>
                       {loadingId === booking.id ? <><LoaderCircle size={14} className="spin" /> Generating…</> : <><ScrollText size={14} /> Generate Kundli summary</>}
+                    </button>
+                  )}
+                  {booking.varshphalSummary && booking.varshphalYear === CURRENT_YEAR ? (
+                    <>
+                      <div className="kundli-report">
+                        <h4>Varshphal {booking.varshphalYear}</h4>
+                        {booking.varshphalSummary.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+                      </div>
+                      <a href={`/api/practitioner/bookings/${booking.id}/varshphal/pdf`} className="button button--small button--ghost">Download PDF</a>
+                    </>
+                  ) : (
+                    <button type="button" className="button button--small" disabled={varshphalLoadingId === booking.id} onClick={() => generateVarshphal(booking.id)}>
+                      {varshphalLoadingId === booking.id ? <><LoaderCircle size={14} className="spin" /> Generating…</> : <><CalendarClock size={14} /> Generate {CURRENT_YEAR} Varshphal</>}
                     </button>
                   )}
                 </div>

@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
 import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
+import { buildVarshphalChart, renderVarshphalReport, VarshphalError } from "@/lib/varshphal";
 import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
@@ -615,6 +616,110 @@ export async function getChatMemberKundliChart(sessionId: string, practitionerId
     return buildKundliChart({ name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace });
   } catch (error) {
     if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
+// --- Varshphal (annual solar-return) — mirrors the four Kundli helpers above, with one
+// deliberate difference: Varshphal is year-scoped, so a cached summary is only reused when its
+// stored varshphalYear still matches the current calendar year (unlike the Kundli cache, which
+// never goes stale). No year-picker here — same "current year, always" default the member
+// self-serve Varshphal flow uses.
+
+/** Generates (or returns the still-current-year cached) Varshphal summary for a booking's
+ * client from the real solar-return engine, using the birth details captured at booking time. */
+export async function getBookingVarshphalSummary(bookingId: string, practitionerId: string) {
+  const ref = db.collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new KundliSummaryError("Booking not found.");
+  const booking = bookingFromDoc(snap);
+  if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+
+  const year = new Date().getFullYear();
+  if (booking.varshphalSummary && booking.varshphalYear === year) return booking;
+
+  let summary: string;
+  try {
+    const chart = buildVarshphalChart({ birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace, year });
+    summary = renderVarshphalReport(chart, booking.clientName);
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+
+  await ref.update({ varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: FieldValue.serverTimestamp() });
+  return { ...booking, varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: new Date() };
+}
+
+/** Same lookup/auth as getBookingVarshphalSummary, but returns the structured VarshphalChart
+ * instead of the rendered text — for the PDF download route. */
+export async function getBookingVarshphalChart(bookingId: string, practitionerId: string) {
+  const ref = db.collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new KundliSummaryError("Booking not found.");
+  const booking = bookingFromDoc(snap);
+  if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+
+  try {
+    return { chart: buildVarshphalChart({ birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace, year: new Date().getFullYear() }), clientName: booking.clientName };
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
+/** Same idea as getBookingVarshphalSummary, but for an instant-chat session — birth details come
+ * from the client's own member profile (no booking-time capture for chat), same as
+ * getChatMemberKundliSummary. Scoped to sessions the calling practitioner actually owns. */
+export async function getChatMemberVarshphalSummary(sessionId: string, practitionerId: string) {
+  const sessionRef = db.collection("chatSessions").doc(sessionId);
+  const sessionSnap = await sessionRef.get();
+  if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
+  const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string; varshphalSummary?: string; varshphalYear?: number };
+  if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+
+  const year = new Date().getFullYear();
+  if (sessionData.varshphalSummary && sessionData.varshphalYear === year) return { varshphalSummary: sessionData.varshphalSummary };
+
+  const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
+  if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
+  const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Varshphal report can't be generated.");
+  }
+
+  let summary: string;
+  try {
+    const chart = buildVarshphalChart({ birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace, year });
+    summary = renderVarshphalReport(chart, member.name);
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+
+  await sessionRef.update({ varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: FieldValue.serverTimestamp() });
+  return { varshphalSummary: summary };
+}
+
+/** Same lookup/auth as getChatMemberVarshphalSummary, but returns the structured VarshphalChart
+ * instead of the rendered text — for the PDF download route. */
+export async function getChatMemberVarshphalChart(sessionId: string, practitionerId: string) {
+  const sessionSnap = await db.collection("chatSessions").doc(sessionId).get();
+  if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
+  const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string };
+  if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+
+  const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
+  if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
+  const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Varshphal report can't be generated.");
+  }
+
+  try {
+    return { chart: buildVarshphalChart({ birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace, year: new Date().getFullYear() }), clientName: member.name };
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
     throw error;
   }
 }
