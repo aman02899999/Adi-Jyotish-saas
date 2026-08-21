@@ -6,6 +6,10 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getAllPosts } from "@/lib/blog";
 
+// Post content itself is a static in-code list, but SiteFooter (rendered below) reads Firestore
+// via getStudioSettings() — see site-footer.tsx. Pinned explicitly so removing SiteHeader's
+// cookies() call (which used to force this dynamic implicitly) doesn't change behavior here.
+export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "The Jyotish Journal",
   description: "Notes on Vedic astrology — Moon signs, planetary transits, Muhurat timing, and how to read your chart with real clarity.",

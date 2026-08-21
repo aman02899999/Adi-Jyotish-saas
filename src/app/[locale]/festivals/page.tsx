@@ -5,6 +5,9 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { FESTIVALS, getFeaturedFestival } from "@/lib/festivals";
 
+// FESTIVALS itself is a static constant, but SiteFooter (rendered below) reads Firestore via
+// getStudioSettings() — see site-footer.tsx and the SiteHeader/SiteFooter fix note in
+// site-header.tsx. Once that's decoupled too, this can go back to ISR.
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Festival Muhurat Calendar",

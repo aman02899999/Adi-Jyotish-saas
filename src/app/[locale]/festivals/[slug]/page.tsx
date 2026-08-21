@@ -8,6 +8,9 @@ import { GlossaryStrip } from "@/components/glossary-strip";
 import { FESTIVALS, getFestivalBySlug, getFestivalPanchang } from "@/lib/festivals";
 import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
+// This page's own data is static, but SiteFooter (rendered below) reads Firestore via
+// getStudioSettings() — see site-footer.tsx. Once that's decoupled too, this can go back to
+// static/ISR (generateStaticParams below already assumes it can be).
 export const dynamic = "force-dynamic";
 
 export function generateStaticParams() {

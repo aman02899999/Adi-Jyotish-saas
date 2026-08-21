@@ -39,10 +39,11 @@ function isNavItemActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SiteNav({ signedInName }: { signedInName: string | null }) {
+export function SiteNav() {
   const t = useTranslations("Nav");
   const pathname = usePathname();
   const [cartCount, setCartCount] = useState(0);
+  const [signedInName, setSignedInName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -57,6 +58,16 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
       window.removeEventListener("storage", sync);
       window.removeEventListener("gemstone-cart-updated", sync);
     };
+  }, []);
+
+  useEffect(() => {
+    // Fetched client-side (rather than passed down from a server-rendered SiteHeader) so pages
+    // using this nav aren't forced into per-request dynamic rendering just to know who's signed
+    // in — see the /api/member/session route comment for why this matters.
+    fetch("/api/member/session")
+      .then((response) => response.json())
+      .then((data: { name: string | null }) => setSignedInName(data.name ? data.name.split(" ")[0] : null))
+      .catch(() => {});
   }, []);
 
   // Closes the mobile menu on outside tap/click, Escape, or navigation — a plain <details> only

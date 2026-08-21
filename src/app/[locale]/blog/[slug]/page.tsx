@@ -10,6 +10,11 @@ import { ShareButtons } from "@/components/share-buttons";
 import { getAllPosts, getPostBySlug } from "@/lib/blog";
 import { getSiteUrl } from "@/lib/site-url";
 
+// Post content itself is a static in-code list, but SiteFooter (rendered below) reads Firestore
+// via getStudioSettings() — see site-footer.tsx. Pinned explicitly so removing SiteHeader's
+// cookies() call (which used to force this dynamic implicitly) doesn't change behavior here.
+export const dynamic = "force-dynamic";
+
 export function generateStaticParams() {
   return getAllPosts().map((post) => ({ slug: post.slug }));
 }

@@ -3,6 +3,8 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getStudioSettings } from "@/lib/studio-settings";
 
+// See about/page.tsx's comment: getStudioSettings() reads Firestore, and build-time prerendering
+// has no credentials to read it with — stays force-dynamic.
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
   title: "Privacy Policy",
