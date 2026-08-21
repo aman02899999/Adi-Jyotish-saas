@@ -83,22 +83,30 @@ are the authoritative runbook, summarized here:
    Secrets needed: `FIREBASE_SERVICE_ACCOUNT_KEY`, `GEMINI_API_KEY`, `TURNSTILE_SECRET_KEY`,
    `CRON_SECRET`, `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`,
    `PAYOUT_ENCRYPTION_KEY`, `RESEND_API_KEY`, `ABLY_API_KEY`.
-3. **Replace the three `REPLACE_ME…` placeholder values** in `apphosting.yaml` with real ones before
-   deploying: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (Cloudflare Turnstile dashboard), `NEXT_PUBLIC_SITE_URL`
-   (your production domain), `FIREBASE_STORAGE_BUCKET` (Firebase Console → Storage).
-4. **Razorpay webhook**: create it at Settings → Webhooks pointing to
-   `https://<your-domain>/api/webhooks/razorpay`, then set `RAZORPAY_WEBHOOK_SECRET` to the secret it
+3. **Replace the two remaining `REPLACE_ME…` placeholder values** in `apphosting.yaml` with real ones
+   before deploying: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (Cloudflare Turnstile dashboard) and
+   `FIREBASE_STORAGE_BUCKET` (Firebase Console → Storage). `NEXT_PUBLIC_SITE_URL` is already set to
+   the production domain, **astronomers.in**.
+4. **Connect astronomers.in as a custom domain**: Firebase Console → App Hosting → your backend →
+   Custom domains → Add custom domain → enter `astronomers.in` (and `www.astronomers.in` if you want
+   both). Firebase generates a TXT record (ownership verification) and the A/CNAME records to point
+   the domain at App Hosting — add each one at your domain registrar's DNS panel exactly as shown;
+   the values are generated per-project, so there's no fixed record to copy from here. Firebase then
+   provisions the TLS certificate automatically once DNS propagates (can take up to 24-48h).
+5. **Razorpay webhook**: create it at Settings → Webhooks pointing to
+   `https://astronomers.in/api/webhooks/razorpay`, then set `RAZORPAY_WEBHOOK_SECRET` to the secret it
    generates. `RAZORPAY_MODE` is `live` in `apphosting.yaml` — real payments process once deployed.
-5. **Resend**: verify a sending domain in the Resend dashboard and update `RESEND_FROM_EMAIL`
-   (defaults to Resend's shared sandbox address, which will not deliver to arbitrary inboxes).
-6. **Optional, currently undeclared**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`,
+6. **Resend**: verify a sending domain in the Resend dashboard (`astronomers.in`, or a subdomain like
+   `mail.astronomers.in`) and update `RESEND_FROM_EMAIL` accordingly — it currently defaults to
+   Resend's shared sandbox address, which will not deliver to arbitrary inboxes.
+7. **Optional, currently undeclared**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`,
    `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`) and the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`) — the app
    gracefully runs without either; add them to `apphosting.yaml` the same way once wanted.
-7. `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
+8. `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
    automatically on push to `main` — no manual step needed for those.
 
-Every one of these requires access to the live Firebase project, Razorpay account, and other
-third-party dashboards — steps only a project owner can complete.
+Every one of these requires access to the live Firebase project, domain registrar, Razorpay account,
+and other third-party dashboards — steps only a project owner can complete.
 
 ## Project structure
 

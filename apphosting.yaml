@@ -165,11 +165,11 @@ env:
       - RUNTIME
 
   # ── Site URL ─────────────────────────────────────────────────────────
-  # Used to build absolute links in emails and metadata. Replace with your
-  # real App Hosting domain (Firebase Console → App Hosting → backend) or
-  # custom domain.
+  # Used to build absolute links in emails and metadata. Set to the custom
+  # domain once it's connected in Firebase Console → App Hosting → backend
+  # → Custom domains (see README's "Deploying to production" section).
   - variable: NEXT_PUBLIC_SITE_URL
-    value: "REPLACE_ME_https://your-domain.com"
+    value: "https://astronomers.in"
     availability:
       - BUILD
       - RUNTIME

@@ -31,7 +31,7 @@ export async function GET(_request: Request, { params }: { params: Promise<{ id:
         </div>
 
         <div style={{ display: "flex", justifyContent: "space-between", fontSize: 20, color: "#aa9d90" }}>
-          <span style={{ display: "flex" }}>adijyotishguru.com</span>
+          <span style={{ display: "flex" }}>astronomers.in</span>
           <span style={{ display: "flex" }}>Milestone reached {milestone.achievedAt.toLocaleDateString("en", { month: "long", year: "numeric" })}</span>
         </div>
       </div>
