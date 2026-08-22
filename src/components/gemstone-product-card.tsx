@@ -1,7 +1,7 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useState } from "react";
 import { Gem, Heart, ShoppingBag, Star } from "lucide-react";
 import { useGemstoneCart } from "@/components/gemstone-cart-context";

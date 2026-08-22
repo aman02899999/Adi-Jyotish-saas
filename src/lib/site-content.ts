@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 
@@ -53,7 +54,7 @@ const CTA_HREF_FIELDS = new Set<keyof HomeHeroContent>(["primaryCtaHref", "secon
 /** Every field falls back to the current hardcoded copy if the admin has never edited it, so a
  * fresh deploy (or a doc that only has some fields set) renders identically to before this
  * system existed — nothing on the homepage can go blank from a missing Firestore doc. */
-export async function getHomeHeroContent(): Promise<HomeHeroContent> {
+async function fetchHomeHeroContent(): Promise<HomeHeroContent> {
   const doc = await collection.doc("home-hero").get();
   if (!doc.exists) return DEFAULT_HERO;
   const data = doc.data() as Partial<HomeHeroContent>;
@@ -68,6 +69,15 @@ export async function getHomeHeroContent(): Promise<HomeHeroContent> {
   return result;
 }
 
+// Same content for every visitor — cached at runtime (not build time, so no Firebase credentials
+// needed during `next build`) rather than read fresh from Firestore on every single homepage hit.
+// An admin save reads back fresh (see updateHomeHeroContent below); other visitors may see the
+// previous version for up to the revalidate window.
+export const getHomeHeroContent = unstable_cache(fetchHomeHeroContent, ["home-hero-content"], {
+  tags: ["home-hero-content"],
+  revalidate: 300,
+});
+
 export async function updateHomeHeroContent(patch: Partial<HomeHeroContent>): Promise<HomeHeroContent> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   for (const [key, rawValue] of Object.entries(patch) as [keyof HomeHeroContent, string][]) {
@@ -77,19 +87,25 @@ export async function updateHomeHeroContent(patch: Partial<HomeHeroContent>): Pr
     update[key] = value;
   }
   await collection.doc("home-hero").set(update, { merge: true });
-  return getHomeHeroContent();
+  return fetchHomeHeroContent();
 }
 
-export async function getFooterContent(): Promise<FooterContent> {
+async function fetchFooterContent(): Promise<FooterContent> {
   const doc = await collection.doc("footer").get();
   if (!doc.exists) return DEFAULT_FOOTER;
   const data = doc.data() as Partial<FooterContent>;
   return { ...DEFAULT_FOOTER, ...(data.blurb ? { blurb: data.blurb } : {}) };
 }
 
+// Rendered via SiteFooter on nearly every page — same rationale as getHomeHeroContent above.
+export const getFooterContent = unstable_cache(fetchFooterContent, ["footer-content"], {
+  tags: ["footer-content"],
+  revalidate: 300,
+});
+
 export async function updateFooterContent(patch: Partial<FooterContent>): Promise<FooterContent> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof patch.blurb === "string") update.blurb = patch.blurb.trim().slice(0, 400);
   await collection.doc("footer").set(update, { merge: true });
-  return getFooterContent();
+  return fetchFooterContent();
 }

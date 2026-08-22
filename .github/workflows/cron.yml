@@ -25,3 +25,27 @@ jobs:
             echo "Housekeeping call failed with status $status"
             exit 1
           fi
+
+  # Synthetic uptime check for the handful of routes real money actually flows through — a failed
+  # GitHub Actions run here (visible in the Actions tab, and emailable via GitHub's own workflow-
+  # failure notifications) is the cheapest possible "is the site actually up" alarm, with no new
+  # secrets beyond the SITE_URL this workflow already requires.
+  uptime:
+    runs-on: ubuntu-latest
+    steps:
+      - name: Check critical routes are reachable
+        run: |
+          if [ -z "${{ secrets.SITE_URL }}" ]; then
+            echo "SITE_URL repo secret not set — skipping (nothing to check yet)."
+            exit 0
+          fi
+          failed=0
+          for path in "/" "/pricing" "/book" "/astrologers"; do
+            status=$(curl -sS -o /dev/null -w "%{http_code}" "${{ secrets.SITE_URL }}$path")
+            echo "$path -> $status"
+            if [ "$status" -ge 400 ]; then
+              echo "::error::$path returned $status"
+              failed=1
+            fi
+          done
+          exit $failed

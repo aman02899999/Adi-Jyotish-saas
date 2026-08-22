@@ -1,7 +1,7 @@
 "use client";
 
 import { useMemo, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import {
   ArrowRight,
   CalendarCheck2,
@@ -88,7 +88,7 @@ export function MemberConsultations({ initialBookings, cancellationHours = 24 }:
             const canCancel = ["pending","confirmed"].includes(item.status) && date.getTime() - now.getTime() >= cancellationHours * 60 * 60 * 1000;
             return <article key={item.id}>
               <div className="consultation-list__icon"><FileText size={18} /></div>
-              <div className="consultation-list__name"><small>{item.reference}</small><h3>{item.serviceTitle}</h3><p>{item.practitionerName ?? "Jyotish Studio"} · {date.toLocaleDateString("en", { weekday: "short", month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })} · {date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</p></div>
+              <div className="consultation-list__name"><small>{item.reference}</small><h3>{item.serviceTitle}</h3><p>{item.practitionerName ?? "Adi Jyotish Guru"} · {date.toLocaleDateString("en", { weekday: "short", month: "long", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })} · {date.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</p></div>
               <div className="consultation-list__meta"><span className={`consultation-status consultation-status--${item.status}`}>{item.status}</span><small>{item.paymentStatus} · ${item.servicePrice}</small></div>
               <div className="consultation-list__actions">{canCancel && <button onClick={() => setCancelling(item)}>Cancel</button>}<Link href={item.serviceId ? `/book?service=${item.serviceId}` : "/book"}>Book again <ArrowRight size={13} /></Link></div>
             </article>;

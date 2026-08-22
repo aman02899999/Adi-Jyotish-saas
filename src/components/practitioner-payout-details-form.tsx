@@ -49,7 +49,7 @@ export function PractitionerPayoutDetailsForm({ initialDetails }: { initialDetai
       <p className="two-factor-hint">
         {saved.bank || saved.upi ? "Payout details are saved. Enter new details below to replace them." : "Add at least one payout method before requesting your first payout."}
       </p>
-      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")}><X size={14} /></button></div>}
+      {notice && <div className="toast"><Check size={15} />{notice}<button onClick={() => setNotice("")} aria-label="Dismiss"><X size={14} /></button></div>}
       <form className="admin-auth-form" onSubmit={submit}>
         <label><span>Account holder name</span><input value={bankAccountName} onChange={(event) => setBankAccountName(event.target.value)} placeholder="As it appears on your bank account" /></label>
         <label><span>Bank account number {saved.bank && <em>(saved — enter a new number to replace it)</em>}</span><input value={bankAccountNumber} onChange={(event) => setBankAccountNumber(event.target.value)} placeholder={saved.bank ? "•••• saved" : "Account number"} /></label>

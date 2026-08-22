@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, Clock3, RefreshCw, Sparkles, X } from "lucide-react";
 
 export type MemberAiReading = {
@@ -9,6 +9,7 @@ export type MemberAiReading = {
   readingType: string;
   clientName: string;
   personaName?: string | null;
+  year?: number | null;
   question: string | null;
   answer: string | null;
   status: string;
@@ -43,7 +44,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
 
   return (
     <>
-      <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>Live Answers</h1><span>Every reading you&apos;ve requested — questions, Kundli, palm, tarot, face, Vastu, and Lal Kitab.</span></div><div className="hero-actions"><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link><Link href="/kundli" className="button button--ghost button--small">Full Kundli report</Link><Link href="/palm-reading" className="button button--ghost button--small">Palm reading</Link><Link href="/tarot-reading" className="button button--ghost button--small">Tarot reading</Link><Link href="/face-reading" className="button button--ghost button--small">Face reading</Link><Link href="/vastu-consultation" className="button button--ghost button--small">Vastu consultation</Link><Link href="/lal-kitab-reading" className="button button--ghost button--small">Lal Kitab reading</Link></div></div>
+      <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>Live Answers</h1><span>Every reading you&apos;ve requested — questions, Kundli, Varshphal, palm, tarot, face, Vastu, and Lal Kitab.</span></div><div className="hero-actions"><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link><Link href="/kundli" className="button button--ghost button--small">Full Kundli report</Link><Link href="/varshphal" className="button button--ghost button--small">Varshphal</Link><Link href="/palm-reading" className="button button--ghost button--small">Palm reading</Link><Link href="/tarot-reading" className="button button--ghost button--small">Tarot reading</Link><Link href="/face-reading" className="button button--ghost button--small">Face reading</Link><Link href="/vastu-consultation" className="button button--ghost button--small">Vastu consultation</Link><Link href="/lal-kitab-reading" className="button button--ghost button--small">Lal Kitab reading</Link></div></div>
       <section className="member-billing-summary">
         <article><span><Sparkles size={19} /></span><div><small>Readings answered</small><strong>{answered} of {readings.length}</strong></div></article>
       </section>
@@ -54,8 +55,8 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
             <article key={reading.id} className="ai-reading-item">
               <div className="member-invoice-icon"><Sparkles size={16} /></div>
               <div className="member-invoice-name ai-reading-item__body">
-                <small>{new Date(reading.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{reading.readingType === "kundli" && <> · Full Kundli report</>}{reading.readingType === "palm" && <> · Palm reading (Pandit Trilochan Shashtri)</>}{reading.readingType === "tarot" && <> · Tarot reading (Tarot Mystic Divya)</>}{reading.readingType === "face" && <> · Face reading (Acharya Devraj Bhardwaj)</>}{reading.readingType === "vastu" && <> · Vastu consultation (Vastu Shastri Ramesh Chaturvedi)</>}{reading.readingType === "lalkitab" && <> · Lal Kitab reading (Pandit Girish Trivedi)</>}{reading.readingType === "persona" && reading.personaName && <> · {reading.personaName}</>}</small>
-                <h3>{reading.question ?? (reading.readingType === "palm" ? "Hast Rekha Palm Reading" : reading.readingType === "face" ? "Mukh Samudrik Face Reading" : "Full Kundli Report")}</h3>
+                <small>{new Date(reading.createdAt).toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric" })}{reading.readingType === "kundli" && <> · Full Kundli report</>}{reading.readingType === "varshphal" && <> · Varshphal {reading.year}</>}{reading.readingType === "palm" && <> · Palm reading (Pandit Trilochan Shashtri)</>}{reading.readingType === "tarot" && <> · Tarot reading (Tarot Mystic Divya)</>}{reading.readingType === "face" && <> · Face reading (Acharya Devraj Bhardwaj)</>}{reading.readingType === "vastu" && <> · Vastu consultation (Vastu Shastri Ramesh Chaturvedi)</>}{reading.readingType === "lalkitab" && <> · Lal Kitab reading (Pandit Girish Trivedi)</>}{reading.readingType === "persona" && reading.personaName && <> · {reading.personaName}</>}</small>
+                <h3>{reading.question ?? (reading.readingType === "palm" ? "Hast Rekha Palm Reading" : reading.readingType === "face" ? "Mukh Samudrik Face Reading" : reading.readingType === "varshphal" ? `Varshphal ${reading.year}` : "Full Kundli Report")}</h3>
                 {reading.status === "answered" && reading.answer
                   ? <p className="ai-reading-item__answer">{reading.answer}</p>
                   : <p className="ai-reading-item__pending"><Clock3 size={13} /> Your payment is confirmed — the reading is still being prepared.</p>}

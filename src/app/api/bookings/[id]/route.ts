@@ -5,6 +5,7 @@ import { sendBookingNotification } from "@/lib/messaging";
 import { dateInTimeZone, validateAvailableSlot } from "@/lib/scheduling";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { bookingFromDoc } from "@/app/api/bookings/route";
+import { checkBookingCompletionMilestone } from "@/lib/milestones";
 
 export const dynamic = "force-dynamic";
 
@@ -97,6 +98,9 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       body.scheduledAt ? `New appointment: ${updated.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Kolkata" })}.` : "",
     ].filter(Boolean).join(" ");
     await sendBookingNotification({ memberEmail: updated.clientEmail, bookingId: updated.id, subject: `${updated.serviceTitle} · ${updated.reference}`, body: `Your consultation was updated. ${changes}` });
+  }
+  if (body.status === "completed" && existing.status !== "completed") {
+    checkBookingCompletionMilestone().catch((error) => console.error("Booking milestone check failed", error));
   }
   return Response.json(updated);
 }

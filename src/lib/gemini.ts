@@ -1,4 +1,6 @@
 import "server-only";
+import { FieldValue } from "firebase-admin/firestore";
+import { db } from "@/lib/firestore";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 /**
@@ -20,6 +22,27 @@ export function isGeminiConfigured() {
 
 type GeminiPart = { text: string } | { inline_data: { mime_type: string; data: string } };
 
+// A hard ceiling on Gemini calls per UTC day, configurable via env since the right number depends
+// entirely on the account's actual budget. Defaults generously (2000/day) so this is inert until
+// someone sets it deliberately, rather than silently rate-limiting a fresh deployment. Every AI
+// reading type funnels through this one function, so gating here covers all of them at once.
+const DAILY_CALL_LIMIT = Number(process.env.GEMINI_DAILY_CALL_LIMIT) || 2000;
+
+class GeminiBudgetError extends Error {}
+
+async function claimGeminiBudget() {
+  const today = new Date().toISOString().slice(0, 10);
+  const ref = db.collection("geminiUsage").doc(today);
+  const withinBudget = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const count = (snap.exists ? (snap.data() as { count?: number }).count ?? 0 : 0) + 1;
+    if (count > DAILY_CALL_LIMIT) return false;
+    tx.set(ref, { count, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+    return true;
+  });
+  if (!withinBudget) throw new GeminiBudgetError("Live readings have reached today's usage limit. Please try again tomorrow, or contact support.");
+}
+
 async function callGemini({ systemPrompt, parts, temperature, maxOutputTokens }: {
   systemPrompt: string;
   parts: GeminiPart[];
@@ -28,6 +51,7 @@ async function callGemini({ systemPrompt, parts, temperature, maxOutputTokens }:
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
   if (!apiKey) throw new Error("Live readings are not configured.");
+  await claimGeminiBudget();
 
   const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
     method: "POST",

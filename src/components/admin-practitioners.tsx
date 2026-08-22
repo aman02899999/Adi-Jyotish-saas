@@ -1,22 +1,28 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { Check, Crown, Edit3, Mail, Plus, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { AlertTriangle, Check, Crown, Edit3, Mail, Plus, ShieldCheck, Trash2, Users, X } from "lucide-react";
+import { AvatarImage } from "@/components/avatar-image";
 import type { Practitioner } from "@/lib/scheduling";
+
+// verificationFlag is computed server-side (computeVerificationFlags in practitioner-portal.ts)
+// and attached alongside each row by the admin practitioners API — not part of the base
+// Practitioner shape since it's derived, not stored on the practitioner doc itself.
+type PractitionerRow = Practitioner & { verificationFlag?: string | null };
 
 type FormState = {
   name: string; email: string; title: string; bio: string; specialties: string; languages: string;
-  consultationModes: string; experienceYears: string; chatRatePerMinute: string; photoUrl: string;
+  consultationModes: string; experienceYears: string; chatRatePerMinute: string; photoUrl: string; videoUrl: string;
   featured: boolean; active: boolean;
 };
 
 const emptyForm: FormState = {
   name: "", email: "", title: "", bio: "", specialties: "", languages: "English, Hindi",
-  consultationModes: "Chat, Call, Video", experienceYears: "5", chatRatePerMinute: "15", photoUrl: "",
+  consultationModes: "Chat, Call, Video", experienceYears: "5", chatRatePerMinute: "15", photoUrl: "", videoUrl: "",
   featured: false, active: false,
 };
 
-export function AdminPractitioners({ initialPractitioners }: { initialPractitioners: Practitioner[] }) {
+export function AdminPractitioners({ initialPractitioners }: { initialPractitioners: PractitionerRow[] }) {
   const [items, setItems] = useState(initialPractitioners);
   const [editing, setEditing] = useState<Practitioner | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -37,7 +43,7 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
       name: person.name, email: person.email, title: person.title, bio: person.bio,
       specialties: person.specialties, languages: person.languages, consultationModes: person.consultationModes,
       experienceYears: String(person.experienceYears), chatRatePerMinute: String(person.chatRatePerMinute),
-      photoUrl: person.photoUrl ?? "", featured: person.featured, active: person.active,
+      photoUrl: person.photoUrl ?? "", videoUrl: person.videoUrl ?? "", featured: person.featured, active: person.active,
     });
     setOpen(true);
   }
@@ -51,6 +57,7 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
       experienceYears: Number(form.experienceYears),
       chatRatePerMinute: Number(form.chatRatePerMinute),
       photoUrl: form.photoUrl.trim() || null,
+      videoUrl: form.videoUrl.trim() || null,
     };
     try {
       const response = await fetch(editing ? `/api/admin/practitioners/${editing.id}` : "/api/admin/practitioners", {
@@ -120,8 +127,11 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
           {items.map((person) => (
             <div className="service-table__row" role="row" key={person.id}>
               <div className="table-service">
-                <span className="table-service__icon">{person.photoUrl ? <img src={person.photoUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} /> : <Users size={17} />}</span>
-                <div><strong>{person.name}</strong><small>{person.email} · {person.hasPortalAccess ? "Portal linked" : "Not yet invited"}</small></div>
+                <span className="table-service__icon"><AvatarImage src={person.photoUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} fallback={<Users size={17} />} /></span>
+                <div>
+                  <strong>{person.name}{person.verificationFlag && <AlertTriangle size={13} color="#c0392b" style={{ marginLeft: 6, verticalAlign: "-1px" }} aria-label={person.verificationFlag} />}</strong>
+                  <small>{person.email} · {person.hasPortalAccess ? "Portal linked" : "Not yet invited"}{person.verificationFlag ? ` · ${person.verificationFlag}` : ""}</small>
+                </div>
               </div>
               <strong>{person.experienceYears} yrs</strong>
               <strong>₹{person.chatRatePerMinute}/min</strong>
@@ -163,6 +173,7 @@ export function AdminPractitioners({ initialPractitioners }: { initialPractition
               <label className="field"><span>Experience (years)</span><input min="0" max="60" type="number" value={form.experienceYears} onChange={(event) => setForm({ ...form, experienceYears: event.target.value })} /></label>
               <label className="field"><span>Chat rate</span><div className="input-prefix"><b>₹/min</b><input min="0" type="number" value={form.chatRatePerMinute} onChange={(event) => setForm({ ...form, chatRatePerMinute: event.target.value })} /></div></label>
               <label className="field field--full"><span>Photo URL (optional)</span><input value={form.photoUrl} onChange={(event) => setForm({ ...form, photoUrl: event.target.value })} placeholder="https://…" /></label>
+              <label className="field field--full"><span>Video intro URL (optional)</span><input value={form.videoUrl} onChange={(event) => setForm({ ...form, videoUrl: event.target.value })} placeholder="https://… a short .mp4 clip" /></label>
               <div className="form-options field--full">
                 <label><button type="button" className={`switch ${form.active ? "on" : ""}`} onClick={() => setForm({ ...form, active: !form.active })}><i /></button><span><strong>Publish to marketplace</strong><small>Visible on /astrologers once on</small></span></label>
                 <label><button type="button" className={`switch ${form.featured ? "on" : ""}`} onClick={() => setForm({ ...form, featured: !form.featured })}><i /></button><span><strong>Feature on homepage</strong><small>Shown in the senior astrologers strip</small></span></label>

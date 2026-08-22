@@ -6,11 +6,90 @@ import { getPlanById, type MembershipPlan } from "@/lib/plans";
 import { splitGstInclusive } from "@/lib/gst";
 import { sendBookingNotification } from "@/lib/messaging";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
+import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { getSiteUrl } from "@/lib/site-url";
 import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/lib/razorpay";
 import { processReferralReward } from "@/lib/referrals";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { rechargeWallet } from "@/lib/wallet";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+
+// Razorpay statuses that mean a renewal charge is stuck (failed retries exhausted, or the
+// subscription got paused) — the member needs to act, so this is the one subscription-status
+// transition worth interrupting them for instead of just updating a record silently.
+const DUNNING_STATUSES = new Set(["halted", "paused"]);
+
+// Razorpay retries webhook delivery until it gets a 2xx, so the same "halted"/"paused" event can
+// arrive more than once for one dunning episode — guard on a per-member flag (cleared once the
+// subscription becomes active again) instead of relying on webhook delivery being exactly-once.
+const DUNNING_NOTICE_COOLDOWN_MS = 20 * 60 * 60 * 1000;
+
+async function sendDunningNotice(memberId: string, planName: string) {
+  const memberRef = db.collection("members").doc(memberId);
+  const memberSnap = await memberRef.get();
+  const member = memberSnap.data() as { name?: string; email?: string; dunningNoticeSentAt?: FirebaseFirestore.Timestamp } | undefined;
+  if (!member?.email) return;
+
+  const lastSentMs = member.dunningNoticeSentAt?.toMillis() ?? 0;
+  if (Date.now() - lastSentMs < DUNNING_NOTICE_COOLDOWN_MS) return;
+  await memberRef.update({ dunningNoticeSentAt: FieldValue.serverTimestamp() });
+
+  const billingUrl = new URL("/dashboard/billing", getSiteUrl()).toString();
+  await createNotification({
+    recipientType: "member",
+    recipientId: memberId,
+    type: "subscription_payment_issue",
+    title: "Your membership renewal needs attention",
+    body: `We couldn't renew your ${planName} membership. Update your payment details to keep your benefits.`,
+    link: "/dashboard/billing",
+  });
+  await sendEmail({
+    to: member.email,
+    subject: "Action needed: your membership renewal failed",
+    html: genericNotificationEmailHtml({
+      title: "Your membership renewal needs attention",
+      name: member.name ?? "there",
+      body: `We weren't able to renew your ${planName} membership — this usually means the card on file was declined. Update your payment details to keep your discounts and benefits active.`,
+      ctaLabel: "Update payment details",
+      ctaUrl: billingUrl,
+    }),
+  }).catch((error) => console.error("Dunning email failed", error));
+}
+
+const PAYMENT_FAILURE_RISK_THRESHOLD = 4;
+const PAYMENT_FAILURE_RISK_WINDOW_MS = 24 * 60 * 60 * 1000;
+
+/** Repeated failed charge attempts from the same member in a short window is a common precursor
+ * to a chargeback/dispute (a declined card being retried, or a stolen card being tested) — flags
+ * it for admin review instead of only finding out after a dispute lands. Uses a single per-member
+ * counter doc (reset once the window elapses) rather than a query over a failures collection, so
+ * this needs no new composite index and stays a fixed cost per failure event. Only covers flows
+ * that stamp notes.memberId on the Razorpay order (wallet recharge, gemstone orders, gift
+ * purchases) — booking/subscription payments use a different checkout path and aren't covered. */
+async function flagPaymentFailureRisk(memberId: string) {
+  const ref = db.collection("paymentFailureCounters").doc(memberId);
+  const shouldNotify = await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const data = snap.exists ? (snap.data() as { count?: number; windowStart?: FirebaseFirestore.Timestamp }) : undefined;
+    const windowStartMs = data?.windowStart?.toMillis() ?? 0;
+    const stillInWindow = Date.now() - windowStartMs < PAYMENT_FAILURE_RISK_WINDOW_MS;
+    const count = (stillInWindow ? data?.count ?? 0 : 0) + 1;
+    tx.set(ref, { count, windowStart: stillInWindow && data ? data.windowStart : FieldValue.serverTimestamp() }, { merge: true });
+    return count >= PAYMENT_FAILURE_RISK_THRESHOLD;
+  });
+  if (!shouldNotify) return;
+
+  const adminIds = await getAdminIdsWithPermission("billing");
+  if (!adminIds.length) return;
+  const memberSnap = await db.collection("members").doc(memberId).get();
+  const member = memberSnap.data() as { name?: string; email?: string } | undefined;
+  await notifyAdmins(adminIds, {
+    type: "payment_failure_risk",
+    title: `Repeated payment failures: ${member?.name ?? "a member"}`,
+    body: `${member?.email ?? memberId} has had ${PAYMENT_FAILURE_RISK_THRESHOLD}+ failed payment attempts in the last 24 hours — worth checking before it becomes a dispute.`,
+    link: "/admin/members",
+  }).catch((error) => console.error("Payment-failure risk notification failed", error));
+}
 
 export const dynamic = "force-dynamic";
 
@@ -95,6 +174,10 @@ export async function POST(request: Request) {
     else if (["subscription.cancelled", "subscription.completed", "subscription.halted", "subscription.paused", "subscription.pending"].includes(body.event)) await handleSubscriptionStatus(body.payload?.subscription?.entity);
   } catch (error) {
     console.error(`Razorpay webhook handling failed for ${body.event}`, error instanceof Error ? error.message : "unknown error");
+    // The dedup doc was created before the handler ran to lock out concurrent duplicate
+    // deliveries — but on genuine failure it has to come back out, or Razorpay's retry of this
+    // same event will be deduped away as "already processed" when it never actually completed.
+    await eventRef.delete().catch(() => {});
     return Response.json({ error: "Webhook processing failed." }, { status: 500 });
   }
 
@@ -158,10 +241,11 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
 async function handlePaymentFailed(payment?: RazorpayWebhookPayment) {
   if (!payment?.order_id) return;
   const snap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
-  if (snap.empty) return;
-  const row = paymentFromSnap(snap.docs[0]);
-  if (row.status !== "pending") return;
-  await snap.docs[0].ref.update({ status: "failed", updatedAt: FieldValue.serverTimestamp() });
+  if (!snap.empty) {
+    const row = paymentFromSnap(snap.docs[0]);
+    if (row.status === "pending") await snap.docs[0].ref.update({ status: "failed", updatedAt: FieldValue.serverTimestamp() });
+  }
+  if (payment.notes?.memberId) await flagPaymentFailureRisk(payment.notes.memberId).catch((error) => console.error("Payment-failure risk flag failed", error));
 }
 
 async function handleRefundProcessed(refund?: RazorpayWebhookRefund) {
@@ -215,6 +299,9 @@ async function handleSubscriptionCharged(subscription?: RazorpayWebhookSubscript
     status: "active",
     currentPeriodStart: periodStart,
     currentPeriodEnd: periodEnd,
+    // A successful renewal charge starts a fresh billing period, so the reminder for the
+    // period that just ended needs to be able to fire again ahead of the next one.
+    renewalReminderSentAt: FieldValue.delete(),
     updatedAt: FieldValue.serverTimestamp(),
   });
 
@@ -272,5 +359,9 @@ async function handleSubscriptionStatus(subscription?: RazorpayWebhookSubscripti
     await syncMemberPlanLabel(found.memberId, "free");
   } else if (subscription.status === "active") {
     await syncMemberPlanLabel(found.memberId, found.plan.key);
+  }
+
+  if (DUNNING_STATUSES.has(subscription.status)) {
+    await sendDunningNotice(found.memberId, found.plan.name).catch((error) => console.error("Dunning notice failed", error));
   }
 }

@@ -1,9 +1,9 @@
 "use client";
 
 import Image from "next/image";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { useEffect, useMemo, useState } from "react";
-import { Check, CheckCircle2, Gem, Heart, Minus, MessageSquarePlus, Plus, RotateCcw, ShieldCheck, ShoppingBag, Star, Truck, X } from "lucide-react";
+import { Award, Check, CheckCircle2, Gem, Heart, Minus, MessageSquarePlus, Plus, RotateCcw, ShieldCheck, ShoppingBag, Star, Truck, X } from "lucide-react";
 import { useGemstoneCart } from "@/components/gemstone-cart-context";
 
 type Variant = { id: string; label: string; weightCarat: string; weightRatti: string; certificationLevel: string; price: number; compareAtPrice: number | null; stockQuantity: number };
@@ -12,7 +12,7 @@ type Review = { id: string; reviewerName: string; rating: number; title: string;
 
 type ProductDetail = {
   id: string; slug: string; name: string; shortDescription: string; description: string; benefits: string; whoShouldWear: string;
-  recommendedZodiac: string; recommendedPlanets: string; origin: string; color: string; treatment: string; certification: string;
+  recommendedZodiac: string; recommendedPlanets: string; origin: string; color: string; treatment: string; certification: string; certificateUrl: string;
   currency: string; categoryName: string; ratingAverage: number; ratingCount: number;
   images: ProductImage[]; variants: Variant[];
 };
@@ -26,6 +26,7 @@ export function GemstoneProductDetail({ product, reviews: initialReviews, wishli
   const [activeImage, setActiveImage] = useState(0);
   const [tab, setTab] = useState<"description" | "benefits" | "wear" | "specs">("description");
   const [liked, setLiked] = useState(wishlisted);
+  const [certificateOpen, setCertificateOpen] = useState(false);
   const [addedNotice, setAddedNotice] = useState("");
   const [reviews, setReviews] = useState(initialReviews);
   const [reviewForm, setReviewForm] = useState({ reviewerName: "", rating: 5, title: "", body: "" });
@@ -151,7 +152,7 @@ export function GemstoneProductDetail({ product, reviews: initialReviews, wishli
         {addedNotice && <div className="product-detail__added"><Check size={14} /> {addedNotice} <Link href="/gemstones/cart">View cart</Link></div>}
 
         <div className="product-detail__trust">
-          <span><ShieldCheck size={15} /> Certified authentic</span>
+          <button type="button" className="product-detail__cert-trigger" onClick={() => setCertificateOpen(true)}><ShieldCheck size={15} /> Certified authentic — <span>View certificate</span></button>
           <span><Truck size={15} /> {variant && variant.stockQuantity > 0 ? "Ships in 2-4 business days" : "Currently unavailable"}</span>
           <span><RotateCcw size={15} /> 7-day return window</span>
         </div>
@@ -169,6 +170,7 @@ export function GemstoneProductDetail({ product, reviews: initialReviews, wishli
             {tab === "wear" && <p>{product.whoShouldWear || "No guidance provided yet."}</p>}
             {tab === "specs" && (
               <dl className="product-detail__specs">
+                <div><dt>Weight</dt><dd>{variant && variant.weightRatti && variant.weightRatti !== "—" ? `${variant.weightRatti} Ratti${variant.weightCarat && variant.weightCarat !== "—" ? ` (${variant.weightCarat} ct)` : ""}` : "—"}</dd></div>
                 <div><dt>Origin</dt><dd>{product.origin || "—"}</dd></div>
                 <div><dt>Color</dt><dd>{product.color || "—"}</dd></div>
                 <div><dt>Treatment</dt><dd>{product.treatment || "—"}</dd></div>
@@ -208,6 +210,35 @@ export function GemstoneProductDetail({ product, reviews: initialReviews, wishli
           {reviewNotice && <div className="toast"><Check size={15} />{reviewNotice}<button type="button" onClick={() => setReviewNotice("")}><X size={14} /></button></div>}
         </form>
       </div>
+
+      {certificateOpen && (
+        <div className="modal-backdrop" role="presentation" onMouseDown={() => setCertificateOpen(false)}>
+          <section className="certificate-modal" role="dialog" aria-modal="true" aria-labelledby="certificate-modal-title" onMouseDown={(event) => event.stopPropagation()}>
+            <button type="button" className="certificate-modal__close" onClick={() => setCertificateOpen(false)} aria-label="Close certificate"><X size={18} /></button>
+            <h2 id="certificate-modal-title" className="certificate-modal__title">Certificate of Authenticity</h2>
+            {product.certificateUrl ? (
+              <div className="certificate-modal__scan">
+                {/* eslint-disable-next-line @next/next/no-img-element -- arbitrary admin-supplied certificate URL, not a known image host */}
+                <img src={product.certificateUrl} alt={`${product.name} lab certificate`} />
+                <a href={product.certificateUrl} target="_blank" rel="noopener noreferrer">Open original document ↗</a>
+              </div>
+            ) : (
+              <div className="certificate-card">
+                <div className="certificate-card__seal"><Award size={26} /></div>
+                <p className="certificate-card__lab">{variant?.certificationLevel || product.certification || "In-house gemological verification"}</p>
+                <dl>
+                  <div><dt>Gemstone</dt><dd>{product.name}</dd></div>
+                  <div><dt>Weight</dt><dd>{variant && variant.weightRatti && variant.weightRatti !== "—" ? `${variant.weightRatti} Ratti${variant.weightCarat && variant.weightCarat !== "—" ? ` (${variant.weightCarat} ct)` : ""}` : "—"}</dd></div>
+                  <div><dt>Color</dt><dd>{product.color || "—"}</dd></div>
+                  <div><dt>Origin</dt><dd>{product.origin || "—"}</dd></div>
+                  <div><dt>Treatment</dt><dd>{product.treatment || "—"}</dd></div>
+                </dl>
+                <small>This summary reflects our gemological verification on file. Contact us for the full lab report.</small>
+              </div>
+            )}
+          </section>
+        </div>
+      )}
     </section>
   );
 }

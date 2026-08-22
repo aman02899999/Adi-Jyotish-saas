@@ -67,6 +67,7 @@ export function MemberWallet({ balance, currency, entries, onlinePaymentsAvailab
           <div className="wallet-custom"><label>Custom amount<div className="input-prefix input-prefix--wide"><b>{currency}</b><input type="number" min={50} max={50000} value={amount} onChange={(event) => setAmount(Number(event.target.value))} /></div></label>
             <button className="button" disabled={loading || !onlinePaymentsAvailable} onClick={recharge}><PlusCircle size={16} />{loading ? "Opening…" : `Add ${currency} ${amount}`}</button>
           </div>
+          {onlinePaymentsAvailable && <p className="legal-note">Secured by Razorpay — you&apos;ll only be charged after confirming.</p>}
         </div>
       </section>
       <section className="member-invoice-card">

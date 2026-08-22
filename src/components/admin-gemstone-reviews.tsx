@@ -19,21 +19,26 @@ export function AdminGemstoneReviews({ initialReviews }: { initialReviews: Admin
   const [items, setItems] = useState(initialReviews);
   const [filter, setFilter] = useState("pending");
   const [notice, setNotice] = useState("");
+  const [saving, setSaving] = useState<string | null>(null);
 
   const visible = items.filter((review) => filter === "all" || review.status === filter);
 
   async function setStatus(review: AdminReviewRow, status: "published" | "hidden") {
+    setSaving(review.id);
     const response = await fetch(`/api/admin/gemstones/reviews/${review.id}`, { method: "PUT", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ status }) });
     const data = await response.json();
     if (response.ok) { setItems((current) => current.map((item) => item.id === review.id ? { ...item, status: data.status } : item)); setNotice(`Review ${status}.`); }
     else setNotice(data.error || "Could not update review.");
+    setSaving(null);
   }
 
   async function remove(review: AdminReviewRow) {
     if (!window.confirm("Delete this review permanently?")) return;
+    setSaving(review.id);
     const response = await fetch(`/api/admin/gemstones/reviews/${review.id}`, { method: "DELETE" });
     if (response.ok) { setItems((current) => current.filter((item) => item.id !== review.id)); setNotice("Review deleted."); }
     else { const data = await response.json().catch(() => ({})); setNotice(data.error || "Could not delete review."); }
+    setSaving(null);
   }
 
   return (
@@ -54,9 +59,9 @@ export function AdminGemstoneReviews({ initialReviews }: { initialReviews: Admin
               {review.title && <h4>{review.title}</h4>}
               <p>{review.body}</p>
               <div className="gem-review-item__actions">
-                {review.status !== "published" && <button onClick={() => setStatus(review, "published")}><Check size={14} /> Publish</button>}
-                {review.status !== "hidden" && <button onClick={() => setStatus(review, "hidden")}><EyeOff size={14} /> Hide</button>}
-                <button className="danger" onClick={() => remove(review)}><Trash2 size={14} /> Delete</button>
+                {review.status !== "published" && <button disabled={saving === review.id} onClick={() => setStatus(review, "published")}><Check size={14} /> Publish</button>}
+                {review.status !== "hidden" && <button disabled={saving === review.id} onClick={() => setStatus(review, "hidden")}><EyeOff size={14} /> Hide</button>}
+                <button className="danger" disabled={saving === review.id} onClick={() => remove(review)}><Trash2 size={14} /> Delete</button>
               </div>
             </article>
           ))}

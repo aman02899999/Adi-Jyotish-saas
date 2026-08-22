@@ -35,6 +35,8 @@ export async function POST(request: Request) {
     message,
     ctaLabel: ctaLabel && ctaHref ? ctaLabel : null,
     ctaHref: ctaLabel && ctaHref ? ctaHref : null,
+    source: "manual",
+    festivalKey: null,
   });
   await recordAudit(admin, "promo_banner.updated", "promoBanner", "main", { enabled: banner.enabled });
 

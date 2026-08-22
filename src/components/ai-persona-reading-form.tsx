@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
@@ -96,7 +96,7 @@ export function AiPersonaReadingForm({ slug, name, member, price, currency, onli
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `${name} · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },
@@ -174,6 +174,7 @@ export function AiPersonaReadingForm({ slug, name, member, price, currency, onli
         {loading ? "Preparing…" : price > 0 ? `Pay ${currency} ${price} & get my reading` : "Get my free reading"}
       </button>
       {price > 0 && !onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments are being configured — please try again shortly.</p>}
+      {price > 0 && onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — you&apos;ll only be charged after confirming.</p>}
       {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
     </div>
   );

@@ -3,6 +3,9 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { creditWalletBonus } from "@/lib/wallet";
+import { createNotification } from "@/lib/notifications";
+
+const REFERRAL_MILESTONES = [5, 10, 25, 50, 100];
 
 // Placeholder reward amounts (INR) — easy to retune, not yet exposed in the admin UI.
 export const REFERRAL_REFERRER_REWARD = 150;
@@ -100,23 +103,49 @@ export async function processReferralReward(memberId: string, rechargeAmount: nu
     referenceId: `referral_referee_${memberId}`,
   });
 
-  const rewardedCountSnap = await db.collection("referrals")
-    .where("referrerId", "==", referral.referrerId)
-    .where("status", "==", "rewarded")
-    .count().get();
-  const referrerCapped = rewardedCountSnap.data().count >= MAX_REWARDED_REFERRALS_PER_REFERRER;
+  // The referrer's per-referrer reward cap must be checked and this referral's status flipped in
+  // one transaction: two different referees of the same referrer completing a qualifying recharge
+  // at nearly the same time previously both read the same pre-increment "rewarded" count outside
+  // any transaction, so both could pass the cap check and both credit the referrer — letting a
+  // referrer with enough coordinated referee accounts exceed MAX_REWARDED_REFERRALS_PER_REFERRER.
+  // Firestore transactions track query reads for conflict detection, so if one concurrent call
+  // commits a status flip that would change the other's count query result, the other retries and
+  // sees the fresh count.
+  const decision = await db.runTransaction(async (tx) => {
+    const freshSnap = await tx.get(referralRef);
+    const fresh = freshSnap.data() as { referrerId: string; status: string } | undefined;
+    if (!fresh || fresh.status !== "pending") return null;
 
-  if (!referrerCapped) {
-    await creditWalletBonus({
-      memberId: referral.referrerId,
-      amount: REFERRAL_REFERRER_REWARD,
-      type: "referral_bonus",
-      referenceType: "referral",
-      referenceId: `referral_referrer_${memberId}`,
-    });
+    const rewardedCountSnap = await tx.get(
+      db.collection("referrals").where("referrerId", "==", fresh.referrerId).where("status", "==", "rewarded").count()
+    );
+    const currentCount = rewardedCountSnap.data().count;
+    const capped = currentCount >= MAX_REWARDED_REFERRALS_PER_REFERRER;
+
+    tx.update(referralRef, { status: capped ? "capped" : "rewarded", rewardedAt: FieldValue.serverTimestamp() });
+    return { capped, newRewardedTotal: currentCount + 1 };
+  });
+
+  if (!decision || decision.capped) return;
+
+  await creditWalletBonus({
+    memberId: referral.referrerId,
+    amount: REFERRAL_REFERRER_REWARD,
+    type: "referral_bonus",
+    referenceType: "referral",
+    referenceId: `referral_referrer_${memberId}`,
+  });
+
+  if (REFERRAL_MILESTONES.includes(decision.newRewardedTotal)) {
+    await createNotification({
+      recipientType: "member",
+      recipientId: referral.referrerId,
+      type: "referral_milestone",
+      title: `You've referred ${decision.newRewardedTotal} friends!`,
+      body: `That's ${decision.newRewardedTotal} successful referrals and counting — thank you for spreading the word. Keep inviting for more wallet credit.`,
+      link: "/dashboard/referrals",
+    }).catch((error) => console.error("Referral milestone notification failed", error));
   }
-
-  await referralRef.update({ status: referrerCapped ? "capped" : "rewarded", rewardedAt: FieldValue.serverTimestamp() });
 }
 
 export type ReferralStats = {

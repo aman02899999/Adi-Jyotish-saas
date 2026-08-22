@@ -1,13 +1,13 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { CalendarDays, Check, Clock3, LoaderCircle, MapPin, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
-const SECTION_HEADINGS = ["Overview", "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance", "Planetary Positions"];
+const SECTION_HEADINGS = ["Overview", "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance", "Doshas", "Planetary Positions"];
 
 function parseSections(text: string): Array<{ heading: string | null; paragraphs: string[] }> {
   const lines = text.split("\n").map((line) => line.trim()).filter(Boolean);
@@ -104,7 +104,7 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Full Kundli Report · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },
@@ -144,6 +144,7 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
         </div>
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">View in your dashboard</Link>
+          {reportId && <a href={`/api/ai-readings/${reportId}/pdf`} className="button">Download PDF</a>}
         </div>
       </div>
     );
@@ -173,6 +174,7 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
         {loading ? "Opening payment…" : `Pay ${currency} ${price} & get my report`}
       </button>
       {!onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments are being configured — please check back shortly.</p>}
+      {onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — you&apos;ll only be charged after confirming.</p>}
       {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
     </div>
   );

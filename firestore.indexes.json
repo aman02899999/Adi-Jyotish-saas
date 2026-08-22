@@ -1,6 +1,30 @@
 {
   "indexes": [
     {
+      "collectionGroup": "giftCards",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "expiresAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "memberSubscriptions",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
+        { "fieldPath": "currentPeriodEnd", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "journalEntries",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "memberId", "order": "ASCENDING" },
+        { "fieldPath": "entryDate", "order": "DESCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "gemstoneCategories",
       "queryScope": "COLLECTION",
       "fields": [
@@ -76,6 +100,13 @@
       ]
     },
     {
+      "collectionGroup": "wishlist",
+      "queryScope": "COLLECTION_GROUP",
+      "fields": [
+        { "fieldPath": "productId", "order": "ASCENDING" }
+      ]
+    },
+    {
       "collectionGroup": "aiReadings",
       "queryScope": "COLLECTION",
       "fields": [
@@ -97,6 +128,14 @@
       "queryScope": "COLLECTION",
       "fields": [
         { "fieldPath": "clientEmail", "order": "ASCENDING" },
+        { "fieldPath": "scheduledAt", "order": "ASCENDING" }
+      ]
+    },
+    {
+      "collectionGroup": "bookings",
+      "queryScope": "COLLECTION",
+      "fields": [
+        { "fieldPath": "status", "order": "ASCENDING" },
         { "fieldPath": "scheduledAt", "order": "ASCENDING" }
       ]
     },

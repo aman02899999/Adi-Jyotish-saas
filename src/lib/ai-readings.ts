@@ -5,12 +5,16 @@ import { bucket, db } from "@/lib/firestore";
 import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
 import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { getPersonaById } from "@/lib/ai-personas";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { notifyAdmins } from "@/lib/notifications";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
+import { buildVarshphalChart, renderVarshphalReport } from "@/lib/varshphal";
 import { getSiteUrl } from "@/lib/site-url";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 export const AI_READING_PRICE = 149;
 export const AI_KUNDLI_PRICE = 499;
+export const AI_VARSHPHAL_PRICE = 399;
 export const AI_PALM_READING_PRICE = 99;
 export const AI_PALM_READING_ORIGINAL_PRICE = 495;
 export const AI_TAROT_READING_PRICE = 149;
@@ -35,6 +39,7 @@ export type AiReading = {
   personaId: string | null;
   personaSlug: string | null;
   personaName: string | null;
+  year: number | null;
   price: number;
   currency: string;
   status: string;
@@ -43,6 +48,8 @@ export type AiReading = {
   answer: string | null;
   answeredAt: Date | null;
   reminderSentAt: Date | null;
+  aiAttempts: number;
+  lastAiError: string | null;
   createdAt: Date;
 };
 
@@ -61,6 +68,7 @@ type AiReadingDoc = {
   personaId?: string | null;
   personaSlug?: string | null;
   personaName?: string | null;
+  year?: number | null;
   price: number;
   currency: string;
   status: string;
@@ -69,6 +77,8 @@ type AiReadingDoc = {
   answer: string | null;
   answeredAt: FirebaseFirestore.Timestamp | null;
   reminderSentAt?: FirebaseFirestore.Timestamp | null;
+  aiAttempts?: number;
+  lastAiError?: string | null;
   createdAt: FirebaseFirestore.Timestamp;
 };
 
@@ -92,6 +102,7 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     personaId: data.personaId ?? null,
     personaSlug: data.personaSlug ?? null,
     personaName: data.personaName ?? null,
+    year: data.year ?? null,
     price: data.price,
     currency: data.currency,
     status: data.status,
@@ -100,6 +111,8 @@ function toReading(doc: FirebaseFirestore.DocumentSnapshot): AiReading {
     answer: data.answer ?? null,
     answeredAt: data.answeredAt ? data.answeredAt.toDate() : null,
     reminderSentAt: data.reminderSentAt ? data.reminderSentAt.toDate() : null,
+    aiAttempts: data.aiAttempts ?? 0,
+    lastAiError: data.lastAiError ?? null,
     createdAt: data.createdAt?.toDate() ?? new Date(),
   };
 }
@@ -209,6 +222,36 @@ export async function createPendingKundliReport({ memberId, clientName, birthDat
     birthPlace,
     question: null,
     price: AI_KUNDLI_PRICE,
+    currency: AI_READING_CURRENCY,
+    status: "pending_payment",
+    razorpayOrderId: null,
+    razorpayPaymentId: null,
+    answer: null,
+    answeredAt: null,
+    reminderSentAt: null,
+    createdAt: FieldValue.serverTimestamp(),
+  });
+  return toReading(await ref.get());
+}
+
+export async function createPendingVarshphalReading({ memberId, clientName, birthDate, birthTime, birthPlace, year }: {
+  memberId: string;
+  clientName: string;
+  birthDate: string;
+  birthTime: string;
+  birthPlace: string;
+  year: number;
+}) {
+  const ref = await collection.add({
+    memberId,
+    readingType: "varshphal",
+    clientName,
+    birthDate,
+    birthTime,
+    birthPlace,
+    question: null,
+    year,
+    price: AI_VARSHPHAL_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
     razorpayOrderId: null,
@@ -485,49 +528,106 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
   return toReading(await ref.get());
 }
 
-/** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays "paid" so it can be retried.
+const MAX_AI_ATTEMPTS = 3;
+const PERMANENT_FAILURE_MESSAGE = "This reading could not be generated after several attempts. Our team has been notified — please contact support for a refund or a manually prepared reading.";
+
+/** A paid-but-permanently-broken reading (bad image, Gemini quota, whatever) used to sit in "paid"
+ * forever and get a fresh Gemini call every single time the 15-minute housekeeping cron's
+ * retryUnansweredReadings() swept past it — real, uncapped, recurring API spend for a reading that
+ * was never going to succeed. aiAttempts now caps that at MAX_AI_ATTEMPTS: past the cap the reading
+ * moves to a terminal "failed" status (which the cron's `status == "paid"` query no longer
+ * matches, so it stops being picked up at all) and an admin is notified once instead of the cron
+ * quietly retrying it forever.
+ *
+ * Runs as a Firestore transaction rather than a plain read-then-write: the cron sweep, a member's
+ * manual retry, and the post-payment verify route can all call this for the same reading at
+ * nearly the same time, and a non-transactional increment let concurrent calls read the same
+ * stale aiAttempts and both write back the same value — silently letting a reading exceed
+ * MAX_AI_ATTEMPTS. The transaction also checks the live status (not the possibly-stale `reading`
+ * argument) so a reading that another concurrent call already flipped to "failed" is left alone
+ * instead of notifying admins a second time. */
+async function recordFailedAttempt(reading: AiReading, error: unknown) {
+  const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
+  const ref = collection.doc(reading.id);
+
+  const { attempts, shouldNotify } = await db.runTransaction(async (transaction) => {
+    const snap = await transaction.get(ref);
+    const data = snap.data() as AiReadingDoc | undefined;
+    if (data?.status === "failed") return { attempts: data.aiAttempts ?? MAX_AI_ATTEMPTS, shouldNotify: false };
+
+    const next = (data?.aiAttempts ?? 0) + 1;
+    const crossesCap = next >= MAX_AI_ATTEMPTS;
+    transaction.update(ref, crossesCap ? { status: "failed", aiAttempts: next, lastAiError: message } : { aiAttempts: next, lastAiError: message });
+    return { attempts: next, shouldNotify: crossesCap };
+  });
+
+  if (!shouldNotify) return;
+  const adminIds = await getAdminIdsWithPermission("insights");
+  await notifyAdmins(adminIds, {
+    type: "ai_reading_failed",
+    title: `AI reading permanently failed: ${reading.readingType}`,
+    body: `${reading.clientName}'s ${reading.readingType} reading failed ${attempts} times and stopped retrying. Last error: ${message}`,
+    link: "/admin/insights",
+  }).catch((notifyError) => console.error("Failed to notify admins of a permanently failed AI reading", notifyError));
+}
+
+/** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays
+ * "paid" (and eligible for one more attempt) until it hits MAX_AI_ATTEMPTS, at which point it
+ * becomes permanently "failed" and stops being retried automatically or manually.
  * The Kundli report is computed by the real chart engine (no AI); every other reading type calls
  * Gemini (palm/face with an uploaded image, tarot with the drawn spread, vastu/lalkitab/question
  * with free-form text). */
 export async function generateReadingAnswer(reading: AiReading): Promise<AiReading> {
   if (reading.status === "answered" && reading.answer) return reading;
+  if (reading.status === "failed") throw new Error(PERMANENT_FAILURE_MESSAGE);
 
-  const answer = await (async () => {
-    if (reading.readingType === "kundli") {
-      return renderKundliReport(buildKundliChart({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace }));
-    }
-    if (!isGeminiConfigured()) throw new Error("Live readings are not configured yet. Please try again shortly.");
-    if (reading.readingType === "palm") {
-      if (!reading.leftPalmImagePath || !reading.rightPalmImagePath) throw new Error("Palm images are missing for this reading.");
-      const [leftPalmImage, rightPalmImage] = await Promise.all([
-        downloadPalmImage(reading.leftPalmImagePath),
-        downloadPalmImage(reading.rightPalmImagePath),
-      ]);
-      return getPalmReadingAnswer({ name: reading.clientName, leftPalmImage, rightPalmImage });
-    }
-    if (reading.readingType === "tarot") {
-      if (!reading.tarotCards || reading.tarotCards.length === 0) throw new Error("Tarot cards are missing for this reading.");
-      return getTarotReadingAnswer({ name: reading.clientName, question: reading.question ?? "", cards: reading.tarotCards });
-    }
-    if (reading.readingType === "face") {
-      if (!reading.faceImagePaths || reading.faceImagePaths.length === 0) throw new Error("Face photo is missing for this reading.");
-      const faceImages = await downloadFaceImages(reading.faceImagePaths);
-      return getFaceReadingAnswer({ name: reading.clientName, question: reading.question ?? "", faceImages });
-    }
-    if (reading.readingType === "vastu") {
-      return getVastuReadingAnswer({ name: reading.clientName, question: reading.question ?? "" });
-    }
-    if (reading.readingType === "lalkitab") {
-      return getLalKitabReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
-    }
-    if (reading.readingType === "persona") {
-      if (!reading.personaId) throw new Error("This reading is missing its persona.");
-      const persona = await getPersonaById(reading.personaId);
-      if (!persona) throw new Error("This persona is no longer available.");
-      return getPersonaReadingAnswer({ systemPrompt: persona.systemPrompt, name: reading.clientName, question: reading.question ?? "" });
-    }
-    return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
-  })();
+  let answer: string;
+  try {
+    answer = await (async () => {
+      if (reading.readingType === "kundli") {
+        return renderKundliReport(buildKundliChart({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace }));
+      }
+      if (reading.readingType === "varshphal") {
+        if (!reading.year) throw new Error("This reading is missing its target year.");
+        const chart = buildVarshphalChart({ birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, year: reading.year });
+        return renderVarshphalReport(chart, reading.clientName);
+      }
+      if (!isGeminiConfigured()) throw new Error("Live readings are not configured yet. Please try again shortly.");
+      if (reading.readingType === "palm") {
+        if (!reading.leftPalmImagePath || !reading.rightPalmImagePath) throw new Error("Palm images are missing for this reading.");
+        const [leftPalmImage, rightPalmImage] = await Promise.all([
+          downloadPalmImage(reading.leftPalmImagePath),
+          downloadPalmImage(reading.rightPalmImagePath),
+        ]);
+        return getPalmReadingAnswer({ name: reading.clientName, leftPalmImage, rightPalmImage });
+      }
+      if (reading.readingType === "tarot") {
+        if (!reading.tarotCards || reading.tarotCards.length === 0) throw new Error("Tarot cards are missing for this reading.");
+        return getTarotReadingAnswer({ name: reading.clientName, question: reading.question ?? "", cards: reading.tarotCards });
+      }
+      if (reading.readingType === "face") {
+        if (!reading.faceImagePaths || reading.faceImagePaths.length === 0) throw new Error("Face photo is missing for this reading.");
+        const faceImages = await downloadFaceImages(reading.faceImagePaths);
+        return getFaceReadingAnswer({ name: reading.clientName, question: reading.question ?? "", faceImages });
+      }
+      if (reading.readingType === "vastu") {
+        return getVastuReadingAnswer({ name: reading.clientName, question: reading.question ?? "" });
+      }
+      if (reading.readingType === "lalkitab") {
+        return getLalKitabReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
+      }
+      if (reading.readingType === "persona") {
+        if (!reading.personaId) throw new Error("This reading is missing its persona.");
+        const persona = await getPersonaById(reading.personaId);
+        if (!persona) throw new Error("This persona is no longer available.");
+        return getPersonaReadingAnswer({ systemPrompt: persona.systemPrompt, name: reading.clientName, question: reading.question ?? "" });
+      }
+      return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
+    })();
+  } catch (error) {
+    await recordFailedAttempt(reading, error);
+    throw error;
+  }
 
   const ref = collection.doc(reading.id);
   await ref.update({ status: "answered", answer, answeredAt: FieldValue.serverTimestamp() });
@@ -537,6 +637,7 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
 const READING_RESUME: Record<string, { label: string; path: string }> = {
   question: { label: "your question reading", path: "/ask" },
   kundli: { label: "your full Kundli report", path: "/kundli" },
+  varshphal: { label: "your Varshphal report", path: "/varshphal" },
   palm: { label: "your Palm Reading", path: "/palm-reading" },
   tarot: { label: "your Tarot Reading", path: "/tarot-reading" },
   face: { label: "your Face Reading", path: "/face-reading" },
@@ -606,10 +707,12 @@ const UNANSWERED_READING_RETRY_BATCH = 25;
  * GEMINI_API_KEY wasn't set, or a transient Gemini API failure — otherwise sits stranded forever:
  * nothing retries it automatically, and the member's only way to get their answer is manually
  * clicking "Check again" on a page they may never revisit. Every reading with status "paid" is
- * by definition unanswered (generateReadingAnswer only ever transitions "paid" -> "answered", and
- * never resets it), so no extra filter is needed to find the backlog. Run on the housekeeping
- * schedule so that fixing a misconfiguration actually clears everyone who paid during the outage,
- * instead of leaving them silently stuck. */
+ * by definition unanswered and still under its attempt cap (generateReadingAnswer moves a reading
+ * that has exhausted MAX_AI_ATTEMPTS to a terminal "failed" status instead, which this query's
+ * status == "paid" filter naturally excludes — a permanently broken reading gets a fixed number of
+ * real Gemini calls total, not one every time this sweep runs). Run on the housekeeping schedule so
+ * that fixing a misconfiguration actually clears everyone who paid during the outage, instead of
+ * leaving them silently stuck. */
 export async function retryUnansweredReadings() {
   const snap = await collection.where("status", "==", "paid").limit(UNANSWERED_READING_RETRY_BATCH).get();
 

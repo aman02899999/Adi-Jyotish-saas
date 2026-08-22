@@ -27,6 +27,6 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
   await batch.commit();
 
   await recordAudit(admin,"practitioner.schedule_updated","practitioner",id,{weeklyRules:rules.length,timeOffBlocks:timeOff.length});
-  const all=await getPractitionerDirectory(false);
+  const all=await getPractitionerDirectory(false,true);
   return Response.json(all.find(item=>item.id===id));
 }

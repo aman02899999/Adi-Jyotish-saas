@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { CalendarDays, Check, Clock3, LoaderCircle, MapPin, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
@@ -98,7 +98,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         amount: data.amount,
         currency: data.currency,
         order_id: data.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Ask Shree Santram Shashtri · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },
@@ -167,6 +167,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         {loading ? "Preparing…" : isFreeEligible ? "Get my first reading free" : `Pay ${currency} ${price} & get my reading`}
       </button>
       {!isFreeEligible && !onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments are being configured — please check back shortly.</p>}
+      {!isFreeEligible && onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — you&apos;ll only be charged after confirming.</p>}
       {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
     </div>
   );

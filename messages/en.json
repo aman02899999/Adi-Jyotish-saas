@@ -1,0 +1,186 @@
+{
+  "LanguageSwitcher": {
+    "label": "Language"
+  },
+  "RootLayout": {
+    "title": "Adi Jyotish Guru — Ancient clarity for modern life",
+    "description": "Personal Vedic astrology readings, cosmic insights, and auspicious timing for modern life.",
+    "ogDescription": "Personal Vedic astrology readings and thoughtful cosmic guidance."
+  },
+  "Nav": {
+    "gemstones": "Gemstones",
+    "practitioners": "Practitioners",
+    "readings": "Readings",
+    "ourMethod": "Our method",
+    "askLive": "Ask Live",
+    "palmReading": "Palm Reading",
+    "tarotReading": "Tarot Reading",
+    "horoscope": "Horoscope",
+    "journal": "Journal",
+    "pricing": "Pricing",
+    "book": "Book",
+    "signIn": "Sign in",
+    "myAccount": "My account",
+    "openYourChart": "Open your chart",
+    "createYourChart": "Create your chart",
+    "cart": "{count, plural, =0 {View cart} one {View cart (# item)} other {View cart (# items)}}"
+  },
+  "Footer": {
+    "about": "About us",
+    "contact": "Contact us",
+    "trustSecure": "Secure Razorpay payments",
+    "trustReviewed": "Team-reviewed practitioners",
+    "trustPrivate": "Your birth data, protected",
+    "practitioners": "Practitioners",
+    "journal": "Journal",
+    "pricing": "Pricing",
+    "dashboard": "Dashboard",
+    "copyright": "© {year} Adi Jyotish Guru",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy",
+    "refundPolicy": "Refund & Cancellation",
+    "practitionerSignIn": "Practitioner sign in",
+    "studioAdmin": "Studio admin",
+    "disclaimer": "Readings are offered for guidance and self-reflection. They are not a substitute for medical, legal, or financial advice, and no specific outcome is guaranteed."
+  },
+  "Home": {
+    "aria": {
+      "trustStrip": "Jyotish highlights",
+      "categories": "Browse by concern",
+      "seniors": "Our most senior astrologers",
+      "live": "Astrologers online now",
+      "services": "Find your clarity",
+      "tools": "Free astrology tools",
+      "horoscope": "Your daily horoscope"
+    },
+    "hero": {
+      "trustedByCount": "Trusted by {count}+ seekers",
+      "trustedByGrowing": "Trusted by a growing community"
+    },
+    "trustStrip": {
+      "consultations": "Consultations delivered",
+      "astrologers": "Vedic astrologers",
+      "avgRating": "Average reading",
+      "privatePersonal": "Private & personal"
+    },
+    "categories": {
+      "eyebrow": "Browse by concern",
+      "headline": "What's on your",
+      "headlineEm": "mind today?",
+      "relationship": { "label": "Love & Relationships", "note": "Understand the heart's timing" },
+      "marriage": { "label": "Marriage", "note": "Compatibility & muhurat" },
+      "career": { "label": "Career & Business", "note": "Growth cycles & timing" },
+      "health": { "label": "Health & Wellness", "note": "Vitality through the chart" },
+      "vastu": { "label": "Family & Home", "note": "Harmony & remedies" },
+      "education": { "label": "Education", "note": "Focus & academic timing" }
+    },
+    "seniors": {
+      "eyebrow": "Our most senior astrologers",
+      "headline": "Decades of wisdom,",
+      "headlineEm": "ready to guide you.",
+      "verified": "Verified",
+      "yearsExperience": "{years}+ years experience",
+      "yrsShort": "{years} yrs",
+      "viewProfile": "View profile",
+      "bookConsultation": "Book consultation"
+    },
+    "live": {
+      "onlineNow": "{count, plural, one {# astrologer online now} other {# astrologers online now}}",
+      "headline": "Talk to a guide",
+      "headlineEm": "right now.",
+      "subhead": "Chat instantly, pay only for the minutes you use. Every guide below is studio-reviewed.",
+      "isOnline": "Online now",
+      "isOffline": "Offline",
+      "reviews": "{count, plural, one {# review} other {# reviews}}",
+      "chatNow": "Chat now",
+      "viewAll": "View all astrologers"
+    },
+    "ctaAsk": {
+      "title": "Or ask Shree Santram Shashtri instantly.",
+      "body": "Our Live Jyotish guide answers one focused question in under a minute. Your first reading is free.",
+      "cta": "Ask now"
+    },
+    "ctaGemstones": {
+      "title": "Wear what the sky recommends.",
+      "body": "Shop certified, natural Vedic gemstones — chosen for your zodiac sign and planetary influence.",
+      "cta": "Buy Gemstones"
+    },
+    "services": {
+      "eyebrow": "Find your clarity",
+      "headline": "Guidance for every",
+      "headlineEm": "chapter of life.",
+      "subhead": "Every reading combines classical Jyotish principles with warm, grounded guidance you can put into practice.",
+      "from": "From"
+    },
+    "tools": {
+      "horoscope": { "label": "Daily Horoscope", "note": "Today's forecast by your sign" },
+      "ask": { "label": "Ask Live a Question", "note": "Instant answer, one question" },
+      "palm": { "label": "Palm Reading", "note": "Pandit Trilochan Shashtri · ₹99" },
+      "tarot": { "label": "Tarot Reading", "note": "Tarot Mystic Divya · ₹149" },
+      "face": { "label": "Face Reading", "note": "Acharya Devraj Bhardwaj · ₹129" },
+      "vastu": { "label": "Vastu Consultation", "note": "Vastu Shastri Ramesh Chaturvedi · ₹249" },
+      "lalKitab": { "label": "Lal Kitab Reading", "note": "Pandit Girish Trivedi · ₹179" },
+      "gemstoneMatch": { "label": "Gemstone Match", "note": "Free Live recommendation" },
+      "kundliMatching": { "label": "Kundli Matching", "note": "Free compatibility reading" },
+      "panchang": { "label": "Panchang Today", "note": "Tithi, nakshatra & muhurat" },
+      "muhurat": { "label": "Muhurat Concierge", "note": "Best days for your decision" },
+      "numerology": { "label": "Numerology", "note": "Life Path & Destiny numbers" },
+      "kundli": { "label": "Full Kundli Report", "note": "Your complete birth chart" },
+      "festivals": { "label": "Festival Muhurat", "note": "Real puja timing, not a date list" },
+      "varshphal": { "label": "Varshphal Report", "note": "Your personalized forecast for the year ahead" },
+      "groups": {
+        "knowYourDay": "Know your day",
+        "understandYourChart": "Understand your chart",
+        "talkToSomeone": "Talk to a specialist"
+      }
+    },
+    "horoscopeStrip": {
+      "eyebrow": "Your daily horoscope",
+      "headline": "Pick your sign,",
+      "headlineEm": "see today's sky.",
+      "body": "Choose Today, Tomorrow, this week, or this month — every reading is generated fresh from the current planetary transits.",
+      "cta": "See today's horoscope",
+      "fallback": "Today's reading is not available right now. Please check back shortly."
+    },
+    "method": {
+      "eyebrow": "The Jyotish method",
+      "headline": "Rooted in tradition.",
+      "headlineEm": "Made for today.",
+      "body": "We calculate your sidereal birth chart using the exact time and place you arrived, then place it in the hands of a trained Vedic guide.",
+      "moonSign": "Moon sign",
+      "currentDasha": "Current dasha",
+      "step1Title": "Map your sky",
+      "step1Body": "Precise planetary positions reveal your natural patterns.",
+      "step2Title": "Understand your season",
+      "step2Body": "Dashas and transits show what is unfolding now.",
+      "step3Title": "Move with clarity",
+      "step3Body": "Leave with grounded guidance and practical next steps.",
+      "dashboardCta": "See your cosmic dashboard"
+    },
+    "ctaGuide": {
+      "title": "Prefer a live guide?",
+      "body": "Chat instantly with an available astrologer — pay only for the minutes you use, no subscription required.",
+      "cta": "Find a guide"
+    },
+    "stories": {
+      "eyebrow": "From our community",
+      "headline": "Clarity changes",
+      "headlineEm": "everything.",
+      "ratingSuffix": "/5 reading"
+    },
+    "referral": {
+      "eyebrow": "Invite & earn",
+      "headline": "Share the sky,",
+      "headlineEm": "earn wallet credit.",
+      "body": "Invite a friend to Adi Jyotish Guru. When they join and recharge their wallet, you get ₹{referrerReward} and they get ₹{refereeReward} — straight into your wallets.",
+      "cta": "Get my referral link"
+    },
+    "finalCta": {
+      "eyebrow": "Begin with your birth chart",
+      "headline": "The sky remembers",
+      "headlineEm": "the moment you arrived.",
+      "body": "Discover what it has to say about where you are going.",
+      "cta": "Begin your reading"
+    }
+  }
+}

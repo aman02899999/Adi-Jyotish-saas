@@ -172,7 +172,7 @@ export async function sendBookingNotification({
   const messageRef = messagesCollection(threadRef.id).doc();
   await messageRef.set({
     senderType: "system",
-    senderName: "Jyotish Studio",
+    senderName: "Adi Jyotish Guru",
     body: body.trim().slice(0, 3000),
     readByAdmin: true,
     readByMember: false,

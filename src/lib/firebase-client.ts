@@ -1,7 +1,7 @@
 "use client";
 
 import { getApps, initializeApp } from "firebase/app";
-import { GoogleAuthProvider, getAuth, getRedirectResult, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword, createUserWithEmailAndPassword as firebaseCreateUserWithEmailAndPassword, sendPasswordResetEmail as firebaseSendPasswordResetEmail, confirmPasswordReset as firebaseConfirmPasswordReset, verifyPasswordResetCode as firebaseVerifyPasswordResetCode } from "firebase/auth";
+import { GoogleAuthProvider, connectAuthEmulator, getAuth, getRedirectResult, signInWithPopup, signInWithRedirect, signInWithEmailAndPassword as firebaseSignInWithEmailAndPassword, createUserWithEmailAndPassword as firebaseCreateUserWithEmailAndPassword, sendPasswordResetEmail as firebaseSendPasswordResetEmail, confirmPasswordReset as firebaseConfirmPasswordReset, verifyPasswordResetCode as firebaseVerifyPasswordResetCode } from "firebase/auth";
 
 // Password reset (sendPasswordResetEmail) and email verification (sendEmailVerification) are
 // handled entirely by Firebase Auth's client SDK — see MDN-style usage at
@@ -19,8 +19,15 @@ export function isGoogleSignInAvailable() {
   return Boolean(firebaseConfig.apiKey && firebaseConfig.authDomain && firebaseConfig.projectId && firebaseConfig.appId);
 }
 
+let emulatorConnected = false;
+
 function getFirebaseApp() {
-  return getApps()[0] ?? initializeApp(firebaseConfig);
+  const app = getApps()[0] ?? initializeApp(firebaseConfig);
+  if (process.env.NEXT_PUBLIC_USE_EMULATOR === "true" && !emulatorConnected) {
+    emulatorConnected = true;
+    connectAuthEmulator(getAuth(app), "http://127.0.0.1:9099", { disableWarnings: true });
+  }
+  return app;
 }
 
 /** Opens the Google account picker and returns a Firebase ID token to hand to our own backend for

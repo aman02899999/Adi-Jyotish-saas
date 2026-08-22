@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
@@ -89,7 +89,7 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
         amount: order.amount,
         currency: order.currency,
         order_id: order.orderId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `Tarot Mystic Divya · ${currency} ${price}`,
         prefill: { name: clientName, email: memberEmail },
         theme: { color: "#a95838" },
@@ -166,6 +166,7 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
           {paying ? "Taiyaar ho raha hai…" : `Pay ${currency} ${price} & poori reading paayein`}
         </button>
         {!onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments abhi configure ho rahe hain — kripya thodi der baad try karein.</p>}
+        {onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — aapse sirf confirm karne ke baad hi charge hoga.</p>}
         {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
       </div>
     );

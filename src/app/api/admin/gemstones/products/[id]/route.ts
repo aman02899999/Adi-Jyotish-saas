@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { deleteProduct, GemstoneError, getProductAdminById, updateProduct, type ProductPayload } from "@/lib/gemstones";
+import { notifyWishlistedMembers } from "@/lib/gemstone-wishlist";
 
 export const dynamic = "force-dynamic";
 
@@ -26,9 +27,12 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const body = (await request.json()) as ProductPayload;
   try {
-    const updated = await updateProduct(id, body);
-    await recordAudit(admin, "gemstone_product.updated", "gemstone_product", id, { name: updated?.name, active: updated?.active });
-    return Response.json(updated);
+    const { product, wishlistTrigger } = await updateProduct(id, body);
+    await recordAudit(admin, "gemstone_product.updated", "gemstone_product", id, { name: product.name, active: product.active });
+    if (wishlistTrigger?.priceDropped || wishlistTrigger?.backInStock) {
+      notifyWishlistedMembers(id, product.name, product.slug, wishlistTrigger).catch((error) => console.error("Wishlist notify failed", error));
+    }
+    return Response.json(product);
   } catch (error) {
     return Response.json({ error: error instanceof GemstoneError ? error.message : "Product could not be updated." }, { status: 400 });
   }

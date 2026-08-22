@@ -27,9 +27,12 @@ export function PractitionerChatKundli({ sessionId }: { sessionId: string }) {
     <section className="chat-kundli-panel">
       <header><ScrollText size={16} /><h3>Client Kundli</h3></header>
       {summary ? (
-        <div className="kundli-report">
-          {summary.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
-        </div>
+        <>
+          <div className="kundli-report">
+            {summary.split(/\n{2,}/).map((paragraph, index) => <p key={index}>{paragraph}</p>)}
+          </div>
+          <a href={`/api/practitioner/chat/${sessionId}/kundli/pdf`} className="button button--small button--ghost">Download PDF</a>
+        </>
       ) : (
         <>
           <p className="chat-kundli-panel__hint">Pull up this client&apos;s birth chart while you answer their question.</p>

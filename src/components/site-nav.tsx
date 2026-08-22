@@ -1,22 +1,23 @@
 "use client";
 
-import Link from "next/link";
-import { usePathname } from "next/navigation";
+import { Link, usePathname } from "@/i18n/navigation";
 import { useEffect, useRef, useState } from "react";
+import { useTranslations } from "next-intl";
 import { ArrowUpRight, Menu, ShoppingBag } from "lucide-react";
+import { LanguageSwitcher } from "@/components/language-switcher";
 
 const NAV_ITEMS = [
-  { href: "/gemstones", label: "Gemstones" },
-  { href: "/astrologers", label: "Practitioners" },
-  { href: "/#services", label: "Readings" },
-  { href: "/#method", label: "Our method" },
-  { href: "/ask", label: "Ask Live" },
-  { href: "/palm-reading", label: "Palm Reading" },
-  { href: "/tarot-reading", label: "Tarot Reading" },
-  { href: "/horoscope", label: "Horoscope" },
-  { href: "/blog", label: "Journal" },
-  { href: "/pricing", label: "Pricing" },
-  { href: "/book", label: "Book" },
+  { href: "/gemstones", key: "gemstones" as const },
+  { href: "/astrologers", key: "practitioners" as const },
+  { href: "/#services", key: "readings" as const },
+  { href: "/#method", key: "ourMethod" as const },
+  { href: "/ask", key: "askLive" as const },
+  { href: "/palm-reading", key: "palmReading" as const },
+  { href: "/tarot-reading", key: "tarotReading" as const },
+  { href: "/horoscope", key: "horoscope" as const },
+  { href: "/blog", key: "journal" as const },
+  { href: "/pricing", key: "pricing" as const },
+  { href: "/book", key: "book" as const },
 ];
 
 const CART_STORAGE_KEY = "jyotish_gem_cart_v1";
@@ -38,9 +39,11 @@ function isNavItemActive(pathname: string, href: string) {
   return pathname === href || pathname.startsWith(`${href}/`);
 }
 
-export function SiteNav({ signedInName }: { signedInName: string | null }) {
+export function SiteNav() {
+  const t = useTranslations("Nav");
   const pathname = usePathname();
   const [cartCount, setCartCount] = useState(0);
+  const [signedInName, setSignedInName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
 
@@ -55,6 +58,16 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
       window.removeEventListener("storage", sync);
       window.removeEventListener("gemstone-cart-updated", sync);
     };
+  }, []);
+
+  useEffect(() => {
+    // Fetched client-side (rather than passed down from a server-rendered SiteHeader) so pages
+    // using this nav aren't forced into per-request dynamic rendering just to know who's signed
+    // in — see the /api/member/session route comment for why this matters.
+    fetch("/api/member/session")
+      .then((response) => response.json())
+      .then((data: { name: string | null }) => setSignedInName(data.name ? data.name.split(" ")[0] : null))
+      .catch(() => {});
   }, []);
 
   // Closes the mobile menu on outside tap/click, Escape, or navigation — a plain <details> only
@@ -84,27 +97,30 @@ export function SiteNav({ signedInName }: { signedInName: string | null }) {
     <>
       <nav className="desktop-nav" aria-label="Primary navigation">
         {NAV_ITEMS.map((item) => (
-          <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{item.label}</Link>
+          <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{t(item.key)}</Link>
         ))}
       </nav>
       <div className="header-actions">
-        <Link href={signedInName ? "/dashboard" : "/account"} className="text-link">{signedInName ?? "Sign in"}</Link>
+        <LanguageSwitcher compact />
+        <Link href={signedInName ? "/dashboard" : "/account"} className="text-link">{signedInName ?? t("signIn")}</Link>
         <Link href={signedInName ? "/dashboard" : "/account?mode=register"} className="button button--small">
-          {signedInName ? "Open your chart" : "Create your chart"} <ArrowUpRight size={15} />
+          {signedInName ? t("openYourChart") : t("createYourChart")} <ArrowUpRight size={15} />
         </Link>
       </div>
-      <Link href="/gemstones/cart" className="header-cart" aria-label={`View cart${cartCount ? ` (${cartCount} item${cartCount === 1 ? "" : "s"})` : ""}`}>
+      <Link href="/gemstones/cart" className="header-cart" aria-label={t("cart", { count: cartCount })}>
         <ShoppingBag size={19} />
         {cartCount > 0 && <span className="header-cart__badge">{cartCount > 99 ? "99+" : cartCount}</span>}
       </Link>
+      {menuOpen && <div className="mobile-menu__backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
       <div className="mobile-menu" ref={menuRef}>
         <button type="button" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Menu size={22} /></button>
         {menuOpen && (
           <nav>
             {NAV_ITEMS.map((item) => (
-              <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{item.label}</Link>
+              <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{t(item.key)}</Link>
             ))}
-            <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? "My account" : "Sign in"}</Link>
+            <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? t("myAccount") : t("signIn")}</Link>
+            <LanguageSwitcher />
           </nav>
         )}
       </div>

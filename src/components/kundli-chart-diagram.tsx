@@ -1,5 +1,5 @@
-import { GRAHA_SHORT, RASHIS, type GrahaKey } from "@/lib/astro-engine";
-import type { KundliHouse } from "@/lib/kundli-engine";
+import { GRAHA_SHORT, RASHIS } from "@/lib/astro-engine";
+import type { KundliHouse, KundliHouseOccupant } from "@/lib/kundli-engine";
 
 type Point = [number, number];
 const pt = (x: number, y: number): Point => [x, y];
@@ -32,8 +32,8 @@ function centroid(points: Point[]) {
   return [x, y] as const;
 }
 
-function occupantsLabel(occupants: GrahaKey[]) {
-  return occupants.map((graha) => GRAHA_SHORT[graha]).join(" ");
+function occupantsLabel(occupants: KundliHouseOccupant[]) {
+  return occupants.map((occupant) => `${GRAHA_SHORT[occupant.graha]}${occupant.isRetrograde ? "℞" : ""}`).join(" ");
 }
 
 export function KundliChartDiagram({ houses }: { houses: KundliHouse[] }) {

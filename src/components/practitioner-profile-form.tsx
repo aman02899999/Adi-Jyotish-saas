@@ -3,7 +3,7 @@
 import { FormEvent, useState } from "react";
 import { Check, Save, X } from "lucide-react";
 
-type Profile = { bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null };
+type Profile = { bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null; videoUrl: string | null };
 
 export function PractitionerProfileForm({ initialProfile }: { initialProfile: Profile }) {
   const [form, setForm] = useState(initialProfile);
@@ -42,7 +42,9 @@ export function PractitionerProfileForm({ initialProfile }: { initialProfile: Pr
           <label><span>Languages</span><input value={form.languages} onChange={(event) => setForm({ ...form, languages: event.target.value })} /></label>
           <label><span>Consultation modes</span><input value={form.consultationModes} onChange={(event) => setForm({ ...form, consultationModes: event.target.value })} /></label>
           <label><span>Photo URL</span><input value={form.photoUrl ?? ""} onChange={(event) => setForm({ ...form, photoUrl: event.target.value })} placeholder="https://…" /></label>
+          <label><span>Video intro URL</span><input value={form.videoUrl ?? ""} onChange={(event) => setForm({ ...form, videoUrl: event.target.value })} placeholder="https://… a short .mp4 clip" /></label>
         </div>
+        <p className="settings-note">A short (30–60s) intro clip clients see on your profile before booking — link to a hosted .mp4 file. Leave blank to hide.</p>
       </section>
       <div className="settings-save">
         <button className="button" disabled={saving}><Save size={15} />{saving ? "Saving…" : "Save profile"}</button>

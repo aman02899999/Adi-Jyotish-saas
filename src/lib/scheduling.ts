@@ -4,6 +4,21 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, isIndexBuildingError } from "@/lib/firestore";
 import { getStudioSettings } from "@/lib/studio-settings";
 
+/** Same allowlist as notifications.ts's sanitizeLink: a site-relative path, or an https:// URL —
+ * never javascript:/data:/vbscript:. Practitioner photoUrl/videoUrl previously stored whatever
+ * string was submitted with only length trimming, unlike every other user-suppliable
+ * link/URL field in the codebase. */
+export function sanitizeMediaUrl(value: string | null | undefined): string | null {
+  const trimmed = value?.trim();
+  if (!trimmed) return null;
+  if (trimmed.startsWith("/") && !trimmed.startsWith("//")) return trimmed.slice(0, 500);
+  try {
+    return new URL(trimmed).protocol === "https:" ? trimmed.slice(0, 500) : null;
+  } catch {
+    return null;
+  }
+}
+
 export type Practitioner = {
   id: string; // Firestore doc ID == slug
   name: string;
@@ -18,10 +33,12 @@ export type Practitioner = {
   verified: boolean;
   verificationLevel: string;
   photoUrl: string | null;
+  videoUrl: string | null;
   online: boolean;
   chatRatePerMinute: number;
   active: boolean;
   featured: boolean;
+  isDemoAccount: boolean;
   firebaseUid: string | null;
   hasPortalAccess: boolean;
   lastLoginAt: Date | null;
@@ -32,7 +49,7 @@ export type Practitioner = {
 export type AvailabilityRule = { id: string; practitionerId: string; weekday: number; startTime: string; endTime: string; active: boolean };
 export type PractitionerTimeOff = { id: string; practitionerId: string; startsAt: Date; endsAt: Date; reason: string | null };
 
-const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "hasPortalAccess" | "lastLoginAt" | "createdAt" | "updatedAt" | "online">> = [
+const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "hasPortalAccess" | "lastLoginAt" | "createdAt" | "updatedAt" | "online" | "isDemoAccount">> = [
   {
     name: "Shree Jagmohan Shashtri Ji",
     slug: "jagmohan-shashtri-ji",
@@ -46,6 +63,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/jagmohan-shashtri.jpg",
+    videoUrl: null,
     chatRatePerMinute: 121,
     active: true,
     featured: true,
@@ -63,6 +81,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/arun-dubey.jpg",
+    videoUrl: null,
     chatRatePerMinute: 109,
     active: true,
     featured: true,
@@ -80,6 +99,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/anika-sharma.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: true,
@@ -97,6 +117,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/rohan-mehta.jpg",
+    videoUrl: null,
     chatRatePerMinute: 15,
     active: true,
     featured: false,
@@ -122,6 +143,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/meera-kulkarni.jpg",
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -139,6 +161,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/ravindra-bhatt.jpg",
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -156,6 +179,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/ananya-iyer.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -173,6 +197,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/suresh-nair.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: false,
@@ -190,6 +215,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/priyanka-deshmukh.jpg",
+    videoUrl: null,
     chatRatePerMinute: 14,
     active: true,
     featured: false,
@@ -209,6 +235,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/harish-shukla.jpg",
+    videoUrl: null,
     chatRatePerMinute: 24,
     active: true,
     featured: false,
@@ -226,6 +253,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/radhika-menon.jpg",
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -243,6 +271,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/om-prakash-tiwari.jpg",
+    videoUrl: null,
     chatRatePerMinute: 26,
     active: true,
     featured: false,
@@ -260,6 +289,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/kavita-joshi.jpg",
+    videoUrl: null,
     chatRatePerMinute: 17,
     active: true,
     featured: false,
@@ -277,6 +307,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/deepak-pandey.jpg",
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -296,6 +327,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/rajesh-malhotra.jpg",
+    videoUrl: null,
     chatRatePerMinute: 22,
     active: true,
     featured: false,
@@ -313,6 +345,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/sneha-kapadia.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -330,6 +363,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 21,
     active: true,
     featured: false,
@@ -347,6 +381,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/ashok-bhargava.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: false,
@@ -364,6 +399,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/priya-ramachandran.jpg",
+    videoUrl: null,
     chatRatePerMinute: 15,
     active: true,
     featured: false,
@@ -383,6 +419,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/mahesh-awasthi.jpg",
+    videoUrl: null,
     chatRatePerMinute: 23,
     active: true,
     featured: false,
@@ -400,6 +437,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/sunita-rao.jpg",
+    videoUrl: null,
     chatRatePerMinute: 17,
     active: true,
     featured: false,
@@ -417,6 +455,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -434,6 +473,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/kavita-nair.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -451,6 +491,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 25,
     active: true,
     featured: false,
@@ -470,6 +511,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "senior-panel",
     photoUrl: "/images/practitioners/vinod-chaubey.jpg",
+    videoUrl: null,
     chatRatePerMinute: 24,
     active: true,
     featured: false,
@@ -487,6 +529,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -504,6 +547,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/sarita-agnihotri.jpg",
+    videoUrl: null,
     chatRatePerMinute: 15,
     active: true,
     featured: false,
@@ -521,6 +565,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 21,
     active: true,
     featured: false,
@@ -538,6 +583,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/lata-kulshreshtha.jpg",
+    videoUrl: null,
     chatRatePerMinute: 19,
     active: true,
     featured: false,
@@ -557,6 +603,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/naresh-vyas.jpg",
+    videoUrl: null,
     chatRatePerMinute: 20,
     active: true,
     featured: false,
@@ -574,6 +621,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/poonam-sinha.jpg",
+    videoUrl: null,
     chatRatePerMinute: 14,
     active: true,
     featured: false,
@@ -591,6 +639,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/manoj-chatterjee.jpg",
+    videoUrl: null,
     chatRatePerMinute: 18,
     active: true,
     featured: false,
@@ -608,6 +657,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: "/images/practitioners/shweta-bapat.jpg",
+    videoUrl: null,
     chatRatePerMinute: 16,
     active: true,
     featured: false,
@@ -625,6 +675,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     verified: true,
     verificationLevel: "verified-panel",
     photoUrl: null,
+    videoUrl: null,
     chatRatePerMinute: 22,
     active: true,
     featured: false,
@@ -672,7 +723,12 @@ export async function seedPractitioners() {
       const weekdays = starter.featured ? [1, 2, 3, 4, 5] : [2, 3, 4, 5, 6];
       const batch = db.batch();
       for (const weekday of weekdays) {
-        batch.set(ref.collection("availabilityRules").doc(), { weekday, startTime: "09:30", endTime: "17:30", active: true });
+        // A deterministic doc ID (not an auto-generated one) keeps this idempotent: this whole
+        // block runs on every directory read, so without it, two concurrent reads that both see
+        // rulesSnap.empty === true (the check-then-act race is real — nothing here locks between
+        // the read and the write) each create their own random-ID doc for the same weekday,
+        // doubling every slot the availability grid ever offers for that practitioner.
+        batch.set(ref.collection("availabilityRules").doc(`starter-${weekday}`), { weekday, startTime: "09:30", endTime: "17:30", active: true });
       }
       await batch.commit();
     }
@@ -695,10 +751,12 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
     verified: data.verified as boolean,
     verificationLevel: data.verificationLevel as string,
     photoUrl: (data.photoUrl as string | null) ?? null,
+    videoUrl: (data.videoUrl as string | null) ?? null,
     online: (data.online as boolean) ?? false,
     chatRatePerMinute: data.chatRatePerMinute as number,
     active: data.active as boolean,
     featured: data.featured as boolean,
+    isDemoAccount: Boolean(data.isDemoAccount),
     firebaseUid: (data.firebaseUid as string | null) ?? null,
     hasPortalAccess: Boolean(data.firebaseUid),
     lastLoginAt: (data.lastLoginAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? null,
@@ -709,7 +767,7 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
 
 export type PractitionerWithSchedule = Practitioner & { rules: AvailabilityRule[]; timeOff: PractitionerTimeOff[] };
 
-export async function getPractitionerDirectory(activeOnly = false): Promise<PractitionerWithSchedule[]> {
+export async function getPractitionerDirectory(activeOnly = false, includeDemo = false): Promise<PractitionerWithSchedule[]> {
   await seedPractitioners();
   const collection = db.collection("practitioners");
   const query = activeOnly ? collection.where("active", "==", true) : collection;
@@ -723,6 +781,10 @@ export async function getPractitionerDirectory(activeOnly = false): Promise<Prac
     console.error("Firestore composite index unavailable for practitioners directory, sorting in JS:", error);
     docs = (await query.get()).docs.sort((a, b) => (a.data().name as string).localeCompare(b.data().name as string));
   }
+  // Demo accounts are only for internal testing (see api/admin/demo-accounts/route.ts) — filtered
+  // in JS rather than via a Firestore `isDemoAccount != true` query, since Firestore's `!=`
+  // excludes docs where the field is unset at all, which would wrongly drop every real practitioner.
+  if (!includeDemo) docs = docs.filter((doc) => !doc.data().isDemoAccount);
   if (!docs.length) return [];
 
   const now = new Date();
@@ -776,7 +838,7 @@ function toPractitionerSlug(name: string) {
  * practitioner-invites.ts) before they can sign in and self-manage their profile. */
 export async function createPractitionerAdmin(input: {
   name: string; email: string; title: string; bio: string; specialties: string; languages: string;
-  consultationModes: string; experienceYears: number; chatRatePerMinute: number; photoUrl: string | null;
+  consultationModes: string; experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null;
   featured: boolean; active: boolean;
 }) {
   const name = input.name.trim().slice(0, 120);
@@ -808,6 +870,7 @@ export async function createPractitionerAdmin(input: {
     verified: false,
     verificationLevel: "unverified",
     photoUrl: input.photoUrl?.trim() || null,
+    videoUrl: input.videoUrl?.trim() || null,
     online: false,
     chatRatePerMinute: Math.max(0, Number(input.chatRatePerMinute) || 0),
     active: input.active,
@@ -821,7 +884,7 @@ export async function createPractitionerAdmin(input: {
 
 export async function updatePractitionerAdmin(id: string, patch: Partial<{
   name: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
-  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
+  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
 }>) {
   const ref = db.collection("practitioners").doc(id);
   const snap = await ref.get();
@@ -841,6 +904,7 @@ export async function updatePractitionerAdmin(id: string, patch: Partial<{
   if (patch.experienceYears !== undefined) update.experienceYears = Math.max(0, Math.min(60, Number(patch.experienceYears) || 0));
   if (patch.chatRatePerMinute !== undefined) update.chatRatePerMinute = Math.max(0, Number(patch.chatRatePerMinute) || 0);
   if (patch.photoUrl !== undefined) update.photoUrl = patch.photoUrl?.trim() || null;
+  if (patch.videoUrl !== undefined) update.videoUrl = patch.videoUrl?.trim() || null;
   if (patch.verified !== undefined) update.verified = patch.verified;
   if (patch.featured !== undefined) update.featured = patch.featured;
   if (patch.active !== undefined) update.active = patch.active;
@@ -935,7 +999,17 @@ export async function getAvailableSlots({ date, duration, practitionerId, exclud
   const slots: AvailableSlot[] = [];
   for (const person of people) {
     const personBookings = existingBookings.filter((booking) => booking.id !== excludeBookingId && booking.practitionerId === person.id && booking.status !== "cancelled");
-    const rules = person.rules.filter((rule) => rule.weekday === weekday && rule.active);
+    // Collapses any pre-existing duplicate rule rows (see seedPractitioners' idempotency note) by
+    // (weekday, startTime, endTime) so a practitioner whose data was affected before that fix
+    // doesn't keep offering every slot twice until someone re-seeds their profile.
+    const seenRuleWindows = new Set<string>();
+    const rules = person.rules.filter((rule) => {
+      if (rule.weekday !== weekday || !rule.active) return false;
+      const key = `${rule.startTime}-${rule.endTime}`;
+      if (seenRuleWindows.has(key)) return false;
+      seenRuleWindows.add(key);
+      return true;
+    });
     for (const rule of rules) {
       for (let cursor = minutes(rule.startTime); cursor + duration <= minutes(rule.endTime); cursor += 30) {
         const startsAt = civilToUtc(date, timeFromMinutes(cursor), settings.timezone);

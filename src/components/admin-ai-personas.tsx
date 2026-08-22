@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { Bot, Check, Edit3, ExternalLink, Plus, Trash2, X } from "lucide-react";
+import { AvatarImage } from "@/components/avatar-image";
 import type { AiPersona } from "@/lib/ai-personas";
 
 type FormState = {
@@ -102,7 +103,7 @@ export function AdminAiPersonas({ initialPersonas }: { initialPersonas: AiPerson
           {items.map((persona) => (
             <div className="service-table__row" role="row" key={persona.id}>
               <div className="table-service">
-                <span className="table-service__icon">{persona.avatarUrl ? <img src={persona.avatarUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} /> : <Bot size={17} />}</span>
+                <span className="table-service__icon"><AvatarImage src={persona.avatarUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} fallback={<Bot size={17} />} /></span>
                 <div><strong>{persona.name}</strong><small>{persona.title}</small></div>
               </div>
               <strong>{persona.price > 0 ? `₹${persona.price}` : "Free"}</strong>

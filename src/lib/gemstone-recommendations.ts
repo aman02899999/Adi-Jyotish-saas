@@ -3,7 +3,8 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getProductCatalog, type ProductListItem } from "@/lib/gemstones";
-import { signForBirthDate, ZODIAC_SIGNS, type ZodiacSignKey } from "@/lib/horoscopes";
+import { ZODIAC_SIGNS, type ZodiacSignKey } from "@/lib/horoscopes";
+import { buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
 
 export class RecommendationError extends Error {}
 
@@ -66,26 +67,41 @@ function buildNarrative({ name, signKey, concern, gemstones }: {
   if (!gemstones.length) {
     const classical = CLASSICAL_STONE[rulingPlanet] ?? "a stone suited to your ruling planet";
     return [
-      `${name}, ${signLabel} is ruled by ${rulingPlanet}.${concernLine} Classically, ${rulingPlanet} is associated with ${classical} — it isn't currently in our collection, so we can't recommend a specific piece from our catalog today.`,
-      `Gemstone selection is genuinely personal — the right weight, metal setting, and even whether a stone suits you at all depends on your full birth chart, not just your sign. A consultation with one of our practitioners will give you guidance grounded in your actual chart rather than a general sign-based guess.`,
+      `${name}, your real sidereal Moon sign is ${signLabel}, ruled by ${rulingPlanet}.${concernLine} Classically, ${rulingPlanet} is associated with ${classical} — it isn't currently in our collection, so we can't recommend a specific piece from our catalog today.`,
+      `Gemstone selection is genuinely personal — the right weight, metal setting, and even whether a stone suits you at all depends on whether that planet is actually weak or afflicted in your full chart, not just which sign your Moon falls in. A consultation with one of our practitioners will give you guidance grounded in your complete chart rather than a Moon-sign-only starting point.`,
     ].join("\n\n");
   }
 
   const list = gemstones.map((gem) => `${gem.name} (ruled by ${gem.planet}) — ${gem.description}`).join("; ");
   return [
-    `${name}, ${signLabel} is ruled by ${rulingPlanet}.${concernLine} From our collection, these stones are classically suited to your sign: ${list}.`,
+    `${name}, your real sidereal Moon sign is ${signLabel}, ruled by ${rulingPlanet}.${concernLine} From our collection, these stones are classically suited to your Moon sign: ${list}.`,
     `A gemstone works with your chart, not against it — before wearing one regularly, it's worth confirming the right weight and metal setting with a practitioner, especially if you're wearing it for a specific concern rather than general wellbeing.`,
   ].join("\n\n");
 }
 
-export async function createGemstoneRecommendation({ memberId, name, birthDate, concern }: {
+export async function createGemstoneRecommendation({ memberId, name, birthDate, birthTime, birthPlace, concern }: {
   memberId: string | null;
   name: string;
   birthDate: string;
+  birthTime: string;
+  birthPlace: string;
   concern: string;
 }) {
-  const sign = signForBirthDate(birthDate);
-  if (!sign) throw new RecommendationError("Please enter a valid birth date.");
+  // Uses the real sidereal Moon rashi from the same chart engine as every other tool on this
+  // platform (Kundli, matching, numerology), not a Western tropical Sun-sign-by-calendar-date
+  // lookup — the two systems disagree by the ~24° ayanamsha offset, so a tropical "Leo" and a
+  // sidereal "Simha" for the same birth data are often genuinely different signs. ZODIAC_SIGNS and
+  // astro-engine's RASHIS share the same index order (Aries/Mesha first), so the Moon's rashiIndex
+  // maps directly onto the existing ZodiacSignKey used for product matching below.
+  let chart: ReturnType<typeof buildKundliChart>;
+  try {
+    chart = buildKundliChart({ name, birthDate, birthTime, birthPlace });
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new RecommendationError(error.message);
+    throw error;
+  }
+  const moon = chart.positions.find((position) => position.graha === "moon")!;
+  const sign = ZODIAC_SIGNS[moon.rashiIndex].key;
 
   const definition = ZODIAC_SIGNS.find((entry) => entry.key === sign)!;
   const matches = await getMatchingProducts(definition.name);

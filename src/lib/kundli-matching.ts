@@ -11,7 +11,7 @@ export class KundliMatchError extends Error {}
 
 function moonPlacement(utcInstant: Date) {
   const moon = computeGrahaPositions(utcInstant).find((position) => position.graha === "moon")!;
-  return { rashiIndex: moon.rashiIndex, nakshatraIndex: moon.nakshatraIndex };
+  return { rashiIndex: moon.rashiIndex, nakshatraIndex: moon.nakshatraIndex, pada: moon.pada };
 }
 
 function scoreTier(score: number) {
@@ -42,6 +42,11 @@ function buildNarrative({ nameA, nameB, result }: { nameA: string; nameB: string
   const strongKootas = entries.filter(([key, value]) => value === KOOTA_INFO[key].max).map(([key]) => KOOTA_INFO[key].name);
   const weakEntries = entries.filter(([, value]) => value === 0);
   const weakKootas = weakEntries.map(([key]) => KOOTA_INFO[key].name);
+  // A koota can score 0 mechanically but still not count as a real dosha — classical texts
+  // recognize specific exceptions (same nakshatra different pada for Nadi; matching rashi lords
+  // for Bhakoot) that cancel the concern without changing the raw point total.
+  const nadiExempt = result.breakdown.nadi === 0 && !result.nadiDosha;
+  const bhakootExempt = result.breakdown.bhakoot === 0 && !result.bhakootDosha;
 
   if (strongKootas.length) {
     const aboutList = entries.filter(([key, value]) => value === KOOTA_INFO[key].max).map(([key]) => KOOTA_INFO[key].about).join("; ");
@@ -56,6 +61,9 @@ function buildNarrative({ nameA, nameB, result }: { nameA: string; nameB: string
   } else {
     paragraphs.push("No koota scored zero — there's no single classical dosha standing out here.");
   }
+
+  if (nadiExempt) paragraphs.push("The Nadi koota scored zero mechanically, but classical texts exempt this specific case — same nakshatra, different pada — from being treated as a real dosha.");
+  if (bhakootExempt) paragraphs.push("The Bhakoot koota scored zero mechanically, but classical texts exempt this specific case — both Moon signs share the same ruling planet — from being treated as a real dosha.");
 
   paragraphs.push(tier.guidance);
   paragraphs.push("Guna Milan is one traditional input among many — it's not a substitute for the couple's own compatibility, values, and communication.");
@@ -99,6 +107,8 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     brideMoonNakshatra: moonA.nakshatraIndex,
     groomMoonRashi: moonB.rashiIndex,
     groomMoonNakshatra: moonB.nakshatraIndex,
+    bridePada: moonA.pada,
+    groomPada: moonB.pada,
   });
 
   const narrative = buildNarrative({ nameA, nameB, result });
@@ -130,5 +140,79 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     moonBRashi: RASHIS[moonB.rashiIndex].name,
     moonBNakshatra: NAKSHATRAS[moonB.nakshatraIndex],
     timeline: timeline as TimelineMonth[],
+  };
+}
+
+export type KundliMatchRecord = {
+  id: string;
+  nameA: string; birthDateA: string; birthTimeA: string; birthPlaceA: string;
+  nameB: string; birthDateB: string; birthTimeB: string; birthPlaceB: string;
+  narrative: string;
+  timeline: TimelineMonth[];
+};
+
+/** Owner-scoped fetch of a saved match, for the PDF download route — unlike
+ * getShareableKundliMatch (deliberately public and birth-detail-free for the social share
+ * card), this returns full birth details, so it's gated to the member who created the match.
+ * Anonymous matches (memberId null) have no owner to check against and can never be fetched
+ * here, matching how every other paid/personal PDF in this codebase is scoped.
+ * Ashtakoot recomputed fresh from the stored birth data rather than trusting cached derived
+ * fields — consistent with this app's deterministic-and-reproducible philosophy, and avoids
+ * needing a schema migration since the moon-placement labels were never persisted. */
+export async function getKundliMatchById(id: string, memberId: string): Promise<{
+  record: KundliMatchRecord;
+  result: AshtakootResult;
+  moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string;
+} | null> {
+  const snap = await db.collection("kundliMatches").doc(id).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as {
+    memberId: string | null;
+    personAName: string; personABirthDate: string; personABirthTime: string; personABirthPlace: string;
+    personBName: string; personBBirthDate: string; personBBirthTime: string; personBBirthPlace: string;
+    narrative: string; timeline: TimelineMonth[];
+  };
+  if (!data.memberId || data.memberId !== memberId) return null;
+
+  const momentA = resolveBirthMoment({ birthDate: data.personABirthDate, birthTime: data.personABirthTime, birthPlace: data.personABirthPlace });
+  const momentB = resolveBirthMoment({ birthDate: data.personBBirthDate, birthTime: data.personBBirthTime, birthPlace: data.personBBirthPlace });
+  const moonA = moonPlacement(momentA.utcInstant);
+  const moonB = moonPlacement(momentB.utcInstant);
+  const result = computeAshtakoot({
+    brideMoonRashi: moonA.rashiIndex, brideMoonNakshatra: moonA.nakshatraIndex,
+    groomMoonRashi: moonB.rashiIndex, groomMoonNakshatra: moonB.nakshatraIndex,
+    bridePada: moonA.pada, groomPada: moonB.pada,
+  });
+
+  return {
+    record: {
+      id: snap.id,
+      nameA: data.personAName, birthDateA: data.personABirthDate, birthTimeA: data.personABirthTime, birthPlaceA: data.personABirthPlace,
+      nameB: data.personBName, birthDateB: data.personBBirthDate, birthTimeB: data.personBBirthTime, birthPlaceB: data.personBBirthPlace,
+      narrative: data.narrative, timeline: data.timeline,
+    },
+    result,
+    moonARashi: RASHIS[moonA.rashiIndex].name, moonANakshatra: NAKSHATRAS[moonA.nakshatraIndex],
+    moonBRashi: RASHIS[moonB.rashiIndex].name, moonBNakshatra: NAKSHATRAS[moonB.nakshatraIndex],
+  };
+}
+
+export { scoreTier };
+
+/** Public, share-safe summary of a saved match — deliberately omits birth date/time/place,
+ * which the full match document stores but a shared social card should never expose. */
+export type ShareableKundliMatch = { id: string; nameA: string; nameB: string; score: number; maxScore: number; tierLabel: string };
+
+export async function getShareableKundliMatch(id: string): Promise<ShareableKundliMatch | null> {
+  const snap = await db.collection("kundliMatches").doc(id).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as { personAName: string; personBName: string; compatibilityScore: number };
+  return {
+    id,
+    nameA: data.personAName,
+    nameB: data.personBName,
+    score: data.compatibilityScore,
+    maxScore: 36,
+    tierLabel: scoreTier(data.compatibilityScore).label,
   };
 }

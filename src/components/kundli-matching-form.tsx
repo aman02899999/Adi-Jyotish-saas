@@ -1,13 +1,15 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Clock3, HeartHandshake, LoaderCircle, MapPin, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, Download, HeartHandshake, LoaderCircle, MapPin, Share2, UserRound, X } from "lucide-react";
+import { Link } from "@/i18n/navigation";
 import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
+import { ShareButtons } from "@/components/share-buttons";
 
 type Breakdown = { varna: number; vashya: number; tara: number; yoni: number; grahaMaitri: number; gana: number; bhakoot: number; nadi: number };
 type TimelineMonth = { monthLabel: string; score: number; tier: "favorable" | "supportive" | "neutral" | "caution"; headline: string };
 type Result = {
-  score: number; maxScore: number; breakdown: Breakdown; nadiDosha: boolean; bhakootDosha: boolean;
+  id: string; score: number; maxScore: number; breakdown: Breakdown; nadiDosha: boolean; bhakootDosha: boolean;
   moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string; narrative: string;
   timeline: TimelineMonth[];
 };
@@ -38,6 +40,32 @@ export function KundliMatchingForm() {
   const [error, setError] = useState("");
   const [result, setResult] = useState<Result | null>(null);
   const [turnstileToken, setTurnstileToken] = useState("");
+  const [pdfLoading, setPdfLoading] = useState(false);
+  const [pdfError, setPdfError] = useState<"unauthenticated" | "other" | null>(null);
+
+  async function downloadPdf() {
+    if (!result) return;
+    setPdfError(null);
+    setPdfLoading(true);
+    try {
+      const response = await fetch(`/api/kundli-matching/${result.id}/pdf`);
+      if (!response.ok) {
+        setPdfError(response.status === 401 || response.status === 404 ? "unauthenticated" : "other");
+        return;
+      }
+      const blob = await response.blob();
+      const url = URL.createObjectURL(blob);
+      const link = document.createElement("a");
+      link.href = url;
+      link.download = `Compatibility-${nameA}-${nameB}.pdf`.replace(/\s+/g, "-");
+      link.click();
+      URL.revokeObjectURL(url);
+    } catch {
+      setPdfError("other");
+    } finally {
+      setPdfLoading(false);
+    }
+  }
 
   async function submit() {
     setError("");
@@ -92,9 +120,26 @@ export function KundliMatchingForm() {
             </div>
           ))}
         </div>
+        <div className="match-share">
+          <p><Share2 size={15} /> Share this match</p>
+          <ShareButtons
+            url={`${window.location.origin}/match/${result.id}`}
+            title={`${nameA} & ${nameB}'s compatibility match`}
+            text={`We scored ${result.score}/${result.maxScore} on the classical Ashtakoot Guna Milan scale.`}
+          />
+        </div>
         <div className="ask-answer__actions">
           <button type="button" className="button button--ghost" onClick={() => { setResult(null); }}>Match another pair</button>
+          <button type="button" className="button" disabled={pdfLoading} onClick={downloadPdf}>
+            {pdfLoading ? <><LoaderCircle size={16} className="spin" /> Preparing PDF…</> : <><Download size={16} /> Download PDF</>}
+          </button>
         </div>
+        {pdfError === "unauthenticated" && (
+          <p className="ask-form-card__note">Sign in to download the PDF version of this report — free accounts can save and revisit their matches. <Link href="/account">Sign in</Link></p>
+        )}
+        {pdfError === "other" && (
+          <p className="ask-form-card__note">The PDF could not be generated right now. Please try again shortly.</p>
+        )}
       </div>
     );
   }

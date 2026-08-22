@@ -4,7 +4,20 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
 import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
+import { buildVarshphalChart, renderVarshphalReport, VarshphalError } from "@/lib/varshphal";
 import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
+import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { notifyAdmins } from "@/lib/notifications";
+import { scanForContactInfo } from "@/lib/content-moderation";
+import { sanitizeMediaUrl } from "@/lib/scheduling";
+
+// A request at or below this amount, from a practitioner with at least one prior *paid* payout
+// and zero rejections ever, is auto-approved instead of sitting in the "requested" queue —
+// admins still have to actually wire the money and enter a transactionRef before anything is
+// marked "paid" (see updatePayoutStatus's ALLOWED_PAYOUT_TRANSITIONS below), so this only removes
+// the low-risk triage step, never the money-movement step itself.
+const AUTO_APPROVE_MAX_AMOUNT = 5000;
+const PAYOUT_DESTINATION_COOLDOWN_MS = 72 * 60 * 60 * 1000;
 
 export class PayoutError extends Error {}
 export class KundliSummaryError extends Error {}
@@ -228,18 +241,36 @@ export async function updatePractitionerSchedule(practitionerId: string, input: 
 }
 
 export async function updatePractitionerProfile(practitionerId: string, input: {
-  bio?: string; specialties?: string; languages?: string; consultationModes?: string; photoUrl?: string | null;
+  bio?: string; specialties?: string; languages?: string; consultationModes?: string; photoUrl?: string | null; videoUrl?: string | null;
 }) {
   const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (input.bio !== undefined) patch.bio = input.bio.trim().slice(0, 4000);
   if (input.specialties !== undefined) patch.specialties = input.specialties.trim().slice(0, 400);
   if (input.languages !== undefined) patch.languages = input.languages.trim().slice(0, 240) || "English, Hindi";
   if (input.consultationModes !== undefined) patch.consultationModes = input.consultationModes.trim().slice(0, 160) || "Video, Audio, Chat";
-  if (input.photoUrl !== undefined) patch.photoUrl = input.photoUrl?.trim() || null;
+  if (input.photoUrl !== undefined) patch.photoUrl = sanitizeMediaUrl(input.photoUrl);
+  if (input.videoUrl !== undefined) patch.videoUrl = sanitizeMediaUrl(input.videoUrl);
 
   const ref = db.collection("practitioners").doc(practitionerId);
   await ref.update(patch);
   const updated = await ref.get();
+
+  if (typeof patch.bio === "string") {
+    const contactFlag = scanForContactInfo(patch.bio);
+    if (contactFlag) {
+      const bioForFlag = updated.data() as { name?: string } | undefined;
+      getAdminIdsWithPermission("practitioners").then(async (adminIds) => {
+        if (!adminIds.length) return;
+        await notifyAdmins(adminIds, {
+          type: "bio_contact_leak",
+          title: `Bio may contain ${contactFlag}`,
+          body: `${bioForFlag?.name ?? "A practitioner"}'s bio looks like it contains ${contactFlag} — worth a look before it stays visible on their public profile.`,
+          link: "/admin/practitioners",
+        });
+      }).catch((error) => console.error("Bio contact-leak flag failed", error));
+    }
+  }
+
   return { id: updated.id, ...updated.data() };
 }
 
@@ -263,9 +294,16 @@ export async function requestPayout(practitionerId: string, amount: number, note
   if (!Number.isInteger(amount) || amount < 100) throw new PayoutError("Enter an amount of at least ₹100.");
 
   const practitionerSnap = await db.collection("practitioners").doc(practitionerId).get();
-  if (practitionerSnap.data()?.isDemoAccount) {
+  const practitionerData = practitionerSnap.data() as { isDemoAccount?: boolean; payoutDetailsUpdatedAt?: FirebaseFirestore.Timestamp } | undefined;
+  if (practitionerData?.isDemoAccount) {
     throw new PayoutError("Demo accounts can't request payouts.");
   }
+  // A payout destination changed inside the cooldown window hasn't had a chance to be reviewed —
+  // without this, a compromised or malicious account could swap in a new bank/UPI destination and
+  // immediately auto-cash-out against an otherwise-clean payout history earned under the old one.
+  const payoutDestinationRecentlyChanged = practitionerData?.payoutDetailsUpdatedAt
+    ? Date.now() - practitionerData.payoutDetailsUpdatedAt.toMillis() < PAYOUT_DESTINATION_COOLDOWN_MS
+    : false;
 
   // totalEarned only grows via paid bookings and ended chat sessions, not this action, so it's
   // safe to read outside the transaction — but paidOut/pendingOut come from the payouts
@@ -284,34 +322,94 @@ export async function requestPayout(practitionerId: string, amount: number, note
 
   const ref = payoutsCollection().doc();
   const now = FieldValue.serverTimestamp();
-  await db.runTransaction(async (tx) => {
+  const autoApproved = await db.runTransaction(async (tx) => {
     const payoutsSnap = await tx.get(payoutsCollection().where("practitionerId", "==", practitionerId));
     let paidOut = 0;
     let pendingOut = 0;
+    let hasPriorPaid = false;
+    let hasRejection = false;
     for (const doc of payoutsSnap.docs) {
       const data = doc.data() as { amount: number; status: string };
-      if (data.status === "paid") paidOut += data.amount;
+      if (data.status === "paid") { paidOut += data.amount; hasPriorPaid = true; }
       else if (data.status === "requested" || data.status === "approved") pendingOut += data.amount;
+      else if (data.status === "rejected") hasRejection = true;
     }
     const availableBalance = Math.max(0, totalEarned - paidOut - pendingOut);
     if (amount > availableBalance) throw new PayoutError(`You can request up to ₹${availableBalance} right now.`);
 
+    const autoApprove = amount <= AUTO_APPROVE_MAX_AMOUNT && hasPriorPaid && !hasRejection && !payoutDestinationRecentlyChanged;
     tx.set(ref, {
       practitionerId,
       amount,
       currency: "INR",
-      status: "requested",
+      status: autoApprove ? "approved" : "requested",
       payoutMethod: "bank_transfer",
       transactionRef: null,
       notes: notes?.trim().slice(0, 500) || null,
-      adminNotes: null,
-      processedBy: null,
+      adminNotes: autoApprove
+        ? `Auto-approved: ₹${amount} is under the ₹${AUTO_APPROVE_MAX_AMOUNT} threshold and this practitioner has a clean payout history. Still needs a real transfer + reference to be marked paid.`
+        : payoutDestinationRecentlyChanged
+          ? "Held for manual review: payout destination (bank/UPI) changed recently."
+          : null,
+      processedBy: autoApprove ? "system:auto-approval" : null,
       requestedAt: now,
-      processedAt: null,
+      processedAt: autoApprove ? now : null,
       updatedAt: now,
     });
+    return autoApprove;
   });
+
+  if (autoApproved) {
+    const adminIds = await getAdminIdsWithPermission("billing");
+    if (adminIds.length) {
+      await notifyAdmins(adminIds, {
+        type: "payout_auto_approved",
+        title: `Payout auto-approved — ₹${amount}`,
+        body: "A small payout request from a practitioner with a clean history was auto-approved. It still needs the actual bank transfer and a transaction reference.",
+        link: "/admin/payouts",
+      }).catch((error) => console.error("Payout auto-approval notification failed", error));
+    }
+  }
+
   return payoutFromSnap(await ref.get());
+}
+
+/** Automated stand-in for a manual "does this look like the same person twice" check: the same
+ * bank account or UPI ID showing up on more than one practitioner profile is exactly the pattern
+ * a multi-accounting practitioner (e.g. banned once, signing up again under a new name) would
+ * produce. Decrypts every practitioner's payout details to compare — fine for an admin-only,
+ * on-demand list load at this practitioner count, but not something to run on a schedule. */
+export async function computeVerificationFlags(): Promise<Map<string, string>> {
+  const snap = await db.collection("practitioners").get();
+  const byBank = new Map<string, string[]>();
+  const byUpi = new Map<string, string[]>();
+
+  for (const doc of snap.docs) {
+    const data = doc.data() as { bankAccountNumberEnc?: string; upiIdEnc?: string; isDemoAccount?: boolean };
+    if (data.isDemoAccount) continue;
+    if (data.bankAccountNumberEnc) {
+      const decrypted = decryptPayoutField(data.bankAccountNumberEnc);
+      if (decrypted) byBank.set(decrypted, [...(byBank.get(decrypted) ?? []), doc.id]);
+    }
+    if (data.upiIdEnc) {
+      const decrypted = decryptPayoutField(data.upiIdEnc);
+      if (decrypted) byUpi.set(decrypted, [...(byUpi.get(decrypted) ?? []), doc.id]);
+    }
+  }
+
+  const flags = new Map<string, string>();
+  for (const ids of byBank.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) flags.set(id, "Shares a bank account with another practitioner profile.");
+  }
+  for (const ids of byUpi.values()) {
+    if (ids.length < 2) continue;
+    for (const id of ids) {
+      const existing = flags.get(id);
+      flags.set(id, existing ? `${existing} Also shares a UPI ID.` : "Shares a UPI ID with another practitioner profile.");
+    }
+  }
+  return flags;
 }
 
 type PractitionerLite = { name: string; email: string; bankAccountName: string | null; bankAccountNumber: string | null; bankIfsc: string | null; upiId: string | null };
@@ -448,6 +546,24 @@ export async function getBookingKundliSummary(bookingId: string, practitionerId:
   return { ...booking, kundliSummary: summary, kundliGeneratedAt: new Date() };
 }
 
+/** Same lookup/auth as getBookingKundliSummary, but returns the structured KundliChart instead of
+ * the rendered text — for the PDF download route, which needs the raw chart data (planetary
+ * positions, houses) to build tables, not just prose. */
+export async function getBookingKundliChart(bookingId: string, practitionerId: string) {
+  const ref = db.collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new KundliSummaryError("Booking not found.");
+  const booking = bookingFromDoc(snap);
+  if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+
+  try {
+    return buildKundliChart({ name: booking.clientName, birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace });
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
 /** Same idea as getBookingKundliSummary, but for an instant-chat session — a scheduled booking
  * captures birth details as part of checkout, but a chat session doesn't, so this reads them off
  * the client's own member profile instead (populated during onboarding). Scoped to sessions the
@@ -478,4 +594,132 @@ export async function getChatMemberKundliSummary(sessionId: string, practitioner
 
   await sessionRef.update({ kundliSummary: summary, kundliGeneratedAt: FieldValue.serverTimestamp() });
   return { kundliSummary: summary };
+}
+
+/** Same lookup/auth as getChatMemberKundliSummary, but returns the structured KundliChart instead
+ * of the rendered text — for the PDF download route, which needs the raw chart data (planetary
+ * positions, houses) to build tables, not just prose. */
+export async function getChatMemberKundliChart(sessionId: string, practitionerId: string) {
+  const sessionSnap = await db.collection("chatSessions").doc(sessionId).get();
+  if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
+  const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string };
+  if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+
+  const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
+  if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
+  const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Kundli can't be generated.");
+  }
+
+  try {
+    return buildKundliChart({ name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace });
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
+// --- Varshphal (annual solar-return) — mirrors the four Kundli helpers above, with one
+// deliberate difference: Varshphal is year-scoped, so a cached summary is only reused when its
+// stored varshphalYear still matches the current calendar year (unlike the Kundli cache, which
+// never goes stale). No year-picker here — same "current year, always" default the member
+// self-serve Varshphal flow uses.
+
+/** Generates (or returns the still-current-year cached) Varshphal summary for a booking's
+ * client from the real solar-return engine, using the birth details captured at booking time. */
+export async function getBookingVarshphalSummary(bookingId: string, practitionerId: string) {
+  const ref = db.collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new KundliSummaryError("Booking not found.");
+  const booking = bookingFromDoc(snap);
+  if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+
+  const year = new Date().getFullYear();
+  if (booking.varshphalSummary && booking.varshphalYear === year) return booking;
+
+  let summary: string;
+  try {
+    const chart = buildVarshphalChart({ birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace, year });
+    summary = renderVarshphalReport(chart, booking.clientName);
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+
+  await ref.update({ varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: FieldValue.serverTimestamp() });
+  return { ...booking, varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: new Date() };
+}
+
+/** Same lookup/auth as getBookingVarshphalSummary, but returns the structured VarshphalChart
+ * instead of the rendered text — for the PDF download route. */
+export async function getBookingVarshphalChart(bookingId: string, practitionerId: string) {
+  const ref = db.collection("bookings").doc(bookingId);
+  const snap = await ref.get();
+  if (!snap.exists) throw new KundliSummaryError("Booking not found.");
+  const booking = bookingFromDoc(snap);
+  if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+
+  try {
+    return { chart: buildVarshphalChart({ birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace, year: new Date().getFullYear() }), clientName: booking.clientName };
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
+/** Same idea as getBookingVarshphalSummary, but for an instant-chat session — birth details come
+ * from the client's own member profile (no booking-time capture for chat), same as
+ * getChatMemberKundliSummary. Scoped to sessions the calling practitioner actually owns. */
+export async function getChatMemberVarshphalSummary(sessionId: string, practitionerId: string) {
+  const sessionRef = db.collection("chatSessions").doc(sessionId);
+  const sessionSnap = await sessionRef.get();
+  if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
+  const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string; varshphalSummary?: string; varshphalYear?: number };
+  if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+
+  const year = new Date().getFullYear();
+  if (sessionData.varshphalSummary && sessionData.varshphalYear === year) return { varshphalSummary: sessionData.varshphalSummary };
+
+  const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
+  if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
+  const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Varshphal report can't be generated.");
+  }
+
+  let summary: string;
+  try {
+    const chart = buildVarshphalChart({ birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace, year });
+    summary = renderVarshphalReport(chart, member.name);
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+
+  await sessionRef.update({ varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: FieldValue.serverTimestamp() });
+  return { varshphalSummary: summary };
+}
+
+/** Same lookup/auth as getChatMemberVarshphalSummary, but returns the structured VarshphalChart
+ * instead of the rendered text — for the PDF download route. */
+export async function getChatMemberVarshphalChart(sessionId: string, practitionerId: string) {
+  const sessionSnap = await db.collection("chatSessions").doc(sessionId).get();
+  if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
+  const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string };
+  if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+
+  const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
+  if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
+  const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Varshphal report can't be generated.");
+  }
+
+  try {
+    return { chart: buildVarshphalChart({ birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace, year: new Date().getFullYear() }), clientName: member.name };
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
 }

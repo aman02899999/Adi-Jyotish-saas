@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Check, Sparkles, X } from "lucide-react";
 import type { MembershipPlan } from "@/lib/plans";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
@@ -36,7 +36,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
       await openRazorpayCheckout({
         key: data.key,
         subscription_id: data.subscriptionId,
-        name: "Jyotish Studio",
+        name: "Adi Jyotish Guru",
         description: `${plan.name} membership · ${interval}`,
         prefill: member ? { name: member.name, email: member.email } : undefined,
         theme: { color: "#a95838" },
@@ -67,6 +67,11 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
       </div>
 
       {!razorpayConfigured && <div className="finance-config-note pricing-config-note"><Sparkles size={18} /><div><strong>Memberships open soon</strong><span>Online billing is being configured. Check back shortly to subscribe.</span></div></div>}
+      {razorpayConfigured && <p className="legal-note">Billing is handled securely by Razorpay — cancel anytime from your dashboard.</p>}
+
+      <p className="pricing-recommend">
+        <strong>Not sure which to pick?</strong> New here — start on <strong>Free</strong>, no commitment, browse and book anytime. Booking more than once a month — look for the <strong>“Most chosen”</strong> badge below; for most members it pays for itself by the second session&rsquo;s discount.
+      </p>
 
       <div className="pricing-grid">
         <article className="pricing-card">

@@ -27,6 +27,25 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const razorpay = getRazorpay();
   if (!razorpay) return Response.json({ error: "Online payments are not configured. You can still pay through the studio." }, { status: 503 });
 
+  // Reuse a still-fresh in-flight order instead of minting a new one: without this, a customer
+  // whose payment succeeded but whose webhook/verify hasn't landed yet (invoice still "open" for
+  // a few seconds) can retry checkout and pay for the same invoice twice, with nothing in the app
+  // to catch the second real charge.
+  const PENDING_ORDER_REUSE_WINDOW_MS = 15 * 60 * 1000;
+  const pendingSnap = await db.collection("payments")
+    .where("invoiceId", "==", invoice.id)
+    .where("status", "==", "pending")
+    .orderBy("createdAt", "desc")
+    .limit(1)
+    .get();
+  const pendingPayment = pendingSnap.docs[0]?.data() as { providerSessionId?: string; createdAt?: FirebaseFirestore.Timestamp } | undefined;
+  if (pendingPayment?.providerSessionId && (Date.now() - (pendingPayment.createdAt?.toMillis() ?? 0)) < PENDING_ORDER_REUSE_WINDOW_MS) {
+    const existingOrder = await razorpay.orders.fetch(pendingPayment.providerSessionId);
+    if (existingOrder.status === "created" || existingOrder.status === "attempted") {
+      return Response.json({ orderId: existingOrder.id, amount: existingOrder.amount, currency: existingOrder.currency, key: getRazorpayKeyId() });
+    }
+  }
+
   const order = await razorpay.orders.create({
     amount: Math.round(invoice.amount * 100),
     currency: invoice.currency,

@@ -214,6 +214,7 @@ export async function seedGemstoneCatalog() {
       color: product.color,
       treatment: product.treatment,
       certification: product.certification,
+      certificateUrl: "",
       currency: "INR",
       sku: product.sku,
       featured: product.featured ?? false,

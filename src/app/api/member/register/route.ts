@@ -1,5 +1,6 @@
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { verifyTurnstileToken } from "@/lib/turnstile";
 
 export const dynamic = "force-dynamic";
 
@@ -7,10 +8,14 @@ export const dynamic = "force-dynamic";
  * (createUserWithEmailAndPassword) and hands us the resulting ID token, plus the display name,
  * to create the Firestore profile document and mint a session cookie. */
 export async function POST(request: Request) {
-  const throttle = await checkRateLimit("member-register", requestIp(request), 8, 3600);
+  const ip = requestIp(request);
+  const throttle = await checkRateLimit("member-register", ip, 8, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = await request.json() as { idToken?: string; name?: string; ref?: string };
+  const body = await request.json() as { idToken?: string; name?: string; ref?: string; turnstileToken?: string };
+  if (!(await verifyTurnstileToken(body.turnstileToken, ip))) {
+    return Response.json({ error: "Verification failed. Please try again." }, { status: 403 });
+  }
   const name = body.name?.trim().slice(0, 120) ?? "";
   if (name.length < 2) return Response.json({ error: "Enter your name." }, { status: 400 });
   if (!body.idToken) return Response.json({ error: "Your account could not be created." }, { status: 400 });

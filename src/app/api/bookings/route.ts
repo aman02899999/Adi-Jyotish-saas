@@ -22,6 +22,7 @@ type BookingPayload = {
   serviceId?: string;
   practitionerId?: string;
   bookingDate?: string;
+  clientName?: string;
   clientPhone?: string;
   birthDate?: string;
   birthTime?: string;
@@ -51,6 +52,9 @@ export type BookingRecord = {
   paymentStatus: string;
   kundliSummary: string | null;
   kundliGeneratedAt: Date | null;
+  varshphalSummary: string | null;
+  varshphalYear: number | null;
+  varshphalGeneratedAt: Date | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -84,6 +88,9 @@ export function bookingFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fi
     paymentStatus: data.paymentStatus as string,
     kundliSummary: (data.kundliSummary as string | null) ?? null,
     kundliGeneratedAt: (data.kundliGeneratedAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? null,
+    varshphalSummary: (data.varshphalSummary as string | null) ?? null,
+    varshphalYear: (data.varshphalYear as number | null) ?? null,
+    varshphalGeneratedAt: (data.varshphalGeneratedAt as FirebaseFirestore.Timestamp | undefined)?.toDate() ?? null,
     createdAt: (data.createdAt as FirebaseFirestore.Timestamp)?.toDate() ?? new Date(),
     updatedAt: (data.updatedAt as FirebaseFirestore.Timestamp)?.toDate() ?? new Date(),
   };
@@ -112,7 +119,12 @@ export async function POST(request: Request) {
   const serviceId = body.serviceId?.trim() ?? "";
   const practitionerId = body.practitionerId?.trim() ?? "";
   const bookingDate = body.bookingDate?.trim() ?? "";
-  const clientName = member.name;
+  // The booking-for-family-member picker (booking-flow.tsx) submits the family member's name here
+  // — falling back to the account owner's name keeps this backward compatible for the "myself"
+  // case and any older client that never sends the field. The account's own email is always used
+  // regardless of who the reading is for, since the booking still belongs to the paying/logged-in
+  // member (confirmation, discount eligibility, dashboard listing all key off it).
+  const clientName = clean(body.clientName, 200) || member.name;
   const clientEmail = member.email;
   const clientPhone = clean(body.clientPhone, 40);
   const birthDate = clean(body.birthDate, 10);
@@ -197,6 +209,9 @@ export async function POST(request: Request) {
         paymentStatus: "unpaid",
         kundliSummary: null,
         kundliGeneratedAt: null,
+        varshphalSummary: null,
+        varshphalYear: null,
+        varshphalGeneratedAt: null,
         createdAt: now,
         updatedAt: now,
       });
@@ -221,6 +236,9 @@ export async function POST(request: Request) {
         paymentStatus: "unpaid",
         kundliSummary: null,
         kundliGeneratedAt: null,
+        varshphalSummary: null,
+        varshphalYear: null,
+        varshphalGeneratedAt: null,
         createdAt: new Date(),
         updatedAt: new Date(),
       } satisfies BookingRecord;

@@ -1,0 +1,186 @@
+{
+  "LanguageSwitcher": {
+    "label": "भाषा"
+  },
+  "RootLayout": {
+    "title": "Adi Jyotish Guru — Purani vidya, aaj ki zindagi ke liye saaf raah",
+    "description": "Personal Vedic jyotish readings, cosmic insights, aur shubh muhurat — aaj ke jeevan ke liye.",
+    "ogDescription": "Personal Vedic jyotish readings aur samajhdaar cosmic guidance."
+  },
+  "Nav": {
+    "gemstones": "Ratna",
+    "practitioners": "Astrologers",
+    "readings": "Readings",
+    "ourMethod": "Hamara tareeka",
+    "askLive": "Live Poochein",
+    "palmReading": "Hastrekha (Palm)",
+    "tarotReading": "Tarot Reading",
+    "horoscope": "Rashifal",
+    "journal": "Journal",
+    "pricing": "Pricing",
+    "book": "Booking Karein",
+    "signIn": "Sign in",
+    "myAccount": "Mera account",
+    "openYourChart": "Apna chart kholein",
+    "createYourChart": "Apna chart banayein",
+    "cart": "{count, plural, =0 {Cart dekhein} one {Cart dekhein (# item)} other {Cart dekhein (# items)}}"
+  },
+  "Footer": {
+    "about": "About us",
+    "contact": "Contact us",
+    "trustSecure": "Secure Razorpay payments",
+    "trustReviewed": "Team-reviewed astrologers",
+    "trustPrivate": "Aapka birth data, protected",
+    "practitioners": "Astrologers",
+    "journal": "Journal",
+    "pricing": "Pricing",
+    "dashboard": "Dashboard",
+    "copyright": "© {year} Adi Jyotish Guru",
+    "terms": "Terms of Service",
+    "privacy": "Privacy Policy",
+    "refundPolicy": "Refund aur Cancellation",
+    "practitionerSignIn": "Astrologer sign in",
+    "studioAdmin": "Studio admin",
+    "disclaimer": "Readings sirf guidance aur self-reflection ke liye di jaati hain. Yeh medical, legal, ya financial advice ka substitute nahi hain, aur kisi specific outcome ki guarantee nahi hai."
+  },
+  "Home": {
+    "aria": {
+      "trustStrip": "Jyotish highlights",
+      "categories": "Vishay ke hisaab se dekhein",
+      "seniors": "Hamare sabse senior astrologers",
+      "live": "Abhi online astrologers",
+      "services": "Apni clarity paayein",
+      "tools": "Free astrology tools",
+      "horoscope": "Aapka daily rashifal"
+    },
+    "hero": {
+      "trustedByCount": "{count}+ logon ka bharosa",
+      "trustedByGrowing": "Ek badhte hue community ka bharosa"
+    },
+    "trustStrip": {
+      "consultations": "Consultations complete hue",
+      "astrologers": "Vedic astrologers",
+      "avgRating": "Average rating",
+      "privatePersonal": "Private aur personal"
+    },
+    "categories": {
+      "eyebrow": "Vishay ke hisaab se dekhein",
+      "headline": "Aaj aapke",
+      "headlineEm": "mann mein kya hai?",
+      "relationship": { "label": "Pyaar aur Rishtey", "note": "Dil ki timing samjhein" },
+      "marriage": { "label": "Shaadi", "note": "Compatibility aur muhurat" },
+      "career": { "label": "Career aur Business", "note": "Growth cycles aur timing" },
+      "health": { "label": "Health aur Wellness", "note": "Chart se vitality samjhein" },
+      "vastu": { "label": "Parivar aur Ghar", "note": "Harmony aur upay" },
+      "education": { "label": "Padhai", "note": "Focus aur academic timing" }
+    },
+    "seniors": {
+      "eyebrow": "Hamare sabse senior astrologers",
+      "headline": "Dashakon ka anubhav,",
+      "headlineEm": "aapki madad ke liye taiyaar.",
+      "verified": "Verified",
+      "yearsExperience": "{years}+ saal ka anubhav",
+      "yrsShort": "{years} saal",
+      "viewProfile": "Profile dekhein",
+      "bookConsultation": "Consultation book karein"
+    },
+    "live": {
+      "onlineNow": "{count, plural, one {# astrologer abhi online hai} other {# astrologers abhi online hain}}",
+      "headline": "Abhi ek guide se",
+      "headlineEm": "baat karein.",
+      "subhead": "Turant chat karein, sirf istemal kiye minutes ka payment karein. Har guide studio-reviewed hai.",
+      "isOnline": "Abhi online",
+      "isOffline": "Offline",
+      "reviews": "{count, plural, one {# review} other {# reviews}}",
+      "chatNow": "Abhi chat karein",
+      "viewAll": "Sabhi astrologers dekhein"
+    },
+    "ctaAsk": {
+      "title": "Ya Shree Santram Shashtri se turant poochein.",
+      "body": "Hamare Live Jyotish guide ek focused sawaal ka jawab ek minute se kam mein dete hain. Aapki pehli reading free hai.",
+      "cta": "Abhi poochein"
+    },
+    "ctaGemstones": {
+      "title": "Wahi pehnein jo aasman recommend kare.",
+      "body": "Certified, natural Vedic ratna kharidein — aapki rashi aur graha ke hisaab se chune gaye.",
+      "cta": "Ratna Kharidein"
+    },
+    "services": {
+      "eyebrow": "Apni clarity paayein",
+      "headline": "Zindagi ke har",
+      "headlineEm": "adhyaay ke liye guidance.",
+      "subhead": "Har reading classical Jyotish principles ko warm, grounded guidance ke saath jodti hai, jise aap turant apna sakein.",
+      "from": "Shuru"
+    },
+    "tools": {
+      "horoscope": { "label": "Daily Rashifal", "note": "Aapki rashi ka aaj ka phal" },
+      "ask": { "label": "Live Sawaal Poochein", "note": "Turant jawab, ek sawaal" },
+      "palm": { "label": "Hastrekha (Palm) Reading", "note": "Pandit Trilochan Shashtri · ₹99" },
+      "tarot": { "label": "Tarot Reading", "note": "Tarot Mystic Divya · ₹149" },
+      "face": { "label": "Face Reading", "note": "Acharya Devraj Bhardwaj · ₹129" },
+      "vastu": { "label": "Vastu Consultation", "note": "Vastu Shastri Ramesh Chaturvedi · ₹249" },
+      "lalKitab": { "label": "Lal Kitab Reading", "note": "Pandit Girish Trivedi · ₹179" },
+      "gemstoneMatch": { "label": "Ratna Match", "note": "Free Live recommendation" },
+      "kundliMatching": { "label": "Kundli Milan", "note": "Free compatibility reading" },
+      "panchang": { "label": "Aaj ka Panchang", "note": "Tithi, nakshatra aur muhurat" },
+      "muhurat": { "label": "Muhurat Concierge", "note": "Aapke faisle ke liye behtareen din" },
+      "numerology": { "label": "Numerology", "note": "Life Path aur Destiny numbers" },
+      "kundli": { "label": "Poori Kundli Report", "note": "Aapka poora birth chart" },
+      "festivals": { "label": "Tyohar Muhurat", "note": "Real puja timing, sirf date list nahi" },
+      "varshphal": { "label": "Varshphal Report", "note": "Agle saal ka aapka personal forecast" },
+      "groups": {
+        "knowYourDay": "Aapka aaj",
+        "understandYourChart": "Apna chart samjhein",
+        "talkToSomeone": "Kisi specialist se baat karein"
+      }
+    },
+    "horoscopeStrip": {
+      "eyebrow": "Aapka daily rashifal",
+      "headline": "Apni rashi chunein,",
+      "headlineEm": "aaj ka aasman dekhein.",
+      "body": "Aaj, kal, is hafte, ya is mahine mein se chunein — har reading current planetary transits se fresh generate hoti hai.",
+      "cta": "Aaj ka rashifal dekhein",
+      "fallback": "Aaj ki reading abhi available nahi hai. Kripya thodi der mein wapas check karein."
+    },
+    "method": {
+      "eyebrow": "Jyotish ka tareeka",
+      "headline": "Parampara mein jama,",
+      "headlineEm": "aaj ke liye banaya gaya.",
+      "body": "Hum aapka sidereal birth chart aapke exact samay aur jagah se calculate karte hain, phir ek trained Vedic guide ke haathon mein saunpte hain.",
+      "moonSign": "Chandra rashi",
+      "currentDasha": "Vartaman dasha",
+      "step1Title": "Apna aasman map karein",
+      "step1Body": "Precise planetary positions aapke natural patterns dikhati hain.",
+      "step2Title": "Apna season samjhein",
+      "step2Body": "Dashas aur transits dikhate hain ki abhi kya ho raha hai.",
+      "step3Title": "Clarity ke saath aage badhein",
+      "step3Body": "Grounded guidance aur practical next steps ke saath jaayein.",
+      "dashboardCta": "Apna cosmic dashboard dekhein"
+    },
+    "ctaGuide": {
+      "title": "Live guide chahiye?",
+      "body": "Ek available astrologer se turant chat karein — sirf istemal kiye minutes ka payment karein, koi subscription zaroori nahi.",
+      "cta": "Guide dhoondein"
+    },
+    "stories": {
+      "eyebrow": "Hamare community se",
+      "headline": "Clarity sab kuch",
+      "headlineEm": "badal deti hai.",
+      "ratingSuffix": "/5 reading"
+    },
+    "referral": {
+      "eyebrow": "Invite karein aur kamayein",
+      "headline": "Aasman share karein,",
+      "headlineEm": "wallet credit kamayein.",
+      "body": "Adi Jyotish Guru mein ek dost ko invite karein. Jab woh join karke apna wallet recharge karte hain, aapko ₹{referrerReward} aur unhe ₹{refereeReward} milte hain — seedha aapke wallets mein.",
+      "cta": "Mera referral link paayein"
+    },
+    "finalCta": {
+      "eyebrow": "Apne birth chart se shuru karein",
+      "headline": "Aasman yaad rakhta hai",
+      "headlineEm": "woh pal jab aap aaye the.",
+      "body": "Jaanein ki aapke aage ke safar ke baare mein aasman kya kehta hai.",
+      "cta": "Apni reading shuru karein"
+    }
+  }
+}

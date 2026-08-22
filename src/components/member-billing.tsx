@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { ArrowRight, Check, CircleDollarSign, CreditCard, FileText, LockKeyhole, ReceiptText, ShieldCheck, X } from "lucide-react";
 import type { FinanceInvoice } from "@/components/admin-billing";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
@@ -18,7 +18,7 @@ export function MemberBilling({invoices,onlinePaymentsAvailable,checkoutState,me
         amount:data.amount,
         currency:data.currency,
         order_id:data.orderId,
-        name:"Jyotish Studio",
+        name:"Adi Jyotish Guru",
         description,
         prefill:{name:member.name,email:member.email},
         theme:{color:"#a95838"},

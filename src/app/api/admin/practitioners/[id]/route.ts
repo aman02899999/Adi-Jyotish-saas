@@ -5,7 +5,7 @@ export const dynamic = "force-dynamic";
 
 type UpdatePayload = Partial<{
   name: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
-  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
+  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
 }>;
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {

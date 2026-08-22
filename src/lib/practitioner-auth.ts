@@ -1,7 +1,8 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { redirect } from "next/navigation";
+import { getLocale } from "next-intl/server";
+import { redirect } from "@/i18n/navigation";
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
@@ -90,7 +91,7 @@ export async function getCurrentPractitioner(): Promise<PractitionerIdentity | n
 
 export async function requirePractitionerPage() {
   const practitioner = await getCurrentPractitioner();
-  if (!practitioner) redirect("/practitioner/login");
+  if (!practitioner) redirect({ href: "/practitioner/login", locale: await getLocale() });
   return practitioner;
 }
 

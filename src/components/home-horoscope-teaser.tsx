@@ -1,7 +1,7 @@
 "use client";
 
 import { useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { ArrowRight, Loader2 } from "lucide-react";
 
 type Sign = { key: string; name: string; symbol: string };

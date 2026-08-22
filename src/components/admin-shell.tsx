@@ -1,5 +1,5 @@
 import type { ReactNode } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import {
   BarChart3,
   Bell,
@@ -16,7 +16,6 @@ import {
   Menu,
   MessageCircle,
   MessageSquareText,
-  Search,
   ScrollText,
   Settings,
   ShieldCheck,
@@ -29,6 +28,7 @@ import {
 import { BrandMark } from "@/components/brand-mark";
 import { NotificationBell } from "@/components/notification-bell";
 import { ProfileMenu } from "@/components/profile-menu";
+import { QuickNavSearch } from "@/components/quick-nav-search";
 import { getCurrentAdmin, hasAdminPermission, type AdminIdentity, type AdminPermission } from "@/lib/admin-auth";
 import { getAdminUnreadCount } from "@/lib/messaging";
 
@@ -83,6 +83,8 @@ function AdminSidebarNav({ admin, active, unreadCount, initials }: { admin: Admi
 export async function AdminShell({ active, children }: { active: ActiveSection; children: ReactNode }) {
   const [admin, unreadCount] = await Promise.all([getCurrentAdmin(), getAdminUnreadCount()]);
   const initials = admin?.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase() || "AD";
+  const searchItems = adminLinks.filter(({ permission }) => hasAdminPermission(admin, permission)).map(({ label, href }) => ({ label, href }));
+  if (hasAdminPermission(admin, "settings")) searchItems.push({ label: "Settings", href: "/admin/settings" });
 
   return (
     <main className="admin-background">
@@ -104,7 +106,7 @@ export async function AdminShell({ active, children }: { active: ActiveSection; 
                 </div>
               </details>
             </div>
-            <label><Search size={16} /><input placeholder="Search anything…" aria-label="Search admin" /><kbd>⌘ K</kbd></label>
+            <QuickNavSearch items={searchItems} placeholder="Search anything…" ariaLabel="Search admin" showShortcutHint />
             <div><Link href="/dashboard">Preview site <ExternalLink size={14} /></Link><Link className="notification-button" href="/admin/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <i />}</Link><NotificationBell apiBase="/api/admin/notifications" /><ProfileMenu initials={initials} name={admin?.name ?? "Administrator"} subtitle={admin?.email ?? admin?.role ?? "admin"} logoutAction="/api/auth/logout" redirectTo="/admin/login" /></div>
           </header>
           {children}

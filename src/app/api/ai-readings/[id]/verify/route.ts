@@ -40,7 +40,11 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   try {
     const answered = await generateReadingAnswer(paid);
     return Response.json({ ok: true, status: answered.status, answer: answered.answer });
-  } catch {
+  } catch (error) {
+    const current = await getReadingById(id, member.id);
+    if (current?.status === "failed") {
+      return Response.json({ ok: false, status: "failed", error: error instanceof Error ? error.message : "This reading could not be generated." }, { status: 502 });
+    }
     return Response.json({ ok: true, status: "paid", answer: null, message: "Your payment is confirmed. Shree Santram Shashtri is still preparing your reading — check back in a moment or refresh." });
   }
 }

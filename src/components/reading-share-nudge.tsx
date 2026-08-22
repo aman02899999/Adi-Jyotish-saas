@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useState } from "react";
-import Link from "next/link";
+import { Link } from "@/i18n/navigation";
 import { Gift } from "lucide-react";
 import { ShareButtons } from "@/components/share-buttons";
 
