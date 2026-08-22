@@ -12,15 +12,20 @@ import { buildVarshphalChart, renderVarshphalReport } from "@/lib/varshphal";
 import { getSiteUrl } from "@/lib/site-url";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
 
-export const AI_READING_PRICE = 149;
+// Every AI-persona reading (Gemini-backed: Ask Live, Palm, Tarot, Face, Vastu, Lal Kitab) is priced
+// on a fixed ₹99–₹999 ladder, ranked by input/output complexity — text-only and single-question
+// first, multi-image and multi-section readings last. Kundli/Varshphal are deliberately NOT on this
+// ladder: they're computed by the deterministic chart engine (kundli-engine.ts/varshphal.ts), not a
+// Gemini persona, so they don't share this "AI practitioner" pricing policy.
+export const AI_READING_PRICE = 99; // Ask Live — text-only, single question, fastest turnaround
 export const AI_KUNDLI_PRICE = 499;
 export const AI_VARSHPHAL_PRICE = 399;
-export const AI_PALM_READING_PRICE = 99;
-export const AI_PALM_READING_ORIGINAL_PRICE = 495;
-export const AI_TAROT_READING_PRICE = 149;
-export const AI_FACE_READING_PRICE = 129;
-export const AI_VASTU_READING_PRICE = 249;
-export const AI_LAL_KITAB_READING_PRICE = 179;
+export const AI_PALM_READING_PRICE = 349; // two mandatory photos, deepest multi-section analysis
+export const AI_PALM_READING_ORIGINAL_PRICE = 999; // discount anchor, capped at the ₹999 ceiling
+export const AI_TAROT_READING_PRICE = 149; // text-only, structured 3-card spread
+export const AI_FACE_READING_PRICE = 299; // 1-5 photos, multi-section physiognomy report
+export const AI_VASTU_READING_PRICE = 249; // text-only, longest input + 5-section remedy plan
+export const AI_LAL_KITAB_READING_PRICE = 179; // text-only, birth details + remedies
 export const AI_READING_CURRENCY = "INR";
 
 export type AiReading = {

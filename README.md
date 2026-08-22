@@ -67,46 +67,35 @@ runs a daily Firestore export to Cloud Storage.
 
 ## Deploying to production
 
-The app deploys to **Firebase App Hosting** — a Next.js-native hosting product that builds and runs
-this repo directly, no separate server or container config needed. `apphosting.yaml` is the full
-build/run configuration (instance limits, every env var, which ones are secrets); its inline comments
-are the authoritative runbook, summarized here:
+The app deploys to **Vercel**, connected directly to this GitHub repo — every push to `main` deploys
+to production (**astronomers.in**), and every pull request gets its own preview deployment. There's no
+build/run config file to maintain; environment variables are set in the Vercel dashboard (Project →
+Settings → Environment Variables) instead of committed to the repo. At minimum the app needs:
 
-1. **Firebase Console → Build → App Hosting → Create backend.** Connect this GitHub repo and pick the
-   branch to deploy (`main` for production, or a feature branch for a preview backend).
-2. **Create every secret** referenced in `apphosting.yaml` (marked `secret:`) before the first deploy —
-   the build fails otherwise:
-   ```bash
-   firebase apphosting:secrets:set SECRET_NAME
-   firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
-   ```
-   Secrets needed: `FIREBASE_SERVICE_ACCOUNT_KEY`, `GEMINI_API_KEY`, `TURNSTILE_SECRET_KEY`,
-   `CRON_SECRET`, `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`,
-   `PAYOUT_ENCRYPTION_KEY`, `RESEND_API_KEY`, `ABLY_API_KEY`.
-3. **Replace the two remaining `REPLACE_ME…` placeholder values** in `apphosting.yaml` with real ones
-   before deploying: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (Cloudflare Turnstile dashboard) and
-   `FIREBASE_STORAGE_BUCKET` (Firebase Console → Storage). `NEXT_PUBLIC_SITE_URL` is already set to
-   the production domain, **astronomers.in**.
-4. **Connect astronomers.in as a custom domain**: Firebase Console → App Hosting → your backend →
-   Custom domains → Add custom domain → enter `astronomers.in` (and `www.astronomers.in` if you want
-   both). Firebase generates a TXT record (ownership verification) and the A/CNAME records to point
-   the domain at App Hosting — add each one at your domain registrar's DNS panel exactly as shown;
-   the values are generated per-project, so there's no fixed record to copy from here. Firebase then
-   provisions the TLS certificate automatically once DNS propagates (can take up to 24-48h).
-5. **Razorpay webhook**: create it at Settings → Webhooks pointing to
-   `https://astronomers.in/api/webhooks/razorpay`, then set `RAZORPAY_WEBHOOK_SECRET` to the secret it
-   generates. `RAZORPAY_MODE` is `live` in `apphosting.yaml` — real payments process once deployed.
-6. **Resend**: verify a sending domain in the Resend dashboard (`astronomers.in`, or a subdomain like
-   `mail.astronomers.in`) and update `RESEND_FROM_EMAIL` accordingly — it currently defaults to
-   Resend's shared sandbox address, which will not deliver to arbitrary inboxes.
-7. **Optional, currently undeclared**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`,
-   `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`) and the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`) — the app
-   gracefully runs without either; add them to `apphosting.yaml` the same way once wanted.
-8. `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
-   automatically on push to `main` — no manual step needed for those.
+- **Firebase**: `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
+  `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`, `FIREBASE_SERVICE_ACCOUNT_KEY`,
+  `FIREBASE_STORAGE_BUCKET`.
+- **Gemini**: `GEMINI_API_KEY`, `GEMINI_DAILY_CALL_LIMIT`.
+- **Razorpay**: `RAZORPAY_MODE=live`, `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`,
+  `RAZORPAY_WEBHOOK_SECRET` — create the webhook at Settings → Webhooks pointing to
+  `https://astronomers.in/api/webhooks/razorpay`.
+- **Cloudflare Turnstile**: `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` — without these the
+  app fails closed (403) on registration, kundli-matching, numerology, and gemstone-recommendation.
+- **Scheduled housekeeping**: `CRON_SECRET`, matching the GitHub Actions repo secret used by
+  `.github/workflows/cron.yml`.
+- **Payouts**: `PAYOUT_ENCRYPTION_KEY` (32-byte, base64).
+- **Email**: `RESEND_API_KEY`, `RESEND_FROM_EMAIL` — verify a sending domain in the Resend dashboard
+  before going live; the default is Resend's shared sandbox address.
+- **Realtime chat**: `ABLY_API_KEY`.
+- **Site URL**: `NEXT_PUBLIC_SITE_URL=https://astronomers.in`.
+- **Optional**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`) and
+  the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`) — the app gracefully runs without either.
 
-Every one of these requires access to the live Firebase project, domain registrar, Razorpay account,
-and other third-party dashboards — steps only a project owner can complete.
+`.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
+automatically on push to `main` — no manual step needed for those.
+
+Every one of these requires access to the live Firebase project, Vercel project, domain registrar,
+Razorpay account, and other third-party dashboards — steps only a project owner can complete.
 
 ## Project structure
 

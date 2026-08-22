@@ -41,12 +41,25 @@ async function fetchStudioSettings(): Promise<StudioSettings> {
   return { ...defaults, ...data, updatedAt: data.updatedAt?.toDate() ?? new Date() };
 }
 
+/** Falls back to defaults instead of throwing — both so a transient Firestore hiccup degrades one
+ * section instead of 500ing an entire marketing page (same philosophy as withIndexFallback in
+ * firestore.ts), and so pages using this can be statically/ISR-prerendered: `next build` has no
+ * Firebase credentials (CI has none at all; this app's deploy config only grants them at runtime),
+ * so the very first call here happens with no credentials and must not crash the build. */
+async function fetchStudioSettingsSafely(): Promise<StudioSettings> {
+  try {
+    return await fetchStudioSettings();
+  } catch (error) {
+    console.error("getStudioSettings: falling back to defaults —", error);
+    return { ...defaults, updatedAt: new Date() };
+  }
+}
+
 // Same content for every visitor (not personalized), read on nearly every page via SiteFooter —
 // without this, that's a real Firestore round-trip on every single request. unstable_cache keeps
-// this a runtime-only cache (nothing here runs during `next build`, so it doesn't need build-time
-// Firebase credentials). An admin save reads back fresh (below); other visitors may see the
-// previous version for up to the revalidate window.
-export const getStudioSettings = unstable_cache(fetchStudioSettings, ["studio-settings"], {
+// this cached at runtime with a 5-minute TTL. An admin save reads back fresh (below); other
+// visitors may see the previous version for up to the revalidate window.
+export const getStudioSettings = unstable_cache(fetchStudioSettingsSafely, ["studio-settings"], {
   tags: ["studio-settings"],
   revalidate: 300,
 });

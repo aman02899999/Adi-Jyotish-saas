@@ -6,7 +6,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { GlossaryStrip } from "@/components/glossary-strip";
 
-export const dynamic = "force-dynamic";
+// No server-side data fetching at all — the form below submits to an API route client-side.
 export const metadata: Metadata = {
   title: "Kundli Matching · Free Ashtakoot Guna Milan Engine",
   description: "Check real Vedic compatibility between two people with our Ashtakoot Guna Milan engine — real planetary positions, all 8 kootas scored out of 36.",
