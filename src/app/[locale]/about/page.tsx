@@ -6,11 +6,9 @@ import { SiteFooter } from "@/components/site-footer";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { getHomepageStats } from "@/lib/homepage";
 
-// Tried ISR here (only reads admin settings, same for every visitor) but getStudioSettings()
-// reads Firestore, and FIREBASE_SERVICE_ACCOUNT_KEY is RUNTIME-only in apphosting.yaml — build-time
-// prerendering has no credentials to read it with, which breaks both CI's build (no Firebase env
-// at all) and the real deploy build. Back to force-dynamic until build-time credentials exist.
-export const dynamic = "force-dynamic";
+// Same content for every visitor (admin settings + homepage stats, no auth check) — cached
+// instead of rendered fresh on every request. An admin save is visible again within the window.
+export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "About Us",
   description: "Who runs Adi Jyotish Guru, how our practitioners are reviewed before going live, and how we protect your birth details and payments.",

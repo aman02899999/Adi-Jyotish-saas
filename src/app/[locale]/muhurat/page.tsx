@@ -6,7 +6,7 @@ import { SiteFooter } from "@/components/site-footer";
 import { GlossaryStrip } from "@/components/glossary-strip";
 import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
-export const dynamic = "force-dynamic";
+// No server-side data fetching at all — the form below submits to an API route client-side.
 export const metadata: Metadata = {
   title: "Muhurat Concierge · Find Your Best Days",
   description: "Tell us what you're planning — starting a business, signing a contract, traveling, moving house, marriage, a hard conversation — and get your best days ranked from real Panchang data.",

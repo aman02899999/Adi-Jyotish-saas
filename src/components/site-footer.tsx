@@ -2,15 +2,17 @@ import { getTranslations } from "next-intl/server";
 import { Lock, ShieldCheck, UserCheck } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { BrandMark } from "@/components/brand-mark";
-import { getFooterContent } from "@/lib/site-content";
-import { getStudioSettings } from "@/lib/studio-settings";
+import { FooterBlurb, FooterSupportEmail } from "@/components/footer-dynamic-text";
 
+// Deliberately does NOT read getFooterContent()/getStudioSettings() here (that used to call
+// Firestore on every server render of every page, via this footer). FooterBlurb/FooterSupportEmail
+// fetch those two DB-driven fields client-side instead — see /api/footer-content's route comment.
 export async function SiteFooter() {
-  const [footer, t, settings] = await Promise.all([getFooterContent(), getTranslations("Footer"), getStudioSettings()]);
+  const t = await getTranslations("Footer");
   return (
     <footer className="footer shell">
       <BrandMark />
-      <p>{footer.blurb.split("\n").map((line, index) => <span key={index}>{index > 0 && <br />}{line}</span>)}</p>
+      <FooterBlurb />
       <div className="footer__links">
         <Link href="/about">{t("about")}</Link>
         <Link href="/contact">{t("contact")}</Link>
@@ -19,7 +21,7 @@ export async function SiteFooter() {
         <Link href="/pricing">{t("pricing")}</Link>
         <Link href="/dashboard">{t("dashboard")}</Link>
       </div>
-      <small>{t("copyright", { year: new Date().getFullYear() })} · <a href={`mailto:${settings.supportEmail}`}>{settings.supportEmail}</a></small>
+      <small>{t("copyright", { year: new Date().getFullYear() })} · <FooterSupportEmail /></small>
       <div className="footer__trust">
         <span><ShieldCheck size={14} /> {t("trustSecure")}</span>
         <span><UserCheck size={14} /> {t("trustReviewed")}</span>

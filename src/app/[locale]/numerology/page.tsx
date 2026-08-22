@@ -5,7 +5,7 @@ import { NumerologyForm } from "@/components/numerology-form";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 
-export const dynamic = "force-dynamic";
+// No server-side data fetching at all — the form below submits to an API route client-side.
 export const metadata: Metadata = {
   title: "Numerology Reading · Free Life Path & Destiny Numbers",
   description: "Discover your Life Path and Destiny numbers with a free Live-guided numerology reading from our Jyotish guide, Shree Santram Shashtri.",

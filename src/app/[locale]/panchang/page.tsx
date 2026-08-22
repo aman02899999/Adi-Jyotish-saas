@@ -7,7 +7,9 @@ import { SiteFooter } from "@/components/site-footer";
 import { GlossaryStrip } from "@/components/glossary-strip";
 import { getTodayPanchang, REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
 
-export const dynamic = "force-dynamic";
+// Computed data (no Firestore, no auth), same for every visitor — revalidated hourly so the
+// "today" values roll over promptly across the date boundary.
+export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "Today's Panchang · Tithi, Nakshatra & Muhurat",
   description: "Today's live Vedic almanac — real tithi, nakshatra, yoga, karana, and the day's muhurat windows, computed from actual planetary positions.",
