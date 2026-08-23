@@ -1,12 +1,77 @@
 # Adi Jyotish Guru
 
-A premium Vedic astrology platform: a verified practitioner marketplace with instant wallet-metered
-chat, scheduled bookings, a suite of deterministic astrology tools (Kundli, matching, Panchang,
-numerology, horoscopes, Muhurat Concierge, Varshphal annual reports), AI-assisted readings (palm,
-tarot, face, Vastu, Lal Kitab, plus a roster of free-form AI persona chats at `/ai`), and a certified
-gemstone store — built on Next.js and Firebase.
+A premium Vedic astrology SaaS platform — a verified practitioner marketplace with instant
+wallet-metered chat and scheduled bookings, a full membership/subscription business, six AI-powered
+reading personas plus admin-authorable AI personas, a suite of deterministic astrology tools, a
+certified gemstone store, and a growth/automation layer, all served bilingually (English/Hindi) —
+built on Next.js and Firebase.
 
 [![CI](https://github.com/aman02899999/Adi-Jyotish-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/aman02899999/Adi-Jyotish-saas/actions/workflows/ci.yml)
+
+Live at **[astronomers.in](https://astronomers.in)**.
+
+## Features
+
+### Practitioner marketplace & consultations
+- Public astrologer directory with categories, ratings, review-based discounted pricing, and a live
+  "online now" badge.
+- Scheduled bookings with per-practitioner availability rules, plus instant wallet-metered live chat
+  (recharge a wallet, chat by the minute, real-time balance via Ably).
+- Verified reviews (clarity/empathy/usefulness dimensions), practitioner prediction accountability
+  tracking, and a practitioner self-service portal (bookings, earnings, payouts, schedule, chat,
+  profile, reviews).
+
+### Membership & payments
+- Subscription plans (admin-managed) with automatic session discounts at checkout, plus one-time
+  Razorpay checkout for bookings, AI readings, and gemstones.
+- Wallet ledger, gift cards (purchase + redemption), a family plan (multi-profile subscription), and
+  a referral program with wallet rewards.
+- Real PDF invoices with GST calculation, dunning notifications, and Razorpay test/live key
+  environments.
+
+### AI-powered readings
+Six Gemini-backed reading personas, each a fixed one-time price: **Ask Live** (free-form Q&A),
+**Palm Reading**, **Tarot Reading**, **Face Reading**, **Vastu Consultation**, and **Lal Kitab
+Reading** — plus an admin-authorable roster of custom AI personas at `/ai/[slug]`. A member's first
+Live reading is free. Answer generation is retried automatically (capped, with admin alerting on
+permanent failure) and gated by a daily Gemini call budget.
+
+### Deterministic astrology tools (no AI)
+Real computed engines, not generated text: full **Kundli** chart reports, **Kundli Matching**
+(classical Ashtakoot Guna Milan), daily **Panchang**, **Muhurat Concierge**, **Numerology**, daily
+**Horoscopes**, **Varshphal** (annual solar return) reports, a **Cosmic Profile Card** (shareable
+chart summary image), a friend compatibility match tool, and an astro journal correlating mood/events
+with real transits.
+
+### Gemstone store
+Certified gemstone storefront with categories, coupons, reviews, wishlist, cart/checkout, order
+tracking, and an AI gemstone recommender.
+
+### Growth & content
+Blog, festival micro-experiences (Navratri/Diwali/Karva Chauth muhurat), reading streaks and badges,
+milestone social-proof shareable cards, site-wide promo banners, and social share nudges across every
+reading/report screen.
+
+### Admin panel
+Full back office: services, plans, gemstones (products/categories/coupons/reviews), practitioners,
+members, bookings, schedule, reviews, live chat console, billing, wallets, payouts, messages,
+AI personas, website content editing, insights, activity/audit log, team & role-based permissions.
+
+### Automation & housekeeping
+Scheduled jobs (`.github/workflows/cron.yml`) cover: expiring stale wallet holds and abandoned
+gemstone/AI-reading carts, review requests, lapsed-member win-back, wishlist price-drop alerts,
+low-stock alerts, subscription renewal/dunning reminders, gift card expiry, payout auto-approval,
+fraud/anomaly flags (review velocity, cancellation rate, duplicate payout destinations), a monthly
+GST/accounting summary, onboarding drip emails, and a synthetic uptime check.
+
+### Security
+Firebase Auth (email/password + Google) across member/practitioner/admin, 2FA (TOTP) on all three
+portals, CSRF protection, per-route rate limiting, Cloudflare Turnstile CAPTCHA on anonymous free
+tools, encrypted practitioner payout details, and role-based admin permissions.
+
+### Internationalization
+English (default, unprefixed URLs) and Hindi (`/hi/...`, Hinglish tone) via next-intl, with a
+language switcher and locale-aware SEO (hreflang, sitemap).
 
 ## Tech stack
 
@@ -15,6 +80,7 @@ gemstone store — built on Next.js and Firebase.
 - **Payments:** Razorpay (one-time checkout, subscriptions, webhooks)
 - **Realtime:** Ably (instant chat)
 - **AI:** Google Gemini (readings, recommendations, chat)
+- **i18n:** next-intl (English/Hindi)
 - **Email:** Resend · **Error tracking:** Sentry · **CAPTCHA:** Cloudflare Turnstile
 - **Styling:** a single hand-written `globals.css` (no component CSS framework)
 - **Testing:** Vitest (unit) · Playwright (E2E, against the Firebase emulator) · Lighthouse CI (performance/accessibility budget)
@@ -39,7 +105,8 @@ what each one unlocks.
 Playwright and Lighthouse CI both drive the app against the Firestore/Auth emulator instead of a real
 Firebase project — see `playwright.config.ts` and `scripts/lighthouse-ci.sh` for the exact env vars.
 To do the same for `npm run dev`, set `NEXT_PUBLIC_USE_EMULATOR=true` and start
-`firebase emulators:start --only auth,firestore` alongside it.
+`firebase emulators:start --only auth,firestore` alongside it. `scripts/seed-firestore-roles.mjs`
+seeds demo admin/member/practitioner roles into the emulator for local QA.
 
 ## Scripts
 
@@ -59,11 +126,11 @@ To do the same for `npm run dev`, set `NEXT_PUBLIC_USE_EMULATOR=true` and start
 `.github/workflows/ci.yml` runs three jobs on every push and pull request: `build-and-test`
 (typecheck, lint, unit tests, build), `e2e` (the full Playwright suite against the emulator), and
 `lighthouse` (a non-blocking performance/accessibility/best-practices/SEO budget via Lighthouse CI —
-see `lighthouserc.js`). `.github/workflows/cron.yml` runs scheduled housekeeping (expiring stale
-wallet holds and abandoned gemstone orders) plus a synthetic uptime check against the site's key
-routes (`/`, `/pricing`, `/book`, `/astrologers`); `.github/workflows/firestore-deploy.yml` deploys
-`firestore.rules`/`firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml`
-runs a daily Firestore export to Cloud Storage.
+see `lighthouserc.js`). `.github/workflows/cron.yml` runs scheduled housekeeping (see Automation
+above) plus a synthetic uptime check against the site's key routes (`/`, `/pricing`, `/book`,
+`/astrologers`); `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/
+`firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml` runs a
+daily Firestore export to Cloud Storage.
 
 ## Deploying to production
 
@@ -100,12 +167,15 @@ Razorpay account, and other third-party dashboards — steps only a project owne
 ## Project structure
 
 ```
-src/app/          Routes (App Router) — public site, /dashboard, /practitioner, /admin
-src/components/    Shared UI
-src/lib/           Server-only data/business logic (Firestore access, payments, chat, astrology engines, …)
-docs/              Product/architecture background
-e2e/               Playwright specs
-scripts/           CI/local helper scripts
+src/app/[locale]/   Public site + /dashboard (member), /practitioner, /admin — all locale-routed
+src/app/api/        API routes (checkout, webhooks, AI readings, admin actions, cron endpoints, …)
+src/components/     Shared UI
+src/lib/            Server-only data/business logic (Firestore access, payments, chat, astrology
+                     engines, automation, …) — one module per domain, ~90 files
+src/i18n/           next-intl routing + message catalogs (en, hi)
+docs/               Product/architecture background
+e2e/                Playwright specs
+scripts/            CI/local helper scripts
 ```
 
 ## Documentation
