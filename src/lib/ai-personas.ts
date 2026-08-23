@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 
@@ -66,10 +67,22 @@ export async function getAllPersonasAdmin(): Promise<AiPersona[]> {
   return snap.docs.map(toPersona);
 }
 
-export async function getActivePersonas(): Promise<AiPersona[]> {
-  const snap = await collection.where("active", "==", true).get();
-  return snap.docs.map(toPersona).sort((a, b) => a.name.localeCompare(b.name));
-}
+// Same list for every visitor (no auth check) — cached instead of read fresh on every request.
+// Falls back to an empty list instead of crashing the page (or the credential-less `next build`
+// static-generation pass).
+export const getActivePersonas = unstable_cache(
+  async () => {
+    try {
+      const snap = await collection.where("active", "==", true).get();
+      return snap.docs.map(toPersona).sort((a, b) => a.name.localeCompare(b.name));
+    } catch (error) {
+      console.error("getActivePersonas: falling back to empty list —", error);
+      return [] as AiPersona[];
+    }
+  },
+  ["active-ai-personas"],
+  { tags: ["active-ai-personas"], revalidate: 300 },
+);
 
 export async function getPersonaBySlug(slug: string): Promise<AiPersona | null> {
   const doc = await collection.doc(slug).get();

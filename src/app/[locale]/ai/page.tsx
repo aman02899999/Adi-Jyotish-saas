@@ -6,7 +6,8 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getActivePersonas } from "@/lib/ai-personas";
 
-export const dynamic = "force-dynamic";
+// Same list for every visitor (no auth check) — cached instead of read fresh on every request.
+export const revalidate = 3600;
 export const metadata: Metadata = {
   title: "Live AI Readings",
   description: "Ask a question and get an instant, personal reading from one of our Live guides.",

@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getPractitionerDirectory } from "@/lib/scheduling";
@@ -54,7 +55,7 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   discountedRatePerMinute: number;
 };
 
-export async function getMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
+async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
   // Reviews fall back to empty (practitioners still list, just without ratings) if the
   // (status, createdAt) composite index isn't built yet.
   const [directory, reviewsSnap, accuracyMap] = await Promise.all([
@@ -82,6 +83,23 @@ export async function getMarketplacePractitioners(): Promise<MarketplacePractiti
     } satisfies MarketplacePractitioner;
   });
 }
+
+// The full directory + every published review + prediction accuracy, joined and scored — expensive
+// enough (and identical for every visitor) that reading it fresh on every request/page is wasteful.
+// Cached at runtime with a short TTL; falls back to an empty list instead of crashing the page (or
+// the build — nothing here runs at build time without Firebase credentials to read with anyway).
+export const getMarketplacePractitioners = unstable_cache(
+  async () => {
+    try {
+      return await fetchMarketplacePractitioners();
+    } catch (error) {
+      console.error("getMarketplacePractitioners: falling back to empty list —", error);
+      return [] as MarketplacePractitioner[];
+    }
+  },
+  ["marketplace-practitioners"],
+  { tags: ["marketplace-practitioners"], revalidate: 120 },
+);
 
 export async function getMarketplacePractitioner(slug: string) {
   const people = await getMarketplacePractitioners();

@@ -1,12 +1,77 @@
 # Adi Jyotish Guru
 
-A premium Vedic astrology platform: a verified practitioner marketplace with instant wallet-metered
-chat, scheduled bookings, a suite of deterministic astrology tools (Kundli, matching, Panchang,
-numerology, horoscopes, Muhurat Concierge, Varshphal annual reports), AI-assisted readings (palm,
-tarot, face, Vastu, Lal Kitab, plus a roster of free-form AI persona chats at `/ai`), and a certified
-gemstone store — built on Next.js and Firebase.
+A premium Vedic astrology SaaS platform — a verified practitioner marketplace with instant
+wallet-metered chat and scheduled bookings, a full membership/subscription business, six AI-powered
+reading personas plus admin-authorable AI personas, a suite of deterministic astrology tools, a
+certified gemstone store, and a growth/automation layer, all served bilingually (English/Hindi) —
+built on Next.js and Firebase.
 
 [![CI](https://github.com/aman02899999/Adi-Jyotish-saas/actions/workflows/ci.yml/badge.svg)](https://github.com/aman02899999/Adi-Jyotish-saas/actions/workflows/ci.yml)
+
+Live at **[astronomers.in](https://astronomers.in)**.
+
+## Features
+
+### Practitioner marketplace & consultations
+- Public astrologer directory with categories, ratings, review-based discounted pricing, and a live
+  "online now" badge.
+- Scheduled bookings with per-practitioner availability rules, plus instant wallet-metered live chat
+  (recharge a wallet, chat by the minute, real-time balance via Ably).
+- Verified reviews (clarity/empathy/usefulness dimensions), practitioner prediction accountability
+  tracking, and a practitioner self-service portal (bookings, earnings, payouts, schedule, chat,
+  profile, reviews).
+
+### Membership & payments
+- Subscription plans (admin-managed) with automatic session discounts at checkout, plus one-time
+  Razorpay checkout for bookings, AI readings, and gemstones.
+- Wallet ledger, gift cards (purchase + redemption), a family plan (multi-profile subscription), and
+  a referral program with wallet rewards.
+- Real PDF invoices with GST calculation, dunning notifications, and Razorpay test/live key
+  environments.
+
+### AI-powered readings
+Six Gemini-backed reading personas, each a fixed one-time price: **Ask Live** (free-form Q&A),
+**Palm Reading**, **Tarot Reading**, **Face Reading**, **Vastu Consultation**, and **Lal Kitab
+Reading** — plus an admin-authorable roster of custom AI personas at `/ai/[slug]`. A member's first
+Live reading is free. Answer generation is retried automatically (capped, with admin alerting on
+permanent failure) and gated by a daily Gemini call budget.
+
+### Deterministic astrology tools (no AI)
+Real computed engines, not generated text: full **Kundli** chart reports, **Kundli Matching**
+(classical Ashtakoot Guna Milan), daily **Panchang**, **Muhurat Concierge**, **Numerology**, daily
+**Horoscopes**, **Varshphal** (annual solar return) reports, a **Cosmic Profile Card** (shareable
+chart summary image), a friend compatibility match tool, and an astro journal correlating mood/events
+with real transits.
+
+### Gemstone store
+Certified gemstone storefront with categories, coupons, reviews, wishlist, cart/checkout, order
+tracking, and an AI gemstone recommender.
+
+### Growth & content
+Blog, festival micro-experiences (Navratri/Diwali/Karva Chauth muhurat), reading streaks and badges,
+milestone social-proof shareable cards, site-wide promo banners, and social share nudges across every
+reading/report screen.
+
+### Admin panel
+Full back office: services, plans, gemstones (products/categories/coupons/reviews), practitioners,
+members, bookings, schedule, reviews, live chat console, billing, wallets, payouts, messages,
+AI personas, website content editing, insights, activity/audit log, team & role-based permissions.
+
+### Automation & housekeeping
+Scheduled jobs (`.github/workflows/cron.yml`) cover: expiring stale wallet holds and abandoned
+gemstone/AI-reading carts, review requests, lapsed-member win-back, wishlist price-drop alerts,
+low-stock alerts, subscription renewal/dunning reminders, gift card expiry, payout auto-approval,
+fraud/anomaly flags (review velocity, cancellation rate, duplicate payout destinations), a monthly
+GST/accounting summary, onboarding drip emails, and a synthetic uptime check.
+
+### Security
+Firebase Auth (email/password + Google) across member/practitioner/admin, 2FA (TOTP) on all three
+portals, CSRF protection, per-route rate limiting, Cloudflare Turnstile CAPTCHA on anonymous free
+tools, encrypted practitioner payout details, and role-based admin permissions.
+
+### Internationalization
+English (default, unprefixed URLs) and Hindi (`/hi/...`, Hinglish tone) via next-intl, with a
+language switcher and locale-aware SEO (hreflang, sitemap).
 
 ## Tech stack
 
@@ -15,6 +80,7 @@ gemstone store — built on Next.js and Firebase.
 - **Payments:** Razorpay (one-time checkout, subscriptions, webhooks)
 - **Realtime:** Ably (instant chat)
 - **AI:** Google Gemini (readings, recommendations, chat)
+- **i18n:** next-intl (English/Hindi)
 - **Email:** Resend · **Error tracking:** Sentry · **CAPTCHA:** Cloudflare Turnstile
 - **Styling:** a single hand-written `globals.css` (no component CSS framework)
 - **Testing:** Vitest (unit) · Playwright (E2E, against the Firebase emulator) · Lighthouse CI (performance/accessibility budget)
@@ -39,7 +105,8 @@ what each one unlocks.
 Playwright and Lighthouse CI both drive the app against the Firestore/Auth emulator instead of a real
 Firebase project — see `playwright.config.ts` and `scripts/lighthouse-ci.sh` for the exact env vars.
 To do the same for `npm run dev`, set `NEXT_PUBLIC_USE_EMULATOR=true` and start
-`firebase emulators:start --only auth,firestore` alongside it.
+`firebase emulators:start --only auth,firestore` alongside it. `scripts/seed-firestore-roles.mjs`
+seeds demo admin/member/practitioner roles into the emulator for local QA.
 
 ## Scripts
 
@@ -59,64 +126,56 @@ To do the same for `npm run dev`, set `NEXT_PUBLIC_USE_EMULATOR=true` and start
 `.github/workflows/ci.yml` runs three jobs on every push and pull request: `build-and-test`
 (typecheck, lint, unit tests, build), `e2e` (the full Playwright suite against the emulator), and
 `lighthouse` (a non-blocking performance/accessibility/best-practices/SEO budget via Lighthouse CI —
-see `lighthouserc.js`). `.github/workflows/cron.yml` runs scheduled housekeeping (expiring stale
-wallet holds and abandoned gemstone orders) plus a synthetic uptime check against the site's key
-routes (`/`, `/pricing`, `/book`, `/astrologers`); `.github/workflows/firestore-deploy.yml` deploys
-`firestore.rules`/`firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml`
-runs a daily Firestore export to Cloud Storage.
+see `lighthouserc.js`). `.github/workflows/cron.yml` runs scheduled housekeeping (see Automation
+above) plus a synthetic uptime check against the site's key routes (`/`, `/pricing`, `/book`,
+`/astrologers`); `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/
+`firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml` runs a
+daily Firestore export to Cloud Storage.
 
 ## Deploying to production
 
-The app deploys to **Firebase App Hosting** — a Next.js-native hosting product that builds and runs
-this repo directly, no separate server or container config needed. `apphosting.yaml` is the full
-build/run configuration (instance limits, every env var, which ones are secrets); its inline comments
-are the authoritative runbook, summarized here:
+The app deploys to **Vercel**, connected directly to this GitHub repo — every push to `main` deploys
+to production (**astronomers.in**), and every pull request gets its own preview deployment. There's no
+build/run config file to maintain; environment variables are set in the Vercel dashboard (Project →
+Settings → Environment Variables) instead of committed to the repo. At minimum the app needs:
 
-1. **Firebase Console → Build → App Hosting → Create backend.** Connect this GitHub repo and pick the
-   branch to deploy (`main` for production, or a feature branch for a preview backend).
-2. **Create every secret** referenced in `apphosting.yaml` (marked `secret:`) before the first deploy —
-   the build fails otherwise:
-   ```bash
-   firebase apphosting:secrets:set SECRET_NAME
-   firebase apphosting:secrets:grantaccess SECRET_NAME --backend=<backend-id>
-   ```
-   Secrets needed: `FIREBASE_SERVICE_ACCOUNT_KEY`, `GEMINI_API_KEY`, `TURNSTILE_SECRET_KEY`,
-   `CRON_SECRET`, `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`, `RAZORPAY_WEBHOOK_SECRET`,
-   `PAYOUT_ENCRYPTION_KEY`, `RESEND_API_KEY`, `ABLY_API_KEY`.
-3. **Replace the two remaining `REPLACE_ME…` placeholder values** in `apphosting.yaml` with real ones
-   before deploying: `NEXT_PUBLIC_TURNSTILE_SITE_KEY` (Cloudflare Turnstile dashboard) and
-   `FIREBASE_STORAGE_BUCKET` (Firebase Console → Storage). `NEXT_PUBLIC_SITE_URL` is already set to
-   the production domain, **astronomers.in**.
-4. **Connect astronomers.in as a custom domain**: Firebase Console → App Hosting → your backend →
-   Custom domains → Add custom domain → enter `astronomers.in` (and `www.astronomers.in` if you want
-   both). Firebase generates a TXT record (ownership verification) and the A/CNAME records to point
-   the domain at App Hosting — add each one at your domain registrar's DNS panel exactly as shown;
-   the values are generated per-project, so there's no fixed record to copy from here. Firebase then
-   provisions the TLS certificate automatically once DNS propagates (can take up to 24-48h).
-5. **Razorpay webhook**: create it at Settings → Webhooks pointing to
-   `https://astronomers.in/api/webhooks/razorpay`, then set `RAZORPAY_WEBHOOK_SECRET` to the secret it
-   generates. `RAZORPAY_MODE` is `live` in `apphosting.yaml` — real payments process once deployed.
-6. **Resend**: verify a sending domain in the Resend dashboard (`astronomers.in`, or a subdomain like
-   `mail.astronomers.in`) and update `RESEND_FROM_EMAIL` accordingly — it currently defaults to
-   Resend's shared sandbox address, which will not deliver to arbitrary inboxes.
-7. **Optional, currently undeclared**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`,
-   `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`) and the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`) — the app
-   gracefully runs without either; add them to `apphosting.yaml` the same way once wanted.
-8. `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
-   automatically on push to `main` — no manual step needed for those.
+- **Firebase**: `NEXT_PUBLIC_FIREBASE_API_KEY`, `NEXT_PUBLIC_FIREBASE_AUTH_DOMAIN`,
+  `NEXT_PUBLIC_FIREBASE_PROJECT_ID`, `NEXT_PUBLIC_FIREBASE_APP_ID`, `FIREBASE_SERVICE_ACCOUNT_KEY`,
+  `FIREBASE_STORAGE_BUCKET`.
+- **Gemini**: `GEMINI_API_KEY`, `GEMINI_DAILY_CALL_LIMIT`.
+- **Razorpay**: `RAZORPAY_MODE=live`, `RAZORPAY_LIVE_KEY_ID`, `RAZORPAY_LIVE_KEY_SECRET`,
+  `RAZORPAY_WEBHOOK_SECRET` — create the webhook at Settings → Webhooks pointing to
+  `https://astronomers.in/api/webhooks/razorpay`.
+- **Cloudflare Turnstile**: `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` — without these the
+  app fails closed (403) on registration, kundli-matching, numerology, and gemstone-recommendation.
+- **Scheduled housekeeping**: `CRON_SECRET`, matching the GitHub Actions repo secret used by
+  `.github/workflows/cron.yml`.
+- **Payouts**: `PAYOUT_ENCRYPTION_KEY` (32-byte, base64).
+- **Email**: `RESEND_API_KEY`, `RESEND_FROM_EMAIL` — verify a sending domain in the Resend dashboard
+  before going live; the default is Resend's shared sandbox address.
+- **Realtime chat**: `ABLY_API_KEY`.
+- **Site URL**: `NEXT_PUBLIC_SITE_URL=https://astronomers.in`.
+- **Optional**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`) and
+  the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`) — the app gracefully runs without either.
 
-Every one of these requires access to the live Firebase project, domain registrar, Razorpay account,
-and other third-party dashboards — steps only a project owner can complete.
+`.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
+automatically on push to `main` — no manual step needed for those.
+
+Every one of these requires access to the live Firebase project, Vercel project, domain registrar,
+Razorpay account, and other third-party dashboards — steps only a project owner can complete.
 
 ## Project structure
 
 ```
-src/app/          Routes (App Router) — public site, /dashboard, /practitioner, /admin
-src/components/    Shared UI
-src/lib/           Server-only data/business logic (Firestore access, payments, chat, astrology engines, …)
-docs/              Product/architecture background
-e2e/               Playwright specs
-scripts/           CI/local helper scripts
+src/app/[locale]/   Public site + /dashboard (member), /practitioner, /admin — all locale-routed
+src/app/api/        API routes (checkout, webhooks, AI readings, admin actions, cron endpoints, …)
+src/components/     Shared UI
+src/lib/            Server-only data/business logic (Firestore access, payments, chat, astrology
+                     engines, automation, …) — one module per domain, ~90 files
+src/i18n/           next-intl routing + message catalogs (en, hi)
+docs/               Product/architecture background
+e2e/                Playwright specs
+scripts/            CI/local helper scripts
 ```
 
 ## Documentation

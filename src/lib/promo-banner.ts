@@ -1,5 +1,6 @@
 import "server-only";
 
+import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 
@@ -29,14 +30,31 @@ const defaults: Omit<PromoBanner, "updatedAt"> = {
 
 const ref = db.collection("promoBanner").doc("main");
 
-export async function getPromoBanner(): Promise<PromoBanner> {
+async function fetchPromoBanner(): Promise<PromoBanner> {
   const snap = await ref.get();
   if (!snap.exists) return { ...defaults, updatedAt: new Date(0) };
   const data = snap.data() as Partial<PromoBanner> & { updatedAt?: FirebaseFirestore.Timestamp };
   return { ...defaults, ...data, updatedAt: data.updatedAt?.toDate() ?? new Date(0) };
 }
 
+// Same content for every visitor, fetched client-side by PromoBanner on nearly every page — cached
+// at runtime with a short TTL instead of hitting Firestore on every single request. Falls back to
+// the disabled-banner defaults (rather than a 500) if Firestore is unreachable, matching
+// getStudioSettings' philosophy in studio-settings.ts.
+export const getPromoBanner = unstable_cache(
+  async () => {
+    try {
+      return await fetchPromoBanner();
+    } catch (error) {
+      console.error("getPromoBanner: falling back to defaults —", error);
+      return { ...defaults, updatedAt: new Date(0) };
+    }
+  },
+  ["promo-banner"],
+  { tags: ["promo-banner"], revalidate: 60 },
+);
+
 export async function updatePromoBanner(patch: Partial<Omit<PromoBanner, "updatedAt">>) {
   await ref.set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-  return getPromoBanner();
+  return fetchPromoBanner();
 }
