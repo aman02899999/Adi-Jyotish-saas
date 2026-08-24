@@ -14,7 +14,11 @@ export type StudioSettings = {
   replySlaHours: number;
   gstRate: number;
   gstin: string | null;
-  updatedAt: Date;
+  // ISO string, not a Date — same fix as promo-banner.ts's PromoBanner.updatedAt: unstable_cache
+  // persists its return value through a serialization round-trip, so a cache-hit silently hands
+  // back a plain string where a cache-miss would have handed back a real Date under the same field
+  // name. Storing the string form up front keeps the type honest regardless of cache state.
+  updatedAt: string;
 };
 
 const defaults: Omit<StudioSettings, "updatedAt"> = {
@@ -35,10 +39,10 @@ async function fetchStudioSettings(): Promise<StudioSettings> {
   const snap = await ref.get();
   if (!snap.exists) {
     await ref.set({ ...defaults, updatedAt: FieldValue.serverTimestamp() });
-    return { ...defaults, updatedAt: new Date() };
+    return { ...defaults, updatedAt: new Date().toISOString() };
   }
-  const data = snap.data() as Partial<StudioSettings> & { updatedAt?: FirebaseFirestore.Timestamp };
-  return { ...defaults, ...data, updatedAt: data.updatedAt?.toDate() ?? new Date() };
+  const data = snap.data() as Partial<Omit<StudioSettings, "updatedAt">> & { updatedAt?: FirebaseFirestore.Timestamp };
+  return { ...defaults, ...data, updatedAt: (data.updatedAt?.toDate() ?? new Date()).toISOString() };
 }
 
 /** Falls back to defaults instead of throwing — both so a transient Firestore hiccup degrades one
@@ -51,7 +55,7 @@ async function fetchStudioSettingsSafely(): Promise<StudioSettings> {
     return await fetchStudioSettings();
   } catch (error) {
     console.error("getStudioSettings: falling back to defaults —", error);
-    return { ...defaults, updatedAt: new Date() };
+    return { ...defaults, updatedAt: new Date().toISOString() };
   }
 }
 

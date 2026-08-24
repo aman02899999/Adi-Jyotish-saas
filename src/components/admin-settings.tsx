@@ -4,7 +4,7 @@ import { FormEvent,useState } from "react";
 import { Check,Clock3,Copy,Crown,Globe2,Mail,Plus,Receipt,Save,Shield,ShieldCheck,Trash2,UserCog,Users,X } from "lucide-react";
 import { AdminRoleManager, type AdminPermissionOption, type RoleRow } from "@/components/admin-role-manager";
 
-export type SettingsData={studioName:string;supportEmail:string;timezone:string;currency:string;cancellationHours:number;bookingLeadMinutes:number;replySlaHours:number;gstRate:number;gstin:string|null;updatedAt:Date|string};
+export type SettingsData={studioName:string;supportEmail:string;timezone:string;currency:string;cancellationHours:number;bookingLeadMinutes:number;replySlaHours:number;gstRate:number;gstin:string|null;updatedAt:string};
 type TeamUser={id:string;name:string;email:string;role:string;active:boolean;lastLoginAt:Date|string|null;createdAt:Date|string};
 type Invite={id:string;email:string;role:string;expiresAt:Date|string;createdAt:Date|string;invitePath?:string};
 type RoleOption={slug:string;name:string};

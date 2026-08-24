@@ -31,11 +31,15 @@ function sweepIfDue() {
 }
 
 export function requestIp(request: Request) {
-  // The rightmost entry in X-Forwarded-For is appended by our own trusted edge/proxy hop and
-  // can't be spoofed by the client; every entry to its left is client-supplied and would let an
-  // attacker rotate through fake IPs to dodge the rate limit if we trusted it instead.
+  // Vercel overwrites this header at its edge and does not forward externally-supplied
+  // X-Forwarded-For values (see https://vercel.com/docs/headers/request-headers) — a client can't
+  // spoof it here the way it could behind a proxy we don't control. The FIRST entry is the actual
+  // client IP; any entries after it are Vercel's own internal hops, which are shared across many
+  // unrelated visitors routed through the same edge node. Reading the LAST entry instead (as this
+  // used to) collapsed rate-limit/throttle buckets for everyone hitting that shared internal hop —
+  // this is the same first-entry convention Vercel's own `ipAddress()` helper uses.
   const forwarded = request.headers.get("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean);
-  return forwarded?.[forwarded.length - 1] || request.headers.get("x-real-ip") || "unknown";
+  return forwarded?.[0] || request.headers.get("x-real-ip") || "unknown";
 }
 
 export async function checkRateLimit(action: string, identifier: string, limit: number, windowSeconds: number) {
