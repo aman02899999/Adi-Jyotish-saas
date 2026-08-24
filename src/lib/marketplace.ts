@@ -73,16 +73,20 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
   return directory.map((person) => {
     const personReviews = reviews.filter((review) => review.practitionerId === person.id);
     const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => personReviews.length ? personReviews.reduce((sum, review) => sum + review[field], 0) / personReviews.length : null;
-    const rating = average("rating");
+    const rawRating = average("rating");
+    const rating = rawRating === null ? null : Math.round(rawRating * 10) / 10;
     const discountPercent = reviewDiscountPercent(personReviews.length);
     return {
       ...person,
-      rating: rating === null ? null : Math.round(rating * 10) / 10,
+      rating,
       reviewCount: personReviews.length,
       dimensions: personReviews.length ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
       predictionAccuracy: accuracyMap.get(person.id) ?? null,
       reviewDiscountPercent: discountPercent,
       discountedRatePerMinute: Math.max(1, applyDiscount(person.chatRatePerMinute, discountPercent)),
+      // Uses the same rounded rating as the card's own ★ display and as chat.ts's own price
+      // computation at checkout (which explicitly rounds before calling this) — otherwise the
+      // marketplace-displayed price could land in a different ₹10 bucket than what's charged.
       sessionPrice: person.isAiPowered
         ? computeFixedSessionPrice({ experienceYears: person.experienceYears, verificationLevel: person.verificationLevel, featured: person.featured, rating, reviewCount: personReviews.length })
         : null,
