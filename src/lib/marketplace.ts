@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
-import { reviewDiscountPercent } from "@/lib/practitioner-pricing";
+import { computeFixedSessionPrice, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
@@ -53,6 +53,9 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   predictionAccuracy: { accuracyPercent: number; resolvedCount: number } | null;
   reviewDiscountPercent: number;
   discountedRatePerMinute: number;
+  /** Flat instant-chat price for AI-powered practitioners (see isAiPowered); null for the real
+   * practitioners, who still charge per-minute via discountedRatePerMinute above. */
+  sessionPrice: number | null;
 };
 
 async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
@@ -80,6 +83,9 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
       predictionAccuracy: accuracyMap.get(person.id) ?? null,
       reviewDiscountPercent: discountPercent,
       discountedRatePerMinute: Math.max(1, applyDiscount(person.chatRatePerMinute, discountPercent)),
+      sessionPrice: person.isAiPowered
+        ? computeFixedSessionPrice({ experienceYears: person.experienceYears, verificationLevel: person.verificationLevel, featured: person.featured, rating, reviewCount: personReviews.length })
+        : null,
     } satisfies MarketplacePractitioner;
   });
 }

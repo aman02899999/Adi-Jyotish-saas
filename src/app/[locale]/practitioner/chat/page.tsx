@@ -23,7 +23,7 @@ export default async function PractitionerChatPage() {
             <div className="wallet-table__row" key={session.id}>
               <div className="finance-customer"><strong>{session.memberName}</strong></div>
               <span className={session.status === "active" ? "invoice-status invoice-status--paid" : "invoice-status"}>{session.status}</span>
-              <span className="payment-provider">{session.ratePerMinute}/min</span>
+              <span className="payment-provider">{session.pricingModel === "fixed" ? `Fixed ₹${session.fixedPrice}` : `${session.ratePerMinute}/min`}</span>
               <div className="finance-date"><strong>{new Date(session.startedAt).toLocaleString("en", { month: "short", day: "numeric", hour: "numeric", minute: "2-digit" })}</strong></div>
               <Link className="button button--small" href={`/practitioner/chat/${session.id}`}>Open <ArrowUpRight size={14} /></Link>
             </div>

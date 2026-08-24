@@ -21,7 +21,7 @@ export async function POST(request: Request) {
 
   try {
     const { session, holdMinutes, practitioner } = await startChatSession(member.id, practitionerId);
-    return Response.json({ sessionId: session.id, channel: chatChannelName(session.id), holdMinutes, ratePerMinute: session.ratePerMinute, practitionerName: practitioner.name }, { status: 201 });
+    return Response.json({ sessionId: session.id, channel: chatChannelName(session.id), holdMinutes, pricingModel: session.pricingModel, ratePerMinute: session.ratePerMinute, fixedPrice: session.fixedPrice, practitionerName: practitioner.name }, { status: 201 });
   } catch (error) {
     if (error instanceof PractitionerUnavailableError) {
       const onlineAlternatives = await getOnlinePractitionerAlternatives(practitionerId).catch(() => []);

@@ -31,17 +31,19 @@ export default async function MemberChatPage({ params }: { params: Promise<{ id:
     getOrCreateWallet(member.id),
   ]);
   const practitioner = practitionerSnap.exists ? (practitionerSnap.data() as { name: string }) : null;
-  const holdMinutes = hold ? Math.max(1, Math.round(hold.amount / session.ratePerMinute)) : 1;
+  const holdMinutes = session.pricingModel === "metered" && hold ? Math.max(1, Math.round(hold.amount / session.ratePerMinute)) : 1;
 
   return (
     <MemberAppShell member={member} active="Wallet">
-      <div className="consultation-heading billing-heading"><div><p>Instant chat</p><h1>{practitioner?.name ?? "Practitioner"}</h1><span>Metered by the minute from your wallet balance.</span></div></div>
+      <div className="consultation-heading billing-heading"><div><p>Instant chat</p><h1>{practitioner?.name ?? "Practitioner"}</h1><span>{session.pricingModel === "fixed" ? "One flat price for this session." : "Metered by the minute from your wallet balance."}</span></div></div>
       <ChatRoom
         sessionId={session.id}
         initialMessages={messages.map((message) => ({ ...message, createdAt: message.createdAt.toISOString() }))}
         initialStatus={session.status}
         startedAt={session.startedAt.toISOString()}
+        pricingModel={session.pricingModel}
         ratePerMinute={session.ratePerMinute}
+        fixedPrice={session.fixedPrice}
         currency={wallet.currency}
         holdMinutes={holdMinutes}
         counterpartName={practitioner?.name ?? "Practitioner"}

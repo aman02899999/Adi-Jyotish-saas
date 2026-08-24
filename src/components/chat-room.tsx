@@ -7,12 +7,14 @@ import { createChatRealtimeClient } from "@/lib/ably-client";
 
 export type ChatMessageRow = { id: string; sessionId: string; senderType: string; senderName: string; body: string; createdAt: string | Date };
 
-export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt, ratePerMinute, currency, holdMinutes, counterpartName, viewerRole, senderName }: {
+export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt, pricingModel, ratePerMinute, fixedPrice, currency, holdMinutes, counterpartName, viewerRole, senderName }: {
   sessionId: string;
   initialMessages: ChatMessageRow[];
   initialStatus: string;
   startedAt: string;
+  pricingModel: "metered" | "fixed";
   ratePerMinute: number;
+  fixedPrice: number | null;
   currency: string;
   holdMinutes: number;
   counterpartName: string;
@@ -101,7 +103,14 @@ export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt,
     <section className="chat-room">
       <header className="chat-room__header">
         <div><MessageCircle size={18} /><div><strong>{counterpartName}</strong><small>{status === "active" ? "Live instant chat" : "Chat ended"}</small></div></div>
-        <div className="chat-room__meter"><Clock3 size={13} /><span>{String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:{String(elapsedSeconds % 60).padStart(2, "0")}</span><b>·</b><span>{currency} {estimatedCost} of {currency} {ratePerMinute * holdMinutes} held</span></div>
+        <div className="chat-room__meter">
+          <Clock3 size={13} />
+          <span>{String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:{String(elapsedSeconds % 60).padStart(2, "0")}</span>
+          <b>·</b>
+          {pricingModel === "fixed"
+            ? <span>Fixed price {currency} {fixedPrice}</span>
+            : <span>{currency} {estimatedCost} of {currency} {ratePerMinute * holdMinutes} held</span>}
+        </div>
       </header>
       <div className="chat-room__list" ref={listRef}>
         {messages.map((message) => (

@@ -115,9 +115,9 @@
     "tools": {
       "horoscope": { "label": "Daily Rashifal", "note": "Aapki rashi ka aaj ka phal" },
       "ask": { "label": "Live Sawaal Poochein", "note": "Turant jawab, ek sawaal" },
-      "palm": { "label": "Hastrekha (Palm) Reading", "note": "Pandit Trilochan Shashtri · ₹99" },
+      "palm": { "label": "Hastrekha (Palm) Reading", "note": "Pandit Trilochan Shashtri · ₹349" },
       "tarot": { "label": "Tarot Reading", "note": "Tarot Mystic Divya · ₹149" },
-      "face": { "label": "Face Reading", "note": "Acharya Devraj Bhardwaj · ₹129" },
+      "face": { "label": "Face Reading", "note": "Acharya Devraj Bhardwaj · ₹299" },
       "vastu": { "label": "Vastu Consultation", "note": "Vastu Shastri Ramesh Chaturvedi · ₹249" },
       "lalKitab": { "label": "Lal Kitab Reading", "note": "Pandit Girish Trivedi · ₹179" },
       "gemstoneMatch": { "label": "Ratna Match", "note": "Free Live recommendation" },
