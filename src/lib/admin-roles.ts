@@ -20,10 +20,20 @@ export type AdminRoleRow = {
 
 type AdminRoleDoc = { name: string; isSystem: boolean; permissions: AdminPermission[] };
 
-function sanitizePermissions(input: string[]): AdminPermission[] {
+/** Also caps the requested set to permissions the acting admin actually holds — without this, any
+ * admin holding just the "roles" permission could create or edit a role with every permission
+ * (including ones like "team" or "roles" itself they were never granted), then use "team" to hand
+ * that omnipotent role to any account, bypassing the owner-only role-grant check in
+ * admin/team/route.ts entirely (that check only special-cases the literal slug "owner", not any
+ * functionally-equivalent custom role). An owner's resolved permission set is already every
+ * permission (see getCurrentAdmin), so this never restricts what an owner can grant. */
+function sanitizePermissions(input: string[], actingAdminPermissions: AdminPermission[]): AdminPermission[] {
   const unique = Array.from(new Set(input));
   const invalid = unique.filter((permission) => !VALID_PERMISSIONS.has(permission as AdminPermission));
   if (invalid.length) throw new RoleError(`Unknown permission: ${invalid[0]}`);
+  const heldSet = new Set(actingAdminPermissions);
+  const beyondOwn = unique.filter((permission) => !heldSet.has(permission as AdminPermission));
+  if (beyondOwn.length) throw new RoleError(`You can't grant a permission you don't have: ${beyondOwn[0]}`);
   return unique as AdminPermission[];
 }
 
@@ -48,12 +58,12 @@ export async function getAllRolesAdmin(): Promise<AdminRoleRow[]> {
     .sort((a, b) => a.name.localeCompare(b.name));
 }
 
-export async function createRole(input: { name: string; slug: string; permissions: string[] }): Promise<AdminRoleRow> {
+export async function createRole(input: { name: string; slug: string; permissions: string[] }, actingAdminPermissions: AdminPermission[]): Promise<AdminRoleRow> {
   const name = input.name.trim().slice(0, 80);
   const slug = input.slug.trim().toLowerCase().slice(0, 40);
   if (name.length < 2) throw new RoleError("Enter a role name.");
   if (!SLUG_PATTERN.test(slug)) throw new RoleError("Slug must be lowercase letters, numbers, or underscores, starting with a letter.");
-  const permissions = sanitizePermissions(input.permissions);
+  const permissions = sanitizePermissions(input.permissions, actingAdminPermissions);
 
   const ref = db.collection("adminRoles").doc(slug);
   const existing = await ref.get();
@@ -63,7 +73,7 @@ export async function createRole(input: { name: string; slug: string; permission
   return { id: slug, slug, name, isSystem: false, permissions, adminCount: 0 };
 }
 
-export async function updateRole(slug: string, input: { name?: string; permissions?: string[] }, actingAdminRole?: string): Promise<AdminRoleRow> {
+export async function updateRole(slug: string, input: { name?: string; permissions?: string[] }, actingAdminRole: string | undefined, actingAdminPermissions: AdminPermission[]): Promise<AdminRoleRow> {
   const ref = db.collection("adminRoles").doc(slug);
   const snap = await ref.get();
   if (!snap.exists) throw new RoleError("Role not found.");
@@ -85,7 +95,10 @@ export async function updateRole(slug: string, input: { name?: string; permissio
     patch.name = name;
   }
   if (input.permissions !== undefined) {
-    patch.permissions = sanitizePermissions(input.permissions);
+    // Same "can't grant what you don't have" cap as createRole — otherwise an admin holding only
+    // "roles" could edit some *other* non-owner role to add every permission, then hand it out via
+    // "team" to escalate past their own access.
+    patch.permissions = sanitizePermissions(input.permissions, actingAdminPermissions);
   }
 
   await ref.update(patch);

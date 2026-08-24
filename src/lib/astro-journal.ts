@@ -36,8 +36,14 @@ export type JournalEntry = {
 
 type JournalEntryDoc = Omit<JournalEntry, "updatedAt"> & { updatedAt: Timestamp };
 
+// Journal entries are calendar days for an India-based audience, not UTC days (same fix as
+// streaks.ts) — without the IST offset, a member journaling between midnight and 5:30am IST gets
+// "today" resolved as the previous UTC date, and since the doc id is memberId_entryDate (a plain
+// upsert), that silently overwrites yesterday's entry instead of creating today's.
+const IST_OFFSET_MS = 5.5 * 60 * 60 * 1000;
+
 function todayIso() {
-  return new Date().toISOString().slice(0, 10);
+  return new Date(Date.now() + IST_OFFSET_MS).toISOString().slice(0, 10);
 }
 
 function relativeHouse(fromRashiIndex: number, toRashiIndex: number) {

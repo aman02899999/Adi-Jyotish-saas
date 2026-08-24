@@ -96,9 +96,13 @@ export async function createCoupon(payload: CouponPayload) {
   const existing = await ref.get();
   if (existing.exists) throw new CouponError("A coupon with this code already exists.");
 
+  const startsAt = payload.startsAt ? new Date(payload.startsAt) : null;
+  const expiresAt = payload.expiresAt ? new Date(payload.expiresAt) : null;
+  if (startsAt && expiresAt && startsAt >= expiresAt) throw new CouponError("Start date must be before the expiry date.");
+
   await ref.set({
     code,
-    description: payload.description?.trim() ?? "",
+    description: (payload.description ?? "").trim().slice(0, 300),
     discountType,
     discountValue,
     minOrderAmount: Math.max(0, Number(payload.minOrderAmount) || 0),
@@ -106,8 +110,8 @@ export async function createCoupon(payload: CouponPayload) {
     usageLimit: payload.usageLimit != null ? Math.max(0, Number(payload.usageLimit)) : null,
     usageCount: 0,
     perCustomerLimit: payload.perCustomerLimit != null ? Math.max(0, Number(payload.perCustomerLimit)) : null,
-    startsAt: payload.startsAt ? new Date(payload.startsAt) : null,
-    expiresAt: payload.expiresAt ? new Date(payload.expiresAt) : null,
+    startsAt,
+    expiresAt,
     active: payload.active ?? true,
     createdAt: FieldValue.serverTimestamp(),
     updatedAt: FieldValue.serverTimestamp(),
@@ -127,17 +131,20 @@ export async function updateCoupon(id: string, payload: CouponPayload) {
   if (discountType === "percent" && discountValue > 100) throw new CouponError("Percentage discounts cannot exceed 100.");
 
   const nextCode = payload.code ? normalizeCode(payload.code) : existing.code;
+  const startsAt = payload.startsAt !== undefined ? (payload.startsAt ? new Date(payload.startsAt) : null) : existing.startsAt;
+  const expiresAt = payload.expiresAt !== undefined ? (payload.expiresAt ? new Date(payload.expiresAt) : null) : existing.expiresAt;
+  if (startsAt && expiresAt && startsAt >= expiresAt) throw new CouponError("Start date must be before the expiry date.");
   const fields = {
     code: nextCode,
-    description: payload.description ?? existing.description,
+    description: payload.description !== undefined ? payload.description.trim().slice(0, 300) : existing.description,
     discountType,
     discountValue,
     minOrderAmount: payload.minOrderAmount != null ? Math.max(0, Number(payload.minOrderAmount) || 0) : existing.minOrderAmount,
     maxDiscountAmount: payload.maxDiscountAmount !== undefined ? (payload.maxDiscountAmount != null ? Math.max(0, Number(payload.maxDiscountAmount)) : null) : existing.maxDiscountAmount,
     usageLimit: payload.usageLimit !== undefined ? (payload.usageLimit != null ? Math.max(0, Number(payload.usageLimit)) : null) : existing.usageLimit,
     perCustomerLimit: payload.perCustomerLimit !== undefined ? (payload.perCustomerLimit != null ? Math.max(0, Number(payload.perCustomerLimit)) : null) : existing.perCustomerLimit,
-    startsAt: payload.startsAt !== undefined ? (payload.startsAt ? new Date(payload.startsAt) : null) : existing.startsAt,
-    expiresAt: payload.expiresAt !== undefined ? (payload.expiresAt ? new Date(payload.expiresAt) : null) : existing.expiresAt,
+    startsAt,
+    expiresAt,
     active: payload.active ?? existing.active,
   };
 

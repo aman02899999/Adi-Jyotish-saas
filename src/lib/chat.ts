@@ -185,72 +185,69 @@ export async function startChatSession(memberId: string, practitionerId: string)
     throw error;
   }
 
-  const reviewsAgg = await db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published")
-    .aggregate({ count: AggregateField.count(), avgRating: AggregateField.average("rating") }).get();
-  const reviewCount = reviewsAgg.data().count;
-  const discountPercent = await getMemberDiscountPercent(memberId);
-
-  // AI-powered practitioners (see isAiPowered in scheduling.ts) charge one flat price per session
-  // instead of metering by the minute — an instant Gemini reply doesn't consume the practitioner's
-  // time the way a real person's does, so there's nothing for per-minute billing to protect. The
-  // real practitioners (Jagmohan Shashtri Ji, Arun Dubey Ji) keep the original per-minute model.
-  const pricingModel: "metered" | "fixed" = practitioner.isAiPowered ? "fixed" : "metered";
-
+  // Everything from here on either holds the chatActiveLocks doc or (once createWalletHold below
+  // succeeds) real wallet balance — a single try/catch around the whole span guarantees both get
+  // released on any failure, instead of only the specific steps that previously bothered to. A
+  // partial failure here used to leave the member's session-start silently 500 with the lock (and,
+  // worse, an already-reserved hold) stuck — permanently blocking new chats until the 30-minute
+  // stale-session sweep eventually caught it, capturing the AI-powered flat price for a session the
+  // member never actually got to open.
+  let hold: Awaited<ReturnType<typeof createWalletHold>> | null = null;
   let ratePerMinute = 0;
   let fixedPrice: number | null = null;
-  let holdAmount: number;
-  let holdMinutes: number;
-
-  if (pricingModel === "fixed") {
-    const avgRating = reviewsAgg.data().avgRating;
-    const basePrice = computeFixedSessionPrice({
-      experienceYears: practitioner.experienceYears,
-      verificationLevel: practitioner.verificationLevel,
-      featured: practitioner.featured,
-      rating: avgRating === null ? null : Math.round(avgRating * 10) / 10,
-      reviewCount,
-    });
-    fixedPrice = Math.max(1, applyDiscount(basePrice, discountPercent));
-    if (wallet.balance < fixedPrice) {
-      await lockRef.delete().catch(() => {});
-      throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${fixedPrice} to your wallet to start this chat.`);
-    }
-    holdAmount = fixedPrice;
-    // Not a per-minute allowance — just reuses the same safety-net window expireStaleChatSessions
-    // already force-ends any active session past (see its comment above), so a fixed-price chat
-    // still can't run forever even though its price no longer depends on how long it runs.
-    holdMinutes = MAX_HOLD_MINUTES;
-  } else {
-    // Mirrors the discounted price shown on the practitioner's marketplace card (see
-    // getMarketplacePractitioners in marketplace.ts) — new/unreviewed practitioners are discounted
-    // to encourage first bookings, and that discount stacks with the member's own plan discount.
-    const reviewDiscount = reviewDiscountPercent(reviewCount);
-    const baseRate = applyDiscount(practitioner.chatRatePerMinute, reviewDiscount);
-    const rate = Math.max(1, applyDiscount(baseRate, discountPercent));
-    const affordableMinutes = Math.floor(wallet.balance / rate);
-    if (affordableMinutes < MIN_HOLD_MINUTES) {
-      await lockRef.delete().catch(() => {});
-      throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${rate} to your wallet to start this chat.`);
-    }
-    ratePerMinute = rate;
-    holdMinutes = Math.min(MAX_HOLD_MINUTES, affordableMinutes);
-    holdAmount = rate * holdMinutes;
-  }
-
-  let hold;
+  let pricingModel: "metered" | "fixed" = "metered";
+  let holdMinutes = 0;
   try {
+    const reviewsAgg = await db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published")
+      .aggregate({ count: AggregateField.count(), avgRating: AggregateField.average("rating") }).get();
+    const reviewCount = reviewsAgg.data().count;
+    const discountPercent = await getMemberDiscountPercent(memberId);
+
+    // AI-powered practitioners (see isAiPowered in scheduling.ts) charge one flat price per session
+    // instead of metering by the minute — an instant Gemini reply doesn't consume the practitioner's
+    // time the way a real person's does, so there's nothing for per-minute billing to protect. The
+    // real practitioners (Jagmohan Shashtri Ji, Arun Dubey Ji) keep the original per-minute model.
+    pricingModel = practitioner.isAiPowered ? "fixed" : "metered";
+
+    let holdAmount: number;
+    if (pricingModel === "fixed") {
+      const avgRating = reviewsAgg.data().avgRating;
+      const basePrice = computeFixedSessionPrice({
+        experienceYears: practitioner.experienceYears,
+        verificationLevel: practitioner.verificationLevel,
+        featured: practitioner.featured,
+        rating: avgRating === null ? null : Math.round(avgRating * 10) / 10,
+        reviewCount,
+      });
+      fixedPrice = Math.max(1, applyDiscount(basePrice, discountPercent));
+      if (wallet.balance < fixedPrice) {
+        throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${fixedPrice} to your wallet to start this chat.`);
+      }
+      holdAmount = fixedPrice;
+      // Not a per-minute allowance — just reuses the same safety-net window expireStaleChatSessions
+      // already force-ends any active session past (see its comment above), so a fixed-price chat
+      // still can't run forever even though its price no longer depends on how long it runs.
+      holdMinutes = MAX_HOLD_MINUTES;
+    } else {
+      // Mirrors the discounted price shown on the practitioner's marketplace card (see
+      // getMarketplacePractitioners in marketplace.ts) — new/unreviewed practitioners are discounted
+      // to encourage first bookings, and that discount stacks with the member's own plan discount.
+      const reviewDiscount = reviewDiscountPercent(reviewCount);
+      const baseRate = applyDiscount(practitioner.chatRatePerMinute, reviewDiscount);
+      const rate = Math.max(1, applyDiscount(baseRate, discountPercent));
+      const affordableMinutes = Math.floor(wallet.balance / rate);
+      if (affordableMinutes < MIN_HOLD_MINUTES) {
+        throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${rate} to your wallet to start this chat.`);
+      }
+      ratePerMinute = rate;
+      holdMinutes = Math.min(MAX_HOLD_MINUTES, affordableMinutes);
+      holdAmount = rate * holdMinutes;
+    }
+
     hold = await createWalletHold({ memberId, amount: holdAmount, referenceType: "chat_session" });
-  } catch (error) {
-    await lockRef.delete().catch(() => {});
-    if (error instanceof WalletInsufficientBalanceError) {
-      throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${pricingModel === "fixed" ? fixedPrice : ratePerMinute} to your wallet to start this chat.`);
-    }
-    throw error;
-  }
 
-  const now = FieldValue.serverTimestamp();
-  const sessionRef = sessionsCollection.doc();
-  try {
+    const now = FieldValue.serverTimestamp();
+    const sessionRef = sessionsCollection.doc();
     await sessionRef.set({
       memberId,
       practitionerId,
@@ -265,26 +262,30 @@ export async function startChatSession(memberId: string, practitionerId: string)
       createdAt: now,
       updatedAt: now,
     });
+
+    const startMessage = pricingModel === "fixed"
+      ? `Chat started with ${practitioner.name}. Flat price ${wallet.currency} ${fixedPrice} for this session, however long it runs.`
+      : `Chat started with ${practitioner.name}. Up to ${holdMinutes} minutes available at ${wallet.currency} ${ratePerMinute}/min.`;
+    await messagesCollection(sessionRef.id).add({
+      senderType: "system",
+      senderName: "Adi Jyotish Guru",
+      body: startMessage,
+      createdAt: now,
+    });
+
+    const sessionSnap = await sessionRef.get();
+    return { session: toSession(sessionSnap), holdMinutes, practitioner };
   } catch (error) {
-    // The hold already reserved real wallet balance — release it back rather than leaving funds
-    // stuck against a session that was never created.
-    await releaseWalletHold({ memberId, holdId: hold.id, referenceType: "chat_session" }).catch(() => {});
+    // The hold (if one was ever created) already reserved real wallet balance — release it back
+    // rather than leaving funds stuck against a session that was never actually handed to the
+    // member.
+    if (hold) await releaseWalletHold({ memberId, holdId: hold.id, referenceType: "chat_session" }).catch(() => {});
     await lockRef.delete().catch(() => {});
+    if (error instanceof WalletInsufficientBalanceError) {
+      throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${pricingModel === "fixed" ? fixedPrice : ratePerMinute} to your wallet to start this chat.`);
+    }
     throw error;
   }
-
-  const startMessage = pricingModel === "fixed"
-    ? `Chat started with ${practitioner.name}. Flat price ${wallet.currency} ${fixedPrice} for this session, however long it runs.`
-    : `Chat started with ${practitioner.name}. Up to ${holdMinutes} minutes available at ${wallet.currency} ${ratePerMinute}/min.`;
-  await messagesCollection(sessionRef.id).add({
-    senderType: "system",
-    senderName: "Adi Jyotish Guru",
-    body: startMessage,
-    createdAt: now,
-  });
-
-  const sessionSnap = await sessionRef.get();
-  return { session: toSession(sessionSnap), holdMinutes, practitioner };
 }
 
 export async function getSessionOr404(sessionId: string): Promise<ChatSession> {
@@ -363,6 +364,13 @@ async function maybeSendAiChatReply(session: ChatSession) {
     return;
   }
 
+  // The Gemini round-trip above can take long enough for the member (or the stale-session sweep)
+  // to end the chat in the meantime — re-check before posting, or a bot reply (and Ably publish)
+  // can land after the session's own "ended" system message, into a channel the client already
+  // tore down.
+  const freshStatus = await sessionsCollection.doc(session.id).get();
+  if ((freshStatus.data() as { status?: string } | undefined)?.status !== "active") return;
+
   const ref = await messagesCollection(session.id).add({ senderType: "practitioner", senderName: practitioner.name, body: reply.slice(0, 2000), createdAt: FieldValue.serverTimestamp() });
   const snap = await ref.get();
   await publishChatEvent(session.id, "message", toMessage(session.id, snap));
@@ -382,8 +390,15 @@ export async function endChatSession(sessionId: string, endedBy: "member" | "pra
   await captureWalletHold({ memberId: session.memberId, holdId: session.walletHoldId, capturedAmount, referenceType: "chat_session" });
 
   await sessionsCollection.doc(sessionId).update({ status: "ended", endedAt: FieldValue.serverTimestamp(), capturedAmount, updatedAt: FieldValue.serverTimestamp() });
-  await messagesCollection(sessionId).add({ senderType: "system", senderName: "Adi Jyotish Guru", body: "Chat ended. Thank you for connecting with Adi Jyotish Guru.", createdAt: FieldValue.serverTimestamp() });
-  await publishChatEvent(sessionId, "session-ended", { endedBy });
+
+  // Funds are already settled and the session is already marked ended at this point — none of these
+  // three cleanup steps should be able to leave the member's chatActiveLocks doc stuck (e.g. an Ably
+  // outage previously left the lock stuck against a session that had actually ended correctly, since
+  // an unguarded throw here skipped the lock-delete below entirely), so each is independently
+  // best-effort instead of one unguarded chain.
+  await messagesCollection(sessionId).add({ senderType: "system", senderName: "Adi Jyotish Guru", body: "Chat ended. Thank you for connecting with Adi Jyotish Guru.", createdAt: FieldValue.serverTimestamp() })
+    .catch((error) => console.error(`Failed to post chat-ended system message for session ${sessionId}`, error));
+  await publishChatEvent(sessionId, "session-ended", { endedBy }).catch((error) => console.error(`Failed to publish session-ended event for session ${sessionId}`, error));
   await db.collection("chatActiveLocks").doc(session.memberId).delete().catch(() => {});
 
   const updatedSnap = await sessionsCollection.doc(sessionId).get();

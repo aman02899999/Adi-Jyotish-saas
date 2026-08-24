@@ -33,7 +33,9 @@ export default async function AdminSettingsPage() {
     getStudioSettings(),
     canManageTeam ? db.collection("adminUsers").orderBy("name", "asc").get() : Promise.resolve(null),
     canManageTeam ? listPendingAdminInvites() : Promise.resolve([]),
-    getAssignableRoleSlugs(),
+    // Only used by the team-invite role picker below — gated the same way as the roster/invites
+    // above so an admin without "team" doesn't receive every role's name/slug in the page payload.
+    canManageTeam ? getAssignableRoleSlugs() : Promise.resolve([]),
     canManageRoles ? getAllRolesAdmin() : Promise.resolve([]),
     getPromoBanner(),
     db.collection("adminUsers").doc(admin!.id).get(),
