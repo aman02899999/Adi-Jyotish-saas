@@ -35,6 +35,7 @@ export type Practitioner = {
   photoUrl: string | null;
   videoUrl: string | null;
   online: boolean;
+  isAiPowered: boolean;
   chatRatePerMinute: number;
   active: boolean;
   featured: boolean;
@@ -49,7 +50,7 @@ export type Practitioner = {
 export type AvailabilityRule = { id: string; practitionerId: string; weekday: number; startTime: string; endTime: string; active: boolean };
 export type PractitionerTimeOff = { id: string; practitionerId: string; startsAt: Date; endsAt: Date; reason: string | null };
 
-const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "hasPortalAccess" | "lastLoginAt" | "createdAt" | "updatedAt" | "online" | "isDemoAccount">> = [
+const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "hasPortalAccess" | "lastLoginAt" | "createdAt" | "updatedAt" | "online" | "isDemoAccount" | "isAiPowered">> = [
   {
     name: "Shree Jagmohan Shashtri Ji",
     slug: "jagmohan-shashtri-ji",
@@ -682,16 +683,25 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
   },
 ];
 
+// Only the two senior-panel founders (44/38 years' real experience, the studio's original hires)
+// are actual humans who log into the practitioner portal and toggle their own online status. Every
+// other seeded profile is Gemini-backed (see getChatPersonaSystemPrompt/maybeSendAiChatReply in
+// chat.ts) — they have no person to log in and flip online, so seeding forces them online instead
+// of leaving them stuck at the false default forever.
+const REAL_PRACTITIONER_SLUGS = new Set(["jagmohan-shashtri-ji", "arun-dubey-ji"]);
+
 export async function seedPractitioners() {
   const collection = db.collection("practitioners");
   for (const starter of starterPractitioners) {
+    const isAiPowered = !REAL_PRACTITIONER_SLUGS.has(starter.slug);
     const ref = collection.doc(starter.slug);
     const snap = await ref.get();
     if (!snap.exists) {
       await ref.set({
         ...starter,
         firebaseUid: null,
-        online: false,
+        isAiPowered,
+        online: isAiPowered,
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
@@ -701,7 +711,9 @@ export async function seedPractitioners() {
       // directory fetch would silently revert a real uploaded photo back to the seed default.
       // Backfilling it only when the existing doc has none lets a newly-added seed photo reach
       // practitioners that were already seeded (e.g. in production) without ever touching one
-      // that's already set.
+      // that's already set. online is similarly left alone for real practitioners (their own
+      // toggle), but force-corrected back to true for AI ones on every pass — there's no human on
+      // the other end to accidentally flip it off, so if it's ever false that's drift, not intent.
       const existingPhotoUrl = (snap.data() as { photoUrl?: string | null }).photoUrl ?? null;
       await ref.update({
         title: starter.title,
@@ -714,7 +726,9 @@ export async function seedPractitioners() {
         verificationLevel: starter.verificationLevel,
         chatRatePerMinute: starter.chatRatePerMinute,
         featured: starter.featured,
+        isAiPowered,
         ...(existingPhotoUrl ? {} : { photoUrl: starter.photoUrl }),
+        ...(isAiPowered ? { online: true } : {}),
       });
     }
 
@@ -753,6 +767,7 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
     photoUrl: (data.photoUrl as string | null) ?? null,
     videoUrl: (data.videoUrl as string | null) ?? null,
     online: (data.online as boolean) ?? false,
+    isAiPowered: Boolean(data.isAiPowered),
     chatRatePerMinute: data.chatRatePerMinute as number,
     active: data.active as boolean,
     featured: data.featured as boolean,
@@ -872,6 +887,7 @@ export async function createPractitionerAdmin(input: {
     photoUrl: input.photoUrl?.trim() || null,
     videoUrl: input.videoUrl?.trim() || null,
     online: false,
+    isAiPowered: false,
     chatRatePerMinute: Math.max(0, Number(input.chatRatePerMinute) || 0),
     active: input.active,
     featured: input.featured,

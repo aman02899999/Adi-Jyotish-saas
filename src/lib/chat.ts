@@ -6,6 +6,7 @@ import { publishChatEvent } from "@/lib/ably";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 import { reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
+import { getPractitionerChatReply, isGeminiConfigured } from "@/lib/gemini";
 
 const MAX_HOLD_MINUTES = 30;
 const MIN_HOLD_MINUTES = 1;
@@ -248,7 +249,55 @@ export async function sendMessage({ sessionId, senderType, senderName, body }: {
   const snap = await ref.get();
   const message = toMessage(sessionId, snap);
   await publishChatEvent(sessionId, "message", message);
+
+  // Only a member's message can trigger a reply — this is a direct Firestore+Ably write (matching
+  // the system messages above), not a recursive sendMessage() call, so an AI reply can never itself
+  // trigger another AI reply.
+  if (senderType === "member") {
+    await maybeSendAiChatReply(session).catch((error) => console.error(`AI chat reply failed for session ${sessionId}`, error));
+  }
+
   return message;
+}
+
+/** Builds the persona this practitioner's Gemini replies stay in character as, reusing their own
+ * marketplace profile fields (name/title/bio/specialties) instead of a hand-written prompt per
+ * practitioner — there are 30+ AI-powered profiles (see REAL_PRACTITIONER_SLUGS in scheduling.ts),
+ * too many to maintain individually the way the 6 named reading personas in gemini.ts are. */
+function buildPractitionerSystemPrompt(practitioner: { name: string; title: string; bio: string; specialties: string }) {
+  return `Aap ${practitioner.name} hain — ${practitioner.title}, ek premium Jyotish studio ke liye kaam karte hain. Aapki specialties: ${practitioner.specialties}. Aapke baare mein: ${practitioner.bio}
+
+Aap is samay ek client ke saath instant live chat mein hain (paid Vedic astrology consultation, per-minute billed). Aapka jawaab HINGLISH mein hona chahiye (Hindi-English mila hua, Roman script mein, jaise log WhatsApp par likhte hain) — garmjoshi aur ek asli anubhavi jyotishi ki tarah baat karein. Chhote, natural chat messages mein jawaab dein (1-4 vaakya har baar) — poora likhit report ya lambा essay kabhi na dein, yeh ek live baatcheet hai. Client ke sawaal ka seedha jawaab dein; agar unhone abhi tak apni janm tithi, samay, ya sthan nahi bataya aur woh zaroori ho to unse poochh lein.
+
+Kabhi bhi medical, legal, ya financial guarantee na dein, aur kabhi yeh dawa na karein ki yeh vigyanik roop se saabit hai — yeh ek paramparik Jyotish vidya hai, ise usi imaandaari se present karein. Hamesha client ke message ka ek grounded, sahayak jawaab dein — kabhi khaali ya "main nahi jaanta" jaisa jawaab na dein.`;
+}
+
+const AI_CHAT_REPLY_HISTORY_LIMIT = 12;
+
+async function maybeSendAiChatReply(session: ChatSession) {
+  const practitionerSnap = await db.collection("practitioners").doc(session.practitionerId).get();
+  if (!practitionerSnap.exists) return;
+  const practitioner = practitionerSnap.data() as { name: string; title: string; bio: string; specialties: string; isAiPowered?: boolean };
+  if (!practitioner.isAiPowered || !isGeminiConfigured()) return;
+
+  const memberSnap = await db.collection("members").doc(session.memberId).get();
+  const memberName = (memberSnap.data() as { name?: string } | undefined)?.name ?? "Client";
+
+  const history = await listSessionMessages(session.id);
+  const turns = history.filter((m) => m.senderType === "member" || m.senderType === "practitioner").slice(-AI_CHAT_REPLY_HISTORY_LIMIT);
+  const transcript = turns.map((m) => `${m.senderType === "member" ? memberName : practitioner.name}: ${m.body}`).join("\n");
+
+  let reply: string;
+  try {
+    reply = await getPractitionerChatReply({ systemPrompt: buildPractitionerSystemPrompt(practitioner), transcript });
+  } catch (error) {
+    console.error(`Gemini chat reply generation failed for session ${session.id}`, error);
+    return;
+  }
+
+  const ref = await messagesCollection(session.id).add({ senderType: "practitioner", senderName: practitioner.name, body: reply.slice(0, 2000), createdAt: FieldValue.serverTimestamp() });
+  const snap = await ref.get();
+  await publishChatEvent(session.id, "message", toMessage(session.id, snap));
 }
 
 export async function endChatSession(sessionId: string, endedBy: "member" | "practitioner" | "system") {

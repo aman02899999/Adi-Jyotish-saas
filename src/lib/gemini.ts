@@ -243,3 +243,14 @@ export async function getPersonaReadingAnswer({ systemPrompt, name, question }: 
   const userPrompt = `Seeker: ${name}\n\nQuestion: ${question}`;
   return callGemini({ systemPrompt, parts: [{ text: userPrompt }], temperature: 0.8, maxOutputTokens: 1200 });
 }
+
+/** Backs the AI-powered marketplace practitioners' instant chat (see maybeSendAiChatReply in
+ * chat.ts) — a live back-and-forth, unlike the one-shot readings above, so this takes the recent
+ * message history as plain text rather than a single question, and asks for shorter, chat-length
+ * replies instead of a structured report. */
+export async function getPractitionerChatReply({ systemPrompt, transcript }: {
+  systemPrompt: string;
+  transcript: string;
+}) {
+  return callGemini({ systemPrompt, parts: [{ text: transcript }], temperature: 0.85, maxOutputTokens: 500 });
+}
