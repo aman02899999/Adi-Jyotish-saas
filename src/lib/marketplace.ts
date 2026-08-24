@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
-import { computeFixedSessionPrice, reviewDiscountPercent } from "@/lib/practitioner-pricing";
+import { computeFixedSessionPrice, computeSessionPriceAnchor, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
@@ -56,6 +56,10 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   /** Flat instant-chat price for AI-powered practitioners (see isAiPowered); null for the real
    * practitioners, who still charge per-minute via discountedRatePerMinute above. */
   sessionPrice: number | null;
+  /** Display-only "worth ₹X" anchor and the 50-80% discount off it that sessionPrice represents
+   * (see computeSessionPriceAnchor) — null wherever sessionPrice is null. Doesn't affect billing. */
+  sessionOriginalPrice: number | null;
+  sessionDiscountPercent: number | null;
 };
 
 async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
@@ -76,6 +80,13 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
     const rawRating = average("rating");
     const rating = rawRating === null ? null : Math.round(rawRating * 10) / 10;
     const discountPercent = reviewDiscountPercent(personReviews.length);
+    // Uses the same rounded rating as the card's own ★ display and as chat.ts's own price
+    // computation at checkout (which explicitly rounds before calling this) — otherwise the
+    // marketplace-displayed price could land in a different ₹10 bucket than what's charged.
+    const sessionPrice = person.isAiPowered
+      ? computeFixedSessionPrice({ experienceYears: person.experienceYears, verificationLevel: person.verificationLevel, featured: person.featured, rating, reviewCount: personReviews.length })
+      : null;
+    const sessionAnchor = sessionPrice !== null ? computeSessionPriceAnchor(sessionPrice, person.slug) : null;
     return {
       ...person,
       rating,
@@ -84,12 +95,9 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
       predictionAccuracy: accuracyMap.get(person.id) ?? null,
       reviewDiscountPercent: discountPercent,
       discountedRatePerMinute: Math.max(1, applyDiscount(person.chatRatePerMinute, discountPercent)),
-      // Uses the same rounded rating as the card's own ★ display and as chat.ts's own price
-      // computation at checkout (which explicitly rounds before calling this) — otherwise the
-      // marketplace-displayed price could land in a different ₹10 bucket than what's charged.
-      sessionPrice: person.isAiPowered
-        ? computeFixedSessionPrice({ experienceYears: person.experienceYears, verificationLevel: person.verificationLevel, featured: person.featured, rating, reviewCount: personReviews.length })
-        : null,
+      sessionPrice,
+      sessionOriginalPrice: sessionAnchor?.originalPrice ?? null,
+      sessionDiscountPercent: sessionAnchor?.discountPercent ?? null,
     } satisfies MarketplacePractitioner;
   });
 }
