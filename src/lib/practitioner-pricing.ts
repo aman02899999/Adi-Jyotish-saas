@@ -37,3 +37,23 @@ export function computeFixedSessionPrice({ experienceYears, verificationLevel, f
   }
   return Math.min(999, Math.max(149, Math.round(price / 10) * 10));
 }
+
+/** Presents the flat session price as a discount off a higher "worth" anchor — same marketing
+ * convention the site already uses for the AI reading ladder (AI_PALM_READING_ORIGINAL_PRICE in
+ * ai-readings.ts: ₹999 struck through, ₹349 charged). Doesn't change what's actually billed
+ * (chat.ts still charges exactly `price`); this only computes what to show crossed out next to it,
+ * so every AI practitioner's profile/card reads as an obvious bargain instead of a bare number.
+ * The discount is deterministic per practitioner (seeded by slug, not randomized per render) so it
+ * stays the same on every page load and deploy, but still varies practitioner-to-practitioner
+ * within the requested 50-80% band rather than showing an identical "70% OFF" on every single card.
+ * discountPercent is recomputed from the final rounded originalPrice rather than reused as-is, so
+ * the displayed percentage always exactly matches the two displayed rupee figures — the rounding
+ * step can shift it by a point or two from the seed target, and a mismatch there is exactly the
+ * class of bug already fixed once in this codebase (see marketplace.ts's rating-rounding fix). */
+export function computeSessionPriceAnchor(price: number, slug: string): { originalPrice: number; discountPercent: number } {
+  const hash = Array.from(slug).reduce((sum, ch) => sum + ch.charCodeAt(0), 0);
+  const targetDiscount = 50 + (hash % 31); // 50-80 inclusive
+  const originalPrice = Math.max(price + 10, Math.round(price / (1 - targetDiscount / 100) / 10) * 10);
+  const discountPercent = Math.round((1 - price / originalPrice) * 100);
+  return { originalPrice, discountPercent };
+}
