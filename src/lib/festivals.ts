@@ -56,7 +56,9 @@ export function getFestivalBySlug(slug: string): Festival | undefined {
 /** The next festival that hasn't happened yet this cycle, falling back to the last one in the
  * table if the whole season has already passed (so the page never shows nothing). */
 export function getFeaturedFestival(): Festival {
-  const today = new Date().toISOString().slice(0, 10);
+  // IST, not UTC (same fix as streaks.ts/astro-journal.ts) — otherwise the cutoff to the next
+  // festival is up to a day stale during the early-morning IST window.
+  const today = new Date(Date.now() + 5.5 * 60 * 60 * 1000).toISOString().slice(0, 10);
   const upcoming = FESTIVALS.filter((festival) => festival.date >= today).sort((a, b) => a.date.localeCompare(b.date));
   return upcoming[0] ?? FESTIVALS[FESTIVALS.length - 1];
 }

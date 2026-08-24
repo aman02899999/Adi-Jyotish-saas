@@ -361,16 +361,33 @@ export async function markOrderPaid({ orderId, razorpayPaymentId }: { orderId: s
     const snap = await tx.get(ref);
     if (!snap.exists) throw new OrderNotFoundError("Order not found.");
     const existing = fromOrderDoc(snap);
-    if (existing.paymentStatus === "paid") return { order: existing, justPaid: false };
-    if (existing.paymentStatus !== "pending") return { order: existing, justPaid: false };
+    if (existing.paymentStatus === "paid") return { order: existing, justPaid: false, revivedCancelled: false };
+    if (existing.paymentStatus !== "pending") return { order: existing, justPaid: false, revivedCancelled: false };
+
+    // The stale-pending-order sweep (expireStalePendingOrders) cancels orders past PENDING_ORDER_TTL_MS
+    // and releases their stock/coupon reservation back to inventory — but deliberately leaves
+    // paymentStatus at "pending" (see updateOrderStatus's cancel path), since a slow Razorpay checkout
+    // can still complete after that. If it does land here, the stock this order originally reserved may
+    // already be sold to someone else — flipping status straight to "processing" would fulfil against
+    // inventory no longer actually held for this order. Record the payment (so it's never lost or
+    // double-charged on a webhook retry) but leave status as "cancelled" and flag it for a human to
+    // reconcile (refund, or manually re-confirm if stock still happens to be available) instead of
+    // silently reviving it.
+    if (existing.status === "cancelled") {
+      tx.update(ref, { paymentStatus: "paid", razorpayPaymentId, updatedAt: FieldValue.serverTimestamp() });
+      return { order: { ...existing, paymentStatus: "paid", razorpayPaymentId }, justPaid: true, revivedCancelled: true };
+    }
 
     // Coupon usageCount is reserved when the order is created (see createPendingOrder), not here —
     // incrementing it again on payment would double-count every order that used a coupon.
     tx.update(ref, { paymentStatus: "paid", status: "processing", razorpayPaymentId, updatedAt: FieldValue.serverTimestamp() });
-    return { order: { ...existing, paymentStatus: "paid", status: "processing", razorpayPaymentId }, justPaid: true };
+    return { order: { ...existing, paymentStatus: "paid", status: "processing", razorpayPaymentId }, justPaid: true, revivedCancelled: false };
   });
 
-  if (result.justPaid) await notifyOrderPaid(result.order).catch(() => {});
+  if (result.justPaid) {
+    if (result.revivedCancelled) await notifyOrderPaidAfterCancellation(result.order).catch(() => {});
+    else await notifyOrderPaid(result.order).catch(() => {});
+  }
   const finalSnap = await ref.get();
   return fromOrderDoc(finalSnap);
 }
@@ -393,6 +410,20 @@ async function notifyOrderPaid(order: GemstoneOrder) {
       link: `/gemstones/order/${order.orderNumber}`,
     });
   }
+}
+
+/** A payment that lands after the stale-order sweep already cancelled and released this order's
+ * stock — needs a human to check whether the reserved units are still available before fulfilling,
+ * or refund the customer if not. Deliberately doesn't send the member the normal "confirmed"
+ * notification, since the order isn't actually confirmed yet. */
+async function notifyOrderPaidAfterCancellation(order: GemstoneOrder) {
+  const adminIds = await getAdminIdsWithPermission("gemstones");
+  await notifyAdmins(adminIds, {
+    type: "gemstone_order.paid_after_cancellation",
+    title: `Payment landed for cancelled order ${order.orderNumber} — needs review`,
+    body: `${order.currency} ${order.total} · ${order.guestName || "Member order"} · stock was already released, confirm availability or refund.`,
+    link: `/admin/gemstones/orders`,
+  });
 }
 
 export async function getOrderItems(orderId: string): Promise<GemstoneOrderItem[]> {

@@ -17,7 +17,7 @@ export async function POST(request: Request) {
 
   const body = (await request.json()) as { name?: string; slug?: string; permissions?: string[] };
   try {
-    const created = await createRole({ name: body.name ?? "", slug: body.slug ?? "", permissions: body.permissions ?? [] });
+    const created = await createRole({ name: body.name ?? "", slug: body.slug ?? "", permissions: body.permissions ?? [] }, admin.permissions);
     await recordAudit(admin, "admin_role.created", "admin_role", created.id, { name: created.name, permissions: created.permissions });
     return Response.json(created, { status: 201 });
   } catch (error) {

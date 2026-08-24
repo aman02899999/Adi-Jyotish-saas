@@ -26,7 +26,11 @@ export async function POST(request: Request) {
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const body = (await request.json()) as CheckoutPayload;
-  const lines = (body.lines ?? []).filter((line) => line.productId && line.variantId && line.quantity > 0);
+  // Per-line quantity is capped in priceCart, but the number of distinct lines wasn't — an
+  // unbounded lines array would still fan out one Firestore read per line inside a per-member
+  // 5/10min-throttled request, a cheap resource-exhaustion amplifier. No real cart needs more than
+  // this many distinct product/variant combinations.
+  const lines = (body.lines ?? []).slice(0, 50).filter((line) => line.productId && line.variantId && line.quantity > 0);
   if (!lines.length) return Response.json({ error: "Your cart is empty." }, { status: 400 });
   if (!body.shipping?.name || !body.shipping?.phone || !body.shipping?.line1 || !body.shipping?.city || !body.shipping?.state || !body.shipping?.pincode) {
     return Response.json({ error: "Please complete your shipping address." }, { status: 400 });

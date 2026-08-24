@@ -2,10 +2,14 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { findPractitionerInviteByToken } from "@/lib/practitioner-invites";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  const throttle = await checkRateLimit("practitioner-invite-accept", requestIp(request), 10, 3600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const body = (await request.json()) as { token?: string; password?: string };
   const token = body.token ?? "";
   const password = body.password ?? "";
@@ -26,6 +30,12 @@ export async function POST(request: Request) {
     const existingUser = await getAuth().getUserByEmail(practitioner.email);
     uid = existingUser.uid;
     await getAuth().updateUser(uid, { password });
+    // The account we just took over may have been self-registered by someone else before the real
+    // practitioner accepted this invite (Firebase's email/password sign-up never verifies email
+    // ownership) — any refresh/ID token that impostor already holds must be invalidated now, or
+    // they'd keep minting valid sessions for this now-practitioner-linked account indefinitely,
+    // password reset notwithstanding.
+    await getAuth().revokeRefreshTokens(uid);
   } catch {
     const created = await getAuth().createUser({ email: practitioner.email, password, displayName: practitioner.name });
     uid = created.uid;

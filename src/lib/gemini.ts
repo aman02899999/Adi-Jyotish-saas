@@ -43,6 +43,20 @@ async function claimGeminiBudget() {
   if (!withinBudget) throw new GeminiBudgetError("Live readings have reached today's usage limit. Please try again tomorrow, or contact support.");
 }
 
+/** Refunds a budget claim after the call it was reserved for turned out not to actually consume a
+ * successful Gemini response (network failure, non-2xx, empty text) — otherwise a run of transient
+ * failures burns through DAILY_CALL_LIMIT without producing a single reading, then legitimately-paid
+ * members get budget-exhausted errors for the rest of the UTC day. */
+async function releaseGeminiBudget() {
+  const today = new Date().toISOString().slice(0, 10);
+  const ref = db.collection("geminiUsage").doc(today);
+  await db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const count = snap.exists ? (snap.data() as { count?: number }).count ?? 0 : 0;
+    tx.set(ref, { count: Math.max(0, count - 1), updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+  });
+}
+
 async function callGemini({ systemPrompt, parts, temperature, maxOutputTokens }: {
   systemPrompt: string;
   parts: GeminiPart[];
@@ -53,25 +67,30 @@ async function callGemini({ systemPrompt, parts, temperature, maxOutputTokens }:
   if (!apiKey) throw new Error("Live readings are not configured.");
   await claimGeminiBudget();
 
-  const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
-    method: "POST",
-    headers: { "Content-Type": "application/json" },
-    body: JSON.stringify({
-      systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
-      contents: [{ role: "user", parts }],
-      generationConfig: { temperature, maxOutputTokens },
-    }),
-  });
+  try {
+    const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
+        contents: [{ role: "user", parts }],
+        generationConfig: { temperature, maxOutputTokens },
+      }),
+    });
 
-  if (!response.ok) {
-    const detail = await response.text().catch(() => "");
-    throw new Error(`Gemini request failed (${response.status}): ${detail.slice(0, 300)}`);
+    if (!response.ok) {
+      const detail = await response.text().catch(() => "");
+      throw new Error(`Gemini request failed (${response.status}): ${detail.slice(0, 300)}`);
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? "").join("").trim();
+    if (!text) throw new Error("Gemini returned an empty reading.");
+    return text;
+  } catch (error) {
+    await releaseGeminiBudget().catch((refundError) => console.error("Failed to refund Gemini budget claim after a failed call", refundError));
+    throw error;
   }
-
-  const data = await response.json();
-  const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? "").join("").trim();
-  if (!text) throw new Error("Gemini returned an empty reading.");
-  return text;
 }
 
 const SYSTEM_PROMPT = `You are Shree Santram Shashtri, a warm and deeply knowledgeable Vedic astrologer (Jyotishi) writing for a premium astrology studio. You give thoughtful, grounded readings rooted in classical Jyotish principles (rashi, nakshatra, dasha, planetary influence) but explained in plain, compassionate language. You are precise about timing and cycles, honest about uncertainty, and you never give medical, legal, or financial guarantees. Address the person by name, reference the birth details they provided as the basis of your reading, answer their specific question, and close with one practical, grounded suggestion. Keep the reading to 3-5 short paragraphs. Sign off as "— Shree Santram Shashtri".`;

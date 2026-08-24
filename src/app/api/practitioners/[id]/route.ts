@@ -36,6 +36,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
   const ref = db.collection("practitioners").doc(id);
   const snap = await ref.get();
   if(!snap.exists)return Response.json({error:"Practitioner not found."},{status:404});
+  const isAiPowered = Boolean((snap.data() as { isAiPowered?: boolean }).isAiPowered);
 
   const emailOwner = await db.collection("practitioners").where("email","==",email).limit(1).get();
   if(!emailOwner.empty && emailOwner.docs[0].id !== id) return Response.json({error:"This email is already in use."},{status:409});
@@ -52,7 +53,11 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
     verified:body.verified??false,
     verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
     photoUrl,
-    online:body.online??false,
+    // AI-powered practitioners have no human on the other end to toggle online status — scheduling.ts's
+    // seedPractitioners() force-corrects them back to true on every directory read regardless of what's
+    // submitted here, so accepting body.online for them would silently discard the admin's own change
+    // (and even undo it before this very request returns, since getPractitionerDirectory below re-seeds).
+    online:isAiPowered?true:(body.online??false),
     chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||15),
     active:body.active??true,
     featured:body.featured??false,
