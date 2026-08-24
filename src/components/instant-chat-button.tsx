@@ -4,7 +4,7 @@ import { useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { MessageCircle } from "lucide-react";
 
-type OnlineAlternative = { id: string; name: string; slug: string; title: string; chatRatePerMinute: number };
+type OnlineAlternative = { id: string; name: string; slug: string; title: string; chatRatePerMinute: number; sessionPrice: number | null };
 
 export function InstantChatButton({ practitionerId, online, memberSignedIn }: { practitionerId: string; online: boolean; memberSignedIn: boolean }) {
   const [loading, setLoading] = useState(false);
@@ -41,7 +41,7 @@ export function InstantChatButton({ practitionerId, online, memberSignedIn }: { 
           <ul>
             {alternatives.map((alt) => (
               <li key={alt.id}>
-                <Link href={`/astrologers/${alt.slug}`}>{alt.name}<small>{alt.title} · ₹{alt.chatRatePerMinute}/min</small></Link>
+                <Link href={`/astrologers/${alt.slug}`}>{alt.name}<small>{alt.title} · {alt.sessionPrice != null ? `₹${alt.sessionPrice}/session` : `₹${alt.chatRatePerMinute}/min`}</small></Link>
               </li>
             ))}
           </ul>

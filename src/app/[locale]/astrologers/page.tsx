@@ -99,6 +99,7 @@ export default async function AstrologersPage({ searchParams }: { searchParams: 
     chatRatePerMinute: person.chatRatePerMinute,
     discountedRatePerMinute: person.discountedRatePerMinute,
     reviewDiscountPercent: person.reviewDiscountPercent,
+    sessionPrice: person.sessionPrice,
     availableDays: new Set(person.rules.filter((rule) => rule.active).map((rule) => rule.weekday)).size,
   }));
   const copy = copyFor(q);

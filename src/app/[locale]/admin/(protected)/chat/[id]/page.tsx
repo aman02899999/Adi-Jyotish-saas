@@ -24,7 +24,7 @@ export default async function AdminChatSessionPage({ params }: { params: Promise
     getActiveHold(session.memberId, session.walletHoldId),
     getOrCreateWallet(session.memberId),
   ]);
-  const holdMinutes = hold ? Math.max(1, Math.round(hold.amount / session.ratePerMinute)) : 1;
+  const holdMinutes = session.pricingModel === "metered" && hold ? Math.max(1, Math.round(hold.amount / session.ratePerMinute)) : 1;
 
   return (
     <AdminShell active="Chat">
@@ -35,7 +35,9 @@ export default async function AdminChatSessionPage({ params }: { params: Promise
           initialMessages={messages.map((message) => ({ ...message, createdAt: message.createdAt.toISOString() }))}
           initialStatus={session.status}
           startedAt={session.startedAt.toISOString()}
+          pricingModel={session.pricingModel}
           ratePerMinute={session.ratePerMinute}
+          fixedPrice={session.fixedPrice}
           currency={wallet.currency}
           holdMinutes={holdMinutes}
           counterpartName={session.memberName}
