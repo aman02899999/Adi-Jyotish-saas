@@ -40,5 +40,5 @@ export async function POST(request: Request) {
   });
   await recordAudit(admin, "promo_banner.updated", "promoBanner", "main", { enabled: banner.enabled });
 
-  return Response.json({ ...banner, updatedAt: banner.updatedAt.toISOString() });
+  return Response.json(banner);
 }

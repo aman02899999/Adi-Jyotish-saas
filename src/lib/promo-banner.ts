@@ -16,7 +16,13 @@ export type PromoBanner = {
   // exactly when to turn itself back off.
   source: "manual" | "auto";
   festivalKey: string | null;
-  updatedAt: Date;
+  // ISO string, not a Date — unstable_cache persists its return value through a serialization
+  // round-trip, so a cache-hit silently hands back a plain string where a cache-miss would have
+  // handed back a real Date with the same field name. Storing the string form up front (instead of
+  // converting at each of the two API routes that used to call .toISOString() on this) makes the
+  // type honest regardless of cache state — that mismatch is exactly what caused a live production
+  // TypeError ("e.updatedAt.toISOString is not a function") on cache hits.
+  updatedAt: string;
 };
 
 const defaults: Omit<PromoBanner, "updatedAt"> = {
@@ -32,9 +38,9 @@ const ref = db.collection("promoBanner").doc("main");
 
 async function fetchPromoBanner(): Promise<PromoBanner> {
   const snap = await ref.get();
-  if (!snap.exists) return { ...defaults, updatedAt: new Date(0) };
-  const data = snap.data() as Partial<PromoBanner> & { updatedAt?: FirebaseFirestore.Timestamp };
-  return { ...defaults, ...data, updatedAt: data.updatedAt?.toDate() ?? new Date(0) };
+  if (!snap.exists) return { ...defaults, updatedAt: new Date(0).toISOString() };
+  const data = snap.data() as Partial<Omit<PromoBanner, "updatedAt">> & { updatedAt?: FirebaseFirestore.Timestamp };
+  return { ...defaults, ...data, updatedAt: (data.updatedAt?.toDate() ?? new Date(0)).toISOString() };
 }
 
 // Same content for every visitor, fetched client-side by PromoBanner on nearly every page — cached
@@ -47,7 +53,7 @@ export const getPromoBanner = unstable_cache(
       return await fetchPromoBanner();
     } catch (error) {
       console.error("getPromoBanner: falling back to defaults —", error);
-      return { ...defaults, updatedAt: new Date(0) };
+      return { ...defaults, updatedAt: new Date(0).toISOString() };
     }
   },
   ["promo-banner"],

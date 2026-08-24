@@ -13,10 +13,11 @@ type ThrottleEntry = { failures: number; windowStartedAt: number; blockedUntil: 
 const entries = new Map<string, ThrottleEntry>();
 
 function throttleKey(scope: string, identifier: string, request: Request) {
-  // See the matching comment in rate-limit.ts: the rightmost X-Forwarded-For entry is the one our
-  // trusted edge appended, not something the client can spoof.
+  // See the matching comment in rate-limit.ts: on Vercel the FIRST X-Forwarded-For entry is the
+  // real client IP; reading the last entry instead grabbed a shared internal Vercel hop IP,
+  // merging unrelated visitors' failed-login counters into one bucket.
   const forwarded = request.headers.get("x-forwarded-for")?.split(",").map((part) => part.trim()).filter(Boolean);
-  const address = forwarded?.[forwarded.length - 1] || request.headers.get("x-real-ip") || "unknown";
+  const address = forwarded?.[0] || request.headers.get("x-real-ip") || "unknown";
   return createHash("sha256").update(`${scope}:${identifier.trim().toLowerCase()}:${address}`).digest("hex");
 }
 
