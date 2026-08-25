@@ -1,30 +1,23 @@
 import { test, expect } from "@playwright/test";
 
-test.use({ storageState: "e2e/.auth/member.json" });
-
 /**
- * Cart lives in localStorage (see gemstone-cart-context / site-nav's readCartCount), so this
- * exercises the real client-side add-to-cart path rather than seeding cart state directly.
- * Stops short of clicking "Pay & place order" — that opens the real Razorpay widget, which this
- * suite has no live payment credentials to complete (RAZORPAY_TEST_KEY_ID/SECRET are not set in
- * the emulator env), so the assertion boundary is "the order summary and total are correct",
- * not "a payment succeeded".
+ * The gemstone storefront (shop/product/cart/checkout/compare) is intentionally offline while the
+ * catalogue is finalized — see the comment atop src/app/[locale]/gemstones/page.tsx. Every route
+ * under it redirects back to the coming-soon index, except /gemstones/recommend, the free AI
+ * gemstone recommender, which stays live as a lead-gen tool independent of checkout being open.
+ * This replaces the previous add-to-cart-through-checkout suite; swap it back once the store
+ * reopens (see PR history for the last version that exercised the real cart/checkout flow).
  */
-test("adding a gemstone to cart carries the right line item and total to checkout", async ({ page }) => {
-  await page.goto("/gemstones/shop");
-  const firstCard = page.locator(".product-card").first();
-  await expect(firstCard).toBeVisible({ timeout: 15_000 });
-  const productName = await firstCard.locator("h3").innerText();
+test("shop, product, cart, checkout, and compare all redirect to the coming-soon page", async ({ page }) => {
+  for (const path of ["/gemstones/shop", "/gemstones/some-product", "/gemstones/cart", "/gemstones/checkout", "/gemstones/compare"]) {
+    await page.goto(path);
+    await expect(page).toHaveURL(/\/gemstones$/);
+    await expect(page.getByRole("heading", { name: /coming soon/i })).toBeVisible();
+  }
+});
 
-  await firstCard.locator(".product-card__cart").click();
-  await expect(firstCard.locator(".product-card__cart")).toHaveText(/added/i);
-
-  await page.goto("/gemstones/cart");
-  await expect(page.getByText(productName, { exact: false })).toBeVisible();
-
-  await page.getByRole("link", { name: /proceed to checkout/i }).click();
-  await expect(page).toHaveURL(/\/gemstones\/checkout/);
-  await expect(page.getByRole("heading", { name: "Order summary" })).toBeVisible();
-  await expect(page.locator(".cart-summary__row--total")).toContainText("₹");
-  await expect(page.getByRole("button", { name: /pay & place order/i })).toBeVisible();
+test("the free gemstone recommender stays open while the store is coming soon", async ({ page }) => {
+  await page.goto("/gemstones");
+  await page.getByRole("link", { name: /get a (free|live) recommendation/i }).first().click();
+  await expect(page).toHaveURL(/\/gemstones\/recommend/);
 });

@@ -1,17 +1,10 @@
 import type { Metadata } from "next";
-import { GemstoneCartView } from "@/components/gemstone-cart-view";
-import { SiteHeader } from "@/components/site-header";
-import { SiteFooter } from "@/components/site-footer";
+import { getLocale } from "next-intl/server";
+import { redirect } from "@/i18n/navigation";
 
-export const dynamic = "force-dynamic";
-export const metadata: Metadata = { title: "Your Cart · Buy Gemstones" };
+export const metadata: Metadata = { title: "Buy Gemstones · Coming Soon" };
 
-export default function GemstoneCartPage() {
-  return (
-    <main className="marketing-page gem-store">
-      <SiteHeader />
-      <GemstoneCartView />
-    <SiteFooter />
-    </main>
-  );
+// The storefront is offline for now — see the comment atop /gemstones/page.tsx.
+export default async function GemstoneCartPage() {
+  redirect({ href: "/gemstones", locale: await getLocale() });
 }

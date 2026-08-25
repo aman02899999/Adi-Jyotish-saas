@@ -1,36 +1,23 @@
 import type { Metadata } from "next";
 import Image from "next/image";
 import { Link } from "@/i18n/navigation";
-import { ArrowRight, Award, BadgeCheck, PackageCheck, ShieldCheck, Sparkles, Truck } from "lucide-react";
-import { GemstoneProductCard } from "@/components/gemstone-product-card";
+import { Award, BadgeCheck, Gem, PackageCheck, ShieldCheck, Sparkles, Truck } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
-import { getWishlistProductIds } from "@/lib/gemstone-wishlist";
-import { getActiveCategories, getProductCatalog } from "@/lib/gemstones";
-import { getCurrentMember } from "@/lib/member-auth";
 
-export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Buy Gemstones · Genuine Vedic Gemstones",
-  description: "Discover premium natural gemstones carefully selected for spiritual and astrological guidance. Shop securely with verified quality and transparent information.",
-  openGraph: { title: "Buy Gemstones · Genuine Vedic Gemstones", description: "Shop authentic, certified Vedic gemstones online.", url: "/gemstones" },
+  title: "Buy Gemstones · Coming Soon",
+  description: "Our certified Vedic gemstone store is on its way. Get a free personalised gemstone recommendation now while you wait.",
+  openGraph: { title: "Buy Gemstones · Coming Soon", description: "Certified Vedic gemstones, arriving soon.", url: "/gemstones" },
 };
 
-const marqueeItems = [
-  "Certified Genuine Gemstones", "Lab Verified Quality", "Secure Razorpay Payments", "Fast Delivery Across India",
-  "Carefully Curated Collection", "Premium Packaging", "Trusted by Thousands of Customers", "Easy Order Tracking",
-];
-
-export default async function GemstonesLandingPage() {
-  const [categories, featured, trending, bestsellers, member] = await Promise.all([
-    getActiveCategories(),
-    getProductCatalog({ featured: true, pageSize: 8 }),
-    getProductCatalog({ trending: true, pageSize: 8 }),
-    getProductCatalog({ bestseller: true, pageSize: 8 }),
-    getCurrentMember(),
-  ]);
-  const wishlistIds = member ? await getWishlistProductIds(member.id) : [];
-
+/** The storefront (shop, product pages, cart, checkout, compare, order confirmation) is
+ * intentionally offline while the catalogue is finalized — every route under /gemstones/*
+ * redirects back here (see each page.tsx) except /gemstones/recommend, the free AI gemstone
+ * recommender, which stays live since it's a lead-gen tool independent of checkout being open.
+ * Admin product/category/order management (src/app/[locale]/admin/(protected)/gemstones/*) is
+ * untouched so the catalogue can keep being prepared behind the scenes. */
+export default function GemstonesComingSoonPage() {
   return (
     <main className="marketing-page gem-store">
       <SiteHeader />
@@ -38,11 +25,11 @@ export default async function GemstonesLandingPage() {
       <section className="gem-hero shell">
         <div className="gem-hero__copy reveal">
           <p className="eyebrow"><span /> Buy Gemstones</p>
-          <h1>Genuine<br /><em>Vedic Gemstones.</em></h1>
-          <p className="gem-hero__lead">Discover premium natural gemstones carefully selected for spiritual and astrological guidance. Shop securely with verified quality and transparent information.</p>
+          <h1>Genuine Vedic<br /><em>Gemstones — Coming Soon.</em></h1>
+          <p className="gem-hero__lead">We&apos;re finishing certification and curation on our gemstone collection. In the meantime, get a free personalised recommendation so you know exactly which stone to look for the moment we open.</p>
           <div className="hero-actions">
-            <Link href="/gemstones/shop" className="button">Explore Gemstones <ArrowRight size={17} /></Link>
-            <Link href="#learn" className="button button--ghost">Learn About Gemstones</Link>
+            <Link href="/gemstones/recommend" className="button">Get a Free Recommendation <Sparkles size={17} /></Link>
+            <Link href="/astrologers" className="button button--ghost">Talk to an Astrologer Instead</Link>
           </div>
         </div>
         <div className="gem-hero__art reveal reveal--delay">
@@ -51,56 +38,17 @@ export default async function GemstonesLandingPage() {
         </div>
       </section>
 
-      <div className="gem-marquee" aria-hidden="true">
-        <div className="gem-marquee__track">
-          {[...marqueeItems, ...marqueeItems].map((item, index) => <span key={index}><Sparkles size={13} /> {item}</span>)}
-        </div>
-      </div>
-
-      <section className="gem-categories shell" id="categories">
-        <div className="section-heading reveal">
-          <div><p className="eyebrow"><span /> Shop by stone</p><h2 style={{ fontSize: "clamp(32px,3.4vw,46px)" }}>Every gem,<br /><em>one destination.</em></h2></div>
-        </div>
-        <div className="gem-category-grid">
-          {categories.map((category) => (
-            <Link href={`/gemstones/shop?category=${category.slug}`} className="gem-category-tile reveal" key={category.id}>
-              <div className="gem-category-tile__art">{category.imageUrl && <Image src={category.imageUrl} alt={category.name} fill sizes="180px" />}</div>
-              <strong>{category.name}</strong>
-              <small>{category.productCount} piece{category.productCount === 1 ? "" : "s"}</small>
-            </Link>
-          ))}
-        </div>
-      </section>
-
-      {featured.items.length > 0 && (
-        <section className="gem-rail shell">
-          <div className="gem-rail__head reveal"><div><p className="eyebrow"><span /> Handpicked</p><h2>Featured gemstones</h2></div><Link href="/gemstones/shop?featured=1" className="text-arrow">View all <ArrowRight size={16} /></Link></div>
-          <div className="product-grid">{featured.items.map((product) => <GemstoneProductCard key={product.id} product={product} wishlisted={wishlistIds.includes(product.id)} />)}</div>
-        </section>
-      )}
-
-      {trending.items.length > 0 && (
-        <section className="gem-rail shell">
-          <div className="gem-rail__head reveal"><div><p className="eyebrow"><span /> Right now</p><h2>Trending gemstones</h2></div><Link href="/gemstones/shop?trending=1" className="text-arrow">View all <ArrowRight size={16} /></Link></div>
-          <div className="product-grid">{trending.items.map((product) => <GemstoneProductCard key={product.id} product={product} wishlisted={wishlistIds.includes(product.id)} />)}</div>
-        </section>
-      )}
-
-      {bestsellers.items.length > 0 && (
-        <section className="gem-rail shell">
-          <div className="gem-rail__head reveal"><div><p className="eyebrow"><span /> Loved by seekers</p><h2>Bestselling gemstones</h2></div><Link href="/gemstones/shop?bestseller=1" className="text-arrow">View all <ArrowRight size={16} /></Link></div>
-          <div className="product-grid">{bestsellers.items.map((product) => <GemstoneProductCard key={product.id} product={product} wishlisted={wishlistIds.includes(product.id)} />)}</div>
-        </section>
-      )}
-
       <section className="gem-trust shell" id="learn">
+        <div className="section-heading reveal">
+          <div><p className="eyebrow"><span /> What to expect</p><h2 style={{ fontSize: "clamp(28px,3vw,40px)" }}>Built for trust,<br /><em>from day one.</em></h2></div>
+        </div>
         <div className="gem-trust__grid">
-          <article><span><BadgeCheck size={22} /></span><div><strong>Certified Authentic</strong><p>Every gemstone is lab-verified with transparent origin and treatment details.</p></div></article>
-          <article><span><ShieldCheck size={22} /></span><div><strong>Secure Payments</strong><p>Checkout is protected end-to-end through Razorpay.</p></div></article>
+          <article><span><BadgeCheck size={22} /></span><div><strong>Certified Authentic</strong><p>Every gemstone will be lab-verified with transparent origin and treatment details.</p></div></article>
+          <article><span><ShieldCheck size={22} /></span><div><strong>Secure Payments</strong><p>Checkout will be protected end-to-end through Razorpay.</p></div></article>
           <article><span><Truck size={22} /></span><div><strong>Fast Delivery</strong><p>Carefully packaged and dispatched across India.</p></div></article>
           <article><span><Award size={22} /></span><div><strong>Curated Quality</strong><p>Each piece is reviewed by our studio before it&apos;s listed.</p></div></article>
           <article><span><PackageCheck size={22} /></span><div><strong>Easy Tracking</strong><p>Follow your order from processing to delivery in your dashboard.</p></div></article>
-          <article><span><Sparkles size={22} /></span><div><strong>Astrologically Guided</strong><p>Every listing notes recommended zodiac signs and planetary influence.</p></div></article>
+          <article><span><Gem size={22} /></span><div><strong>Astrologically Guided</strong><p>Every listing will note recommended zodiac signs and planetary influence.</p></div></article>
         </div>
       </section>
 
@@ -108,7 +56,7 @@ export default async function GemstonesLandingPage() {
         <div className="cta-zodiac" aria-hidden="true">✦</div>
         <p className="eyebrow"><span /> Find your stone</p>
         <h2>Wear what<br /><em>the sky recommends.</em></h2>
-        <p>Share your birth date and let our Live guide point you to your stone from the full collection.</p>
+        <p>Share your birth date and let our AI guide point you to your stone — free, and ready before the store is.</p>
         <Link href="/gemstones/recommend" className="button button--light">Get a Live recommendation <Sparkles size={16} /></Link>
       </section>
     <SiteFooter />

@@ -3,7 +3,7 @@
 import { Link, usePathname } from "@/i18n/navigation";
 import { useEffect, useRef, useState } from "react";
 import { useTranslations } from "next-intl";
-import { ArrowUpRight, Menu, ShoppingBag } from "lucide-react";
+import { ArrowUpRight, Menu } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
 const NAV_ITEMS = [
@@ -20,20 +20,6 @@ const NAV_ITEMS = [
   { href: "/book", key: "book" as const },
 ];
 
-const CART_STORAGE_KEY = "jyotish_gem_cart_v1";
-
-function readCartCount() {
-  if (typeof window === "undefined") return 0;
-  try {
-    const raw = window.localStorage.getItem(CART_STORAGE_KEY);
-    if (!raw) return 0;
-    const lines = JSON.parse(raw) as { quantity?: number }[];
-    return lines.reduce((sum, line) => sum + (line.quantity ?? 0), 0);
-  } catch {
-    return 0;
-  }
-}
-
 function isNavItemActive(pathname: string, href: string) {
   if (href.includes("#")) return false;
   return pathname === href || pathname.startsWith(`${href}/`);
@@ -42,23 +28,9 @@ function isNavItemActive(pathname: string, href: string) {
 export function SiteNav() {
   const t = useTranslations("Nav");
   const pathname = usePathname();
-  const [cartCount, setCartCount] = useState(0);
   const [signedInName, setSignedInName] = useState<string | null>(null);
   const [menuOpen, setMenuOpen] = useState(false);
   const menuRef = useRef<HTMLDivElement>(null);
-
-  useEffect(() => {
-    // Cart lives in localStorage, so the real count can only be read after hydration to avoid a server/client mismatch.
-    // eslint-disable-next-line react-hooks/set-state-in-effect
-    setCartCount(readCartCount());
-    const sync = () => setCartCount(readCartCount());
-    window.addEventListener("storage", sync);
-    window.addEventListener("gemstone-cart-updated", sync);
-    return () => {
-      window.removeEventListener("storage", sync);
-      window.removeEventListener("gemstone-cart-updated", sync);
-    };
-  }, []);
 
   useEffect(() => {
     // Fetched client-side (rather than passed down from a server-rendered SiteHeader) so pages
@@ -107,10 +79,6 @@ export function SiteNav() {
           {signedInName ? t("openYourChart") : t("createYourChart")} <ArrowUpRight size={15} />
         </Link>
       </div>
-      <Link href="/gemstones/cart" className="header-cart" aria-label={t("cart", { count: cartCount })}>
-        <ShoppingBag size={19} />
-        {cartCount > 0 && <span className="header-cart__badge">{cartCount > 99 ? "99+" : cartCount}</span>}
-      </Link>
       {menuOpen && <div className="mobile-menu__backdrop" onClick={() => setMenuOpen(false)} aria-hidden="true" />}
       <div className="mobile-menu" ref={menuRef}>
         <button type="button" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Menu size={22} /></button>

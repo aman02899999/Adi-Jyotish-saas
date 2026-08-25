@@ -5,7 +5,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
-import { computeFixedSessionPrice, computeSessionPriceAnchor, reviewDiscountPercent } from "@/lib/practitioner-pricing";
+import { computeSessionPriceAnchor, computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { createNotification } from "@/lib/notifications";
@@ -74,24 +74,33 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
     getPractitionerAccuracyMap(),
   ]);
   const reviews = reviewsSnap.docs.map(reviewFromDoc);
-  return directory.map((person) => {
+  const scored = directory.map((person) => {
     const personReviews = reviews.filter((review) => review.practitionerId === person.id);
     const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => personReviews.length ? personReviews.reduce((sum, review) => sum + review[field], 0) / personReviews.length : null;
     const rawRating = average("rating");
     const rating = rawRating === null ? null : Math.round(rawRating * 10) / 10;
-    const discountPercent = reviewDiscountPercent(personReviews.length);
-    // Uses the same rounded rating as the card's own ★ display and as chat.ts's own price
-    // computation at checkout (which explicitly rounds before calling this) — otherwise the
-    // marketplace-displayed price could land in a different ₹10 bucket than what's charged.
-    const sessionPrice = person.isAiPowered
-      ? computeFixedSessionPrice({ experienceYears: person.experienceYears, verificationLevel: person.verificationLevel, featured: person.featured, rating, reviewCount: personReviews.length })
-      : null;
+    return {
+      person,
+      rating,
+      reviewCount: personReviews.length,
+      dimensions: personReviews.length ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
+    };
+  });
+  // One batch computation across every AI-powered practitioner (see computeTieredSessionPrices) —
+  // the requested pricing split ("60% of the roster between ₹49-149, …") is a statement about the
+  // whole cohort, not something derivable per-practitioner in isolation.
+  const sessionPriceById = computeTieredSessionPrices(
+    scored.filter((entry) => entry.person.isAiPowered).map((entry) => ({ id: entry.person.id, rating: entry.rating, reviewCount: entry.reviewCount })),
+  );
+  return scored.map(({ person, rating, reviewCount, dimensions }) => {
+    const discountPercent = reviewDiscountPercent(reviewCount);
+    const sessionPrice = sessionPriceById.get(person.id) ?? null;
     const sessionAnchor = sessionPrice !== null ? computeSessionPriceAnchor(sessionPrice, person.slug) : null;
     return {
       ...person,
       rating,
-      reviewCount: personReviews.length,
-      dimensions: personReviews.length ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
+      reviewCount,
+      dimensions,
       predictionAccuracy: accuracyMap.get(person.id) ?? null,
       reviewDiscountPercent: discountPercent,
       discountedRatePerMinute: Math.max(1, applyDiscount(person.chatRatePerMinute, discountPercent)),
