@@ -7,9 +7,6 @@ import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
 import { computeSessionPriceAnchor, computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
-import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
-import { createNotification } from "@/lib/notifications";
-import { getSiteUrl } from "@/lib/site-url";
 
 export type PractitionerReview = {
   id: string;
@@ -164,79 +161,6 @@ export async function getEligibleReviewBookings(memberEmail: string, practitione
       const data = doc.data() as { serviceTitle: string; scheduledAt: FirebaseFirestore.Timestamp };
       return { id: doc.id, serviceTitle: data.serviceTitle, scheduledAt: data.scheduledAt.toDate() };
     });
-}
-
-/** Scheduled sweep (called from the housekeeping cron): emails a review request for every
- * completed booking whose session finished 2-26 hours ago, once — a member who never comes back
- * to the site to be asked in person will otherwise never leave a review. The 2-hour floor gives
- * an admin/practitioner time to actually mark the booking "completed"; the 26-hour ceiling keeps
- * this sweep, which runs every 15 minutes, from re-scanning bookings indefinitely. reviewRequestedAt
- * is stamped either way (review already exists, or the request was just sent) so a booking is only
- * ever considered once. */
-export async function sendPendingReviewRequests() {
-  const now = Date.now();
-  const windowStart = new Date(now - 26 * 60 * 60 * 1000);
-  const windowEnd = new Date(now - 2 * 60 * 60 * 1000);
-  const snap = await withIndexFallback(
-    () => db.collection("bookings")
-      .where("status", "==", "completed")
-      .where("scheduledAt", ">=", windowStart)
-      .where("scheduledAt", "<=", windowEnd)
-      .get(),
-    { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
-  );
-
-  let sent = 0;
-  for (const doc of snap.docs) {
-    const data = doc.data() as {
-      reviewRequestedAt?: unknown;
-      practitionerId?: string | null;
-      practitionerName?: string | null;
-      clientEmail?: string;
-      clientName?: string;
-      serviceTitle?: string;
-    };
-    if (data.reviewRequestedAt || !data.practitionerId || !data.clientEmail) continue;
-
-    const reviewSnap = await db.collection("practitionerReviews").where("bookingId", "==", doc.id).limit(1).get();
-    if (!reviewSnap.empty) {
-      await doc.ref.update({ reviewRequestedAt: FieldValue.serverTimestamp() });
-      continue;
-    }
-
-    const practitionerSnap = await db.collection("practitioners").doc(data.practitionerId).get();
-    const slug = (practitionerSnap.data() as { slug?: string } | undefined)?.slug;
-    const reviewUrl = (slug ? new URL(`/astrologers/${slug}`, getSiteUrl()) : new URL("/dashboard/consultations", getSiteUrl())).toString();
-    const practitionerLabel = data.practitionerName ?? "your astrologer";
-
-    await sendEmail({
-      to: data.clientEmail,
-      subject: `How was your reading with ${practitionerLabel}?`,
-      html: genericNotificationEmailHtml({
-        title: "Share your experience",
-        name: data.clientName ?? "there",
-        body: `Your ${data.serviceTitle ?? "reading"} with ${practitionerLabel} is complete. A quick review helps other members find the right guide.`,
-        ctaLabel: "Leave a review",
-        ctaUrl: reviewUrl,
-      }),
-    }).catch((error) => console.error("Review request email failed", error));
-
-    const memberSnap = await db.collection("members").where("email", "==", data.clientEmail).limit(1).get();
-    if (!memberSnap.empty) {
-      await createNotification({
-        recipientType: "member",
-        recipientId: memberSnap.docs[0].id,
-        type: "review_request",
-        title: "How was your reading?",
-        body: `Leave a review for your session with ${practitionerLabel}.`,
-        link: slug ? `/astrologers/${slug}` : "/dashboard/consultations",
-      }).catch((error) => console.error("Review request notification failed", error));
-    }
-
-    await doc.ref.update({ reviewRequestedAt: FieldValue.serverTimestamp() });
-    sent++;
-  }
-  return { checked: snap.docs.length, sent };
 }
 
 export async function getAdminReviews() {

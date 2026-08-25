@@ -1,15 +1,13 @@
 import "server-only";
 
-import { FieldValue, Timestamp } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
-import { genericNotificationEmailHtml, isEmailConfigured, sendEmail } from "@/lib/email";
 import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { getPersonaById } from "@/lib/ai-personas";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
 import { buildVarshphalChart, renderVarshphalReport } from "@/lib/varshphal";
-import { getSiteUrl } from "@/lib/site-url";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
 
 // Every AI-persona reading (Gemini-backed: Ask Live, Palm, Tarot, Face, Vastu, Lal Kitab) is priced
@@ -637,98 +635,4 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
   const ref = collection.doc(reading.id);
   await ref.update({ status: "answered", answer, answeredAt: FieldValue.serverTimestamp() });
   return toReading(await ref.get());
-}
-
-const READING_RESUME: Record<string, { label: string; path: string }> = {
-  question: { label: "your question reading", path: "/ask" },
-  kundli: { label: "your full Kundli report", path: "/kundli" },
-  varshphal: { label: "your Varshphal report", path: "/varshphal" },
-  palm: { label: "your Palm Reading", path: "/palm-reading" },
-  tarot: { label: "your Tarot Reading", path: "/tarot-reading" },
-  face: { label: "your Face Reading", path: "/face-reading" },
-  vastu: { label: "your Vastu Consultation", path: "/vastu-consultation" },
-  lalkitab: { label: "your Lal Kitab Reading", path: "/lal-kitab-reading" },
-};
-
-const PENDING_READING_REMINDER_DELAY_MS = 60 * 60 * 1000;
-const PENDING_READING_REMINDER_BATCH = 25;
-
-/** A reading left unpaid (client closed the Razorpay modal, or never opened it) otherwise sits in
- * `pending_payment` forever with no follow-up. Run on a schedule (see the housekeeping cron) to
- * nudge the client back once, an hour after they started — long enough to not feel like spam,
- * short enough that the intent is still fresh. `reminderSentAt` is set unconditionally after an
- * attempt (even on a missing/unconfigured email) so a bad record can't be retried every 15
- * minutes forever. */
-export async function sendPendingReadingReminders() {
-  if (!isEmailConfigured()) return { sent: 0, skipped: true as const };
-
-  const cutoff = Timestamp.fromMillis(Date.now() - PENDING_READING_REMINDER_DELAY_MS);
-  const snap = await collection
-    .where("status", "==", "pending_payment")
-    .where("reminderSentAt", "==", null)
-    .where("createdAt", "<", cutoff)
-    .limit(PENDING_READING_REMINDER_BATCH)
-    .get();
-
-  let sent = 0;
-  for (const doc of snap.docs) {
-    const reading = toReading(doc);
-    // Personas have no fixed path (each admin-created one lives at its own /ai/{slug}), so their
-    // resume link is built from the reading's own personaSlug/personaName instead of the static map.
-    const resume = reading.readingType === "persona"
-      ? (reading.personaSlug ? { label: `your ${reading.personaName ?? "reading"}`, path: `/ai/${reading.personaSlug}` } : null)
-      : READING_RESUME[reading.readingType];
-    try {
-      if (resume) {
-        const memberSnap = await db.collection("members").doc(reading.memberId).get();
-        const memberData = memberSnap.data() as { name?: string; email?: string } | undefined;
-        if (memberData?.email) {
-          const result = await sendEmail({
-            to: memberData.email,
-            subject: `${resume.label} is waiting for you`,
-            html: genericNotificationEmailHtml({
-              title: "Your reading is one step away",
-              name: memberData.name || "there",
-              body: `You started ${resume.label} on Adi Jyotish Guru but didn't finish payment. Complete it now to get your full report.`,
-              ctaLabel: "Complete my reading",
-              ctaUrl: new URL(resume.path, getSiteUrl()).toString(),
-            }),
-          });
-          if (result.sent) sent += 1;
-        }
-      }
-    } catch (error) {
-      console.error(`Failed to send pending-reading reminder for ${doc.id}`, error);
-    } finally {
-      await doc.ref.update({ reminderSentAt: FieldValue.serverTimestamp() });
-    }
-  }
-  return { sent, skipped: false as const };
-}
-
-const UNANSWERED_READING_RETRY_BATCH = 25;
-
-/** A reading that's been paid for (or was free) but never got an answer — most commonly because
- * GEMINI_API_KEY wasn't set, or a transient Gemini API failure — otherwise sits stranded forever:
- * nothing retries it automatically, and the member's only way to get their answer is manually
- * clicking "Check again" on a page they may never revisit. Every reading with status "paid" is
- * by definition unanswered and still under its attempt cap (generateReadingAnswer moves a reading
- * that has exhausted MAX_AI_ATTEMPTS to a terminal "failed" status instead, which this query's
- * status == "paid" filter naturally excludes — a permanently broken reading gets a fixed number of
- * real Gemini calls total, not one every time this sweep runs). Run on the housekeeping schedule so
- * that fixing a misconfiguration actually clears everyone who paid during the outage, instead of
- * leaving them silently stuck. */
-export async function retryUnansweredReadings() {
-  const snap = await collection.where("status", "==", "paid").limit(UNANSWERED_READING_RETRY_BATCH).get();
-
-  let answered = 0;
-  for (const doc of snap.docs) {
-    try {
-      const result = await generateReadingAnswer(toReading(doc));
-      if (result.status === "answered") answered += 1;
-    } catch (error) {
-      console.error(`Failed to retry AI reading ${doc.id}:`, error);
-    }
-  }
-  return { attempted: snap.size, answered };
 }

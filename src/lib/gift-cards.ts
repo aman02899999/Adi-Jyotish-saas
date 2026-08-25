@@ -1,11 +1,8 @@
 import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
-import { db, withIndexFallback } from "@/lib/firestore";
+import { db } from "@/lib/firestore";
 import { getOrCreateWallet } from "@/lib/wallet";
-import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
-import { getSiteUrl } from "@/lib/site-url";
-import { shouldRunNow } from "@/lib/automation-state";
 
 const GIFT_CARD_VALIDITY_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -131,46 +128,3 @@ export async function redeemGiftCard({ code, memberId }: { code: string; memberI
   });
 }
 
-const GIFT_EXPIRY_REMINDER_LEAD_MS = 7 * 24 * 60 * 60 * 1000;
-const GIFT_EXPIRY_REMINDER_WINDOW_MS = 24 * 60 * 60 * 1000;
-
-/** Daily-gated sweep: nudges the buyer (not the recipient — a gift card only ever captures the
- * recipient's name, never their contact info) 7 days before an unclaimed gift expires, so a gift
- * that would otherwise silently lapse gets one last chance to be forwarded or reissued. */
-export async function sendGiftCardExpiryReminders() {
-  if (!(await shouldRunNow("gift-card-expiry-sweep", 20 * 60 * 60 * 1000))) return { skipped: true as const };
-
-  const now = Date.now();
-  const windowStart = new Date(now + GIFT_EXPIRY_REMINDER_LEAD_MS);
-  const windowEnd = new Date(now + GIFT_EXPIRY_REMINDER_LEAD_MS + GIFT_EXPIRY_REMINDER_WINDOW_MS);
-  const snap = await withIndexFallback(
-    () => db.collection("giftCards").where("status", "==", "unclaimed").where("expiresAt", ">=", windowStart).where("expiresAt", "<=", windowEnd).get(),
-    { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
-  );
-
-  let sent = 0;
-  for (const doc of snap.docs) {
-    const data = doc.data() as GiftCardDoc & { expiryReminderSentAt?: FirebaseFirestore.Timestamp };
-    if (data.expiryReminderSentAt) continue;
-
-    const memberSnap = await db.collection("members").doc(data.buyerId).get();
-    const buyer = memberSnap.data() as { email?: string } | undefined;
-    if (!buyer?.email) continue;
-
-    await sendEmail({
-      to: buyer.email,
-      subject: "Your gift card expires in 7 days",
-      html: genericNotificationEmailHtml({
-        title: "Your gift card hasn't been claimed yet",
-        name: data.buyerName ?? "there",
-        body: `The ₹${data.amount} gift you sent to ${data.recipientName} hasn't been redeemed, and it expires in 7 days. Consider following up with them, or reach out to us if you'd like it reissued.`,
-        ctaLabel: "View gift",
-        ctaUrl: new URL(`/gift/${doc.id}`, getSiteUrl()).toString(),
-      }),
-    }).catch((error) => console.error("Gift card expiry reminder failed", error));
-
-    await doc.ref.update({ expiryReminderSentAt: FieldValue.serverTimestamp() });
-    sent++;
-  }
-  return { checked: snap.docs.length, sent };
-}
