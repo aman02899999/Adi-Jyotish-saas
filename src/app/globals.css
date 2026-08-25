@@ -79,7 +79,7 @@ button { border: 0; }
 .header-cart:hover { background: #f4ece1; }
 .header-cart__badge { position: absolute; top: -4px; right: -4px; min-width: 17px; height: 17px; padding: 0 4px; display: grid; place-items: center; border-radius: 999px; color: #fff; background: var(--copper); font-size:12px; font-weight: 700; }
 .mobile-menu { display: none; position: relative; margin-left: 10px; }
-.mobile-menu button { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: inherit; cursor: pointer; }
+.mobile-menu button { width: 42px; height: 42px; display: grid; place-items: center; border: 1px solid var(--line); border-radius: 50%; background: transparent; color: inherit; cursor: pointer; position: relative; z-index: 22; }
 .mobile-menu__backdrop { position: fixed; z-index: 19; inset: 0; background: rgba(30,22,15,.4); animation: fadeIn .2s ease both; }
 .mobile-menu nav { position: absolute; z-index: 21; right: 0; top: 52px; width: min(280px, calc(100vw - 32px)); max-height: calc(100dvh - 84px); overflow-y: auto; padding: 12px; display: grid; gap: 2px; border: 1px solid var(--line); border-radius: 16px; background: rgba(249,246,240,.98); box-shadow: var(--shadow); }
 .mobile-menu nav a { padding: 12px 14px; border-radius: 10px; font-size:15px; }
@@ -1972,7 +1972,13 @@ button { border: 0; }
   .shell { width:min(100% - 38px,760px); }
   .desktop-nav,.header-actions { display:none; }
   .header-cart { margin-left:auto; }
-  .mobile-menu { display:block; }
+  /* .desktop-nav and .header-actions are display:none on mobile, so the margin-left:auto that
+     used to push .mobile-menu to the header's right edge (via that flex sibling) is gone on
+     pages with no .header-cart either — the hamburger button then lands mid-header instead of
+     the top-right corner, and its dropdown (position:absolute; right:0) renders anchored to
+     that wrong position instead of the screen edge. Push .mobile-menu itself to the right so
+     this holds regardless of which other header elements are present. */
+  .mobile-menu { display:block; margin-left:auto; }
   /* Grid-column tables (wallet ledger, chat sessions, service tables) are wider than a phone
      screen at their fixed column widths. The card ancestor clips overflow for its rounded
      corners, so without this the rightmost columns are simply invisible rather than reachable. */
