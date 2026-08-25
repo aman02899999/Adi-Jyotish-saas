@@ -58,11 +58,14 @@ members, bookings, schedule, reviews, live chat console, billing, wallets, payou
 AI personas, website content editing, insights, activity/audit log, team & role-based permissions.
 
 ### Automation & housekeeping
-Scheduled jobs (`.github/workflows/cron.yml`) cover: expiring stale wallet holds and abandoned
-gemstone/AI-reading carts, review requests, lapsed-member win-back, wishlist price-drop alerts,
-low-stock alerts, subscription renewal/dunning reminders, gift card expiry, payout auto-approval,
-fraud/anomaly flags (review velocity, cancellation rate, duplicate payout destinations), a monthly
-GST/accounting summary, onboarding drip emails, and a synthetic uptime check.
+The recurring 15-minute sweep layer (review-request nudges, lapsed-member win-back, low-stock
+alerts, subscription renewal/dunning reminders, gift card expiry, fraud/anomaly flags, a monthly
+GST summary, onboarding drip emails, and the rest) has been removed to avoid background Firestore
+traffic before the site is actually launched — see `.github/workflows/cron.yml`, which now runs
+only a synthetic uptime check against the site's key routes. The two safety-net expiries that
+protect real money (stale instant-chat wallet holds, abandoned gemstone pending orders) are
+unaffected: they still run inline the moment a member's own request would otherwise hit them, in
+`src/lib/chat.ts` and `src/lib/gemstone-orders.ts` respectively — they never depended on the cron.
 
 ### Security
 Firebase Auth (email/password + Google) across member/practitioner/admin, 2FA (TOTP) on all three
@@ -126,9 +129,9 @@ seeds demo admin/member/practitioner roles into the emulator for local QA.
 `.github/workflows/ci.yml` runs three jobs on every push and pull request: `build-and-test`
 (typecheck, lint, unit tests, build), `e2e` (the full Playwright suite against the emulator), and
 `lighthouse` (a non-blocking performance/accessibility/best-practices/SEO budget via Lighthouse CI —
-see `lighthouserc.js`). `.github/workflows/cron.yml` runs scheduled housekeeping (see Automation
-above) plus a synthetic uptime check against the site's key routes (`/`, `/pricing`, `/book`,
-`/astrologers`); `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/
+see `lighthouserc.js`). `.github/workflows/cron.yml` runs a synthetic uptime check against the
+site's key routes (`/`, `/pricing`, `/book`, `/astrologers`) — see Automation above for what used
+to also run there; `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/
 `firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml` runs a
 daily Firestore export to Cloud Storage.
 
@@ -148,8 +151,6 @@ Settings → Environment Variables) instead of committed to the repo. At minimum
   `https://astronomers.in/api/webhooks/razorpay`.
 - **Cloudflare Turnstile**: `NEXT_PUBLIC_TURNSTILE_SITE_KEY`, `TURNSTILE_SECRET_KEY` — without these the
   app fails closed (403) on registration, kundli-matching, numerology, and gemstone-recommendation.
-- **Scheduled housekeeping**: `CRON_SECRET`, matching the GitHub Actions repo secret used by
-  `.github/workflows/cron.yml`.
 - **Payouts**: `PAYOUT_ENCRYPTION_KEY` (32-byte, base64).
 - **Email**: `RESEND_API_KEY`, `RESEND_FROM_EMAIL` — verify a sending domain in the Resend dashboard
   before going live; the default is Resend's shared sandbox address.
