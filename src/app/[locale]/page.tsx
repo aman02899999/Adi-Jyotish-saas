@@ -297,7 +297,7 @@ export default async function HomePage() {
             <strong>{t("ctaGemstones.title")}</strong>
             <span>{t("ctaGemstones.body")}</span>
           </div>
-          <Link href="/gemstones" className="button button--light">{t("ctaGemstones.cta")} <ArrowRight size={16} /></Link>
+          <Link href="/gemstones/recommend" className="button button--light">{t("ctaGemstones.cta")} <ArrowRight size={16} /></Link>
         </div>
       </div>
 

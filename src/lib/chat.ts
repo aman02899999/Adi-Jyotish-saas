@@ -4,7 +4,7 @@ import { AggregateField, FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { publishChatEvent } from "@/lib/ably";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
-import { computeFixedSessionPrice, reviewDiscountPercent } from "@/lib/practitioner-pricing";
+import { reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
 import { getPractitionerChatReply, isGeminiConfigured } from "@/lib/gemini";
@@ -158,7 +158,7 @@ export async function getMemberActiveSession(memberId: string): Promise<ChatSess
 export async function startChatSession(memberId: string, practitionerId: string) {
   const practitionerSnap = await db.collection("practitioners").doc(practitionerId).get();
   const practitioner = practitionerSnap.exists
-    ? (practitionerSnap.data() as { name: string; active: boolean; online: boolean; chatRatePerMinute: number; isAiPowered?: boolean; experienceYears: number; verificationLevel: string; featured: boolean })
+    ? (practitionerSnap.data() as { name: string; active: boolean; online: boolean; chatRatePerMinute: number; isAiPowered?: boolean })
     : null;
   if (!practitioner || !practitioner.active || !practitioner.online) {
     throw new PractitionerUnavailableError("This practitioner is not available for instant chat right now.");
@@ -198,9 +198,6 @@ export async function startChatSession(memberId: string, practitionerId: string)
   let pricingModel: "metered" | "fixed" = "metered";
   let holdMinutes = 0;
   try {
-    const reviewsAgg = await db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published")
-      .aggregate({ count: AggregateField.count(), avgRating: AggregateField.average("rating") }).get();
-    const reviewCount = reviewsAgg.data().count;
     const discountPercent = await getMemberDiscountPercent(memberId);
 
     // AI-powered practitioners (see isAiPowered in scheduling.ts) charge one flat price per session
@@ -211,14 +208,13 @@ export async function startChatSession(memberId: string, practitionerId: string)
 
     let holdAmount: number;
     if (pricingModel === "fixed") {
-      const avgRating = reviewsAgg.data().avgRating;
-      const basePrice = computeFixedSessionPrice({
-        experienceYears: practitioner.experienceYears,
-        verificationLevel: practitioner.verificationLevel,
-        featured: practitioner.featured,
-        rating: avgRating === null ? null : Math.round(avgRating * 10) / 10,
-        reviewCount,
-      });
+      // Reads the price from the same cached list the practitioner's marketplace card renders
+      // (see getOnlinePractitionerAlternatives above for the identical pattern) instead of
+      // recomputing it here — computeTieredSessionPrices ranks a practitioner's price against the
+      // whole AI-powered roster, so recomputing it from this one practitioner's data alone could
+      // never reproduce the same number, and what's billed must exactly match what's shown.
+      const basePrice = (await getMarketplacePractitioners()).find((p) => p.id === practitionerId)?.sessionPrice;
+      if (basePrice == null) throw new PractitionerUnavailableError("This practitioner's pricing isn't set up yet — try again in a moment.");
       fixedPrice = Math.max(1, applyDiscount(basePrice, discountPercent));
       if (wallet.balance < fixedPrice) {
         throw new InsufficientBalanceError(`Add at least ${wallet.currency} ${fixedPrice} to your wallet to start this chat.`);
@@ -232,6 +228,8 @@ export async function startChatSession(memberId: string, practitionerId: string)
       // Mirrors the discounted price shown on the practitioner's marketplace card (see
       // getMarketplacePractitioners in marketplace.ts) — new/unreviewed practitioners are discounted
       // to encourage first bookings, and that discount stacks with the member's own plan discount.
+      const reviewCount = (await db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published")
+        .aggregate({ count: AggregateField.count() }).get()).data().count;
       const reviewDiscount = reviewDiscountPercent(reviewCount);
       const baseRate = applyDiscount(practitioner.chatRatePerMinute, reviewDiscount);
       const rate = Math.max(1, applyDiscount(baseRate, discountPercent));
