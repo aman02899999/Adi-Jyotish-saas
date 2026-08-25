@@ -136,7 +136,7 @@ export default async function AstrologersPage({ searchParams }: { searchParams: 
             <p>Choose with confidence</p>
             <h2>Practitioners, not profiles<br /><em>optimized for clicks.</em></h2>
           </div>
-          <span>Our ordering favors fit, verification, experience, and availability. New guides are not penalized for having fewer reviews.</span>
+          <span>Sorted by price, low to high, by default — switch to Recommended, Highest rated, or Most experienced anytime.</span>
         </div>
         <MarketplaceExplorer people={cards} favoriteIds={favorites} memberSignedIn={Boolean(member)} initialQuery={q ?? ""} />
       </section>
