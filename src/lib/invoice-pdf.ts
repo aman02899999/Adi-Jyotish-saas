@@ -2,6 +2,7 @@ import "server-only";
 
 import { PDFDocument, StandardFonts, rgb } from "pdf-lib";
 import type { BillingInvoice } from "@/lib/billing";
+import { pdfSafe, pdfSafeName } from "@/lib/pdf-text";
 import type { getStudioSettings } from "@/lib/studio-settings";
 
 type StudioSettings = Awaited<ReturnType<typeof getStudioSettings>>;
@@ -19,21 +20,28 @@ export async function generateInvoicePdf(invoice: BillingInvoice, settings: Stud
   const left = 56;
   let y = height - 70;
 
+  // Invoices carry member-supplied names and admin-supplied studio settings, neither of which is
+  // guaranteed to be WinAnsi-encodable — pdf-lib throws rather than substituting, so everything
+  // drawn here is sanitized first. See pdf-text.ts.
   const text = (value: string, x: number, yPos: number, options: { size?: number; f?: typeof font; color?: ReturnType<typeof rgb> } = {}) => {
-    page.drawText(value, { x, y: yPos, size: options.size ?? 10, font: options.f ?? font, color: options.color ?? INK });
+    page.drawText(pdfSafe(value), { x, y: yPos, size: options.size ?? 10, font: options.f ?? font, color: options.color ?? INK });
   };
 
   text(settings.studioName, left, y, { size: 20, f: bold, color: COPPER });
-  text(`Invoice ${invoice.number}`, width - left - bold.widthOfTextAtSize(`Invoice ${invoice.number}`, 12), y, { size: 12, f: bold });
+  const invoiceLabel = pdfSafe(`Invoice ${invoice.number}`);
+  text(invoiceLabel, width - left - bold.widthOfTextAtSize(invoiceLabel, 12), y, { size: 12, f: bold });
   y -= 18;
   text(settings.supportEmail, left, y, { size: 9, color: MUTED });
-  if (settings.gstin) text(`GSTIN: ${settings.gstin}`, width - left - font.widthOfTextAtSize(`GSTIN: ${settings.gstin}`, 9), y, { size: 9, color: MUTED });
+  if (settings.gstin) {
+    const gstinLabel = pdfSafe(`GSTIN: ${settings.gstin}`);
+    text(gstinLabel, width - left - font.widthOfTextAtSize(gstinLabel, 9), y, { size: 9, color: MUTED });
+  }
 
   y -= 40;
   text("Bill to", left, y, { size: 8, color: MUTED });
   text(`Status: ${invoice.status.replace("_", " ").toUpperCase()}`, width - left - 150, y, { size: 8, color: MUTED });
   y -= 15;
-  text(invoice.customerName, left, y, { size: 12, f: bold });
+  text(pdfSafeName(invoice.customerName), left, y, { size: 12, f: bold });
   y -= 15;
   text(invoice.customerEmail, left, y, { size: 10, color: MUTED });
 

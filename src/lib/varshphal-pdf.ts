@@ -6,6 +6,7 @@ import {
   attributionLine, BASE_GLOSSARY, COPPER, GRAHA_SIGNIFICANCE, HOUSE_SIGNIFICATIONS, HOUSE_TITLES,
   MUTED, type PdfAttribution, RASHI_TRAITS, ReportWriter,
 } from "@/lib/report-writer";
+import { pdfSafeName } from "@/lib/pdf-text";
 
 /**
  * The Varshphal (annual solar-return) counterpart to kundli-pdf.ts, built on the same shared
@@ -67,7 +68,10 @@ export type VarshphalPdfOptions = {
 };
 
 export async function generateVarshphalPdf(chart: VarshphalChart, name: string, options: VarshphalPdfOptions): Promise<Uint8Array> {
-  const runningTitle = `${options.studioName} — ${chart.year} Varshphal for ${name}`;
+  // Resolved before composition so a name in a non-Latin script cannot leave the running header
+  // reading "2026 Varshphal for" with nothing after it — see matching-pdf.ts for the same reason.
+  const safeName = pdfSafeName(name);
+  const runningTitle = `${options.studioName} — ${chart.year} Varshphal for ${safeName}`;
   const writer = await ReportWriter.create(runningTitle, options.reportId);
   const attribution = attributionLine(options.attribution, options.studioName, "automated Varshphal engine");
   const returnDateLabel = chart.returnMoment.toLocaleDateString("en", { month: "long", day: "numeric", year: "numeric", timeZone: "UTC" });
@@ -75,7 +79,7 @@ export async function generateVarshphalPdf(chart: VarshphalChart, name: string, 
   writer.coverPage({
     studioName: options.studioName,
     reportKind: `${chart.year} VARSHPHAL — ANNUAL REPORT`,
-    subjectName: name,
+    subjectName: safeName,
     detailRows: [
       ["Solar Return Date", returnDateLabel],
       ["Cast For", chart.matchedPlace],

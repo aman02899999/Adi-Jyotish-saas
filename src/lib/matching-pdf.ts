@@ -6,6 +6,7 @@ import { scoreTier } from "@/lib/kundli-matching";
 import {
   attributionLine, BASE_GLOSSARY, COPPER, MUTED, type PdfAttribution, ReportWriter,
 } from "@/lib/report-writer";
+import { pdfSafeName } from "@/lib/pdf-text";
 
 /**
  * The compatibility-matching counterpart to kundli-pdf.ts / varshphal-pdf.ts, built on the same
@@ -50,7 +51,13 @@ export async function generateMatchingPdf(
   moons: { moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string },
   options: MatchingPdfOptions,
 ): Promise<Uint8Array> {
-  const runningTitle = `${options.studioName} — ${record.nameA} & ${record.nameB} Compatibility Report`;
+  // Both names are resolved to a drawable form *before* being composed into any sentence. The
+  // report writer sanitizes whatever it is handed, but by then "रवि & Priya" has already become
+  // " & Priya" — a cover page reading "& Priya Sharma" and a panel headed "'s Moon". Substituting
+  // per name keeps every composed string grammatical whatever script the names are written in.
+  const nameA = pdfSafeName(record.nameA, "Partner A");
+  const nameB = pdfSafeName(record.nameB, "Partner B");
+  const runningTitle = `${options.studioName} — ${nameA} & ${nameB} Compatibility Report`;
   const writer = await ReportWriter.create(runningTitle, options.reportId);
   const attribution = attributionLine(options.attribution, options.studioName, "automated matching engine");
   const tier = scoreTier(result.totalScore);
@@ -58,12 +65,12 @@ export async function generateMatchingPdf(
   writer.coverPage({
     studioName: options.studioName,
     reportKind: "COMPATIBILITY MATCHING REPORT",
-    subjectName: `${record.nameA} & ${record.nameB}`,
+    subjectName: `${nameA} & ${nameB}`,
     detailRows: [
       ["Guna Milan Score", `${result.totalScore} / ${result.maxScore}`],
       ["Classical Verdict", tier.label],
-      [`${record.nameA}'s Moon`, `${moons.moonARashi} · ${moons.moonANakshatra}`],
-      [`${record.nameB}'s Moon`, `${moons.moonBRashi} · ${moons.moonBNakshatra}`],
+      [`${nameA}'s Moon`, `${moons.moonARashi} · ${moons.moonANakshatra}`],
+      [`${nameB}'s Moon`, `${moons.moonBRashi} · ${moons.moonBNakshatra}`],
     ],
     attributionLine: attribution,
     reportId: options.reportId,
@@ -84,9 +91,9 @@ export async function generateMatchingPdf(
   // 2. Score Overview
   writer.beginSection("Score Overview");
   writer.panel([
-    [record.nameA, `Born ${record.birthDateA} · ${record.birthTimeA}`],
+    [nameA, `Born ${record.birthDateA} · ${record.birthTimeA}`],
     ["Birthplace A", record.birthPlaceA],
-    [record.nameB, `Born ${record.birthDateB} · ${record.birthTimeB}`],
+    [nameB, `Born ${record.birthDateB} · ${record.birthTimeB}`],
     ["Birthplace B", record.birthPlaceB],
   ]);
   writer.paragraph(attribution, { size: 9.5, bold: true, color: COPPER });
@@ -94,7 +101,7 @@ export async function generateMatchingPdf(
   writer.paragraph(tier.guidance);
   writer.subheading("Moon Placements");
   writer.paragraph(
-    `${record.nameA}'s Moon is in ${moons.moonARashi}, ${moons.moonANakshatra} nakshatra. ${record.nameB}'s Moon is in ${moons.moonBRashi}, ${moons.moonBNakshatra} nakshatra. Every koota below is derived from these two placements.`,
+    `${nameA}'s Moon is in ${moons.moonARashi}, ${moons.moonANakshatra} nakshatra. ${nameB}'s Moon is in ${moons.moonBRashi}, ${moons.moonBNakshatra} nakshatra. Every koota below is derived from these two placements.`,
   );
 
   // 3. Koota-by-Koota Breakdown
