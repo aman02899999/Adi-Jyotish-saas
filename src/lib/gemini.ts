@@ -57,10 +57,19 @@ async function releaseGeminiBudget() {
   });
 }
 
-async function callGemini({ systemPrompt, parts, temperature, maxOutputTokens }: {
+/**
+ * NOTE ON SAMPLING PARAMETERS: temperature, topP and topK are deliberately not sent.
+ * Starting with gemini-3.6-flash (the model above) Google deprecated them across the Flash line —
+ * they are currently accepted and silently ignored, and are documented to return HTTP 400 in
+ * future model generations. Passing them was therefore doing nothing except queueing up a
+ * hard failure at the next model bump, so the per-reading values this used to send were removed
+ * rather than left in place looking meaningful. Google's guidance is to steer tone and
+ * determinism through the system instruction instead, which is where every persona's voice is
+ * already defined.
+ */
+async function callGemini({ systemPrompt, parts, maxOutputTokens }: {
   systemPrompt: string;
   parts: GeminiPart[];
-  temperature: number;
   maxOutputTokens: number;
 }) {
   const apiKey = process.env.GEMINI_API_KEY;
@@ -74,7 +83,7 @@ async function callGemini({ systemPrompt, parts, temperature, maxOutputTokens }:
       body: JSON.stringify({
         systemInstruction: { role: "system", parts: [{ text: systemPrompt }] },
         contents: [{ role: "user", parts }],
-        generationConfig: { temperature, maxOutputTokens },
+        generationConfig: { maxOutputTokens },
       }),
     });
 
@@ -103,7 +112,7 @@ export async function getAiReadingAnswer({ name, birthDate, birthTime, birthPlac
   question: string;
 }) {
   const userPrompt = `Seeker: ${name}\nBirth date: ${birthDate}\nBirth time: ${birthTime}\nBirth place: ${birthPlace}\n\nQuestion: ${question}`;
-  return callGemini({ systemPrompt: SYSTEM_PROMPT, parts: [{ text: userPrompt }], temperature: 0.8, maxOutputTokens: 900 });
+  return callGemini({ systemPrompt: SYSTEM_PROMPT, parts: [{ text: userPrompt }], maxOutputTokens: 900 });
 }
 
 // Hinglish (Hindi-English code-mixed, Roman script) by explicit product requirement — this is the
@@ -138,7 +147,7 @@ export async function getPalmReadingAnswer({ name, leftPalmImage, rightPalmImage
     { inline_data: { mime_type: leftPalmImage.mimeType, data: leftPalmImage.base64 } },
     { inline_data: { mime_type: rightPalmImage.mimeType, data: rightPalmImage.base64 } },
   ];
-  return callGemini({ systemPrompt: PALM_SYSTEM_PROMPT, parts, temperature: 0.85, maxOutputTokens: 1600 });
+  return callGemini({ systemPrompt: PALM_SYSTEM_PROMPT, parts, maxOutputTokens: 1600 });
 }
 
 // Same Hinglish + no-scientific-claim requirements as the palm-reading persona above — Tarot is
@@ -163,7 +172,7 @@ export async function getTarotReadingAnswer({ name, question, cards }: {
 }) {
   const cardLines = cards.map((card) => `${card.position}: ${card.name} (${card.reversed ? "Reversed / Ulta" : "Upright / Seedha"})`).join("\n");
   const userPrompt = `Client ka naam: ${name}\n\nSawaal: ${question}\n\nNikala gaya teen-card spread:\n${cardLines}\n\nInn cards ka client ke sawaal ke sandarbh mein poora Hinglish tarot reading banayein.`;
-  return callGemini({ systemPrompt: TAROT_SYSTEM_PROMPT, parts: [{ text: userPrompt }], temperature: 0.85, maxOutputTokens: 1400 });
+  return callGemini({ systemPrompt: TAROT_SYSTEM_PROMPT, parts: [{ text: userPrompt }], maxOutputTokens: 1400 });
 }
 
 // Mukh Samudrik Shastra (classical Indian face reading) — same Hinglish + no-scientific-claim
@@ -196,7 +205,7 @@ export async function getFaceReadingAnswer({ name, question, faceImages }: {
     { text: intro },
     ...faceImages.map((faceImage): GeminiPart => ({ inline_data: { mime_type: faceImage.mimeType, data: faceImage.base64 } })),
   ];
-  return callGemini({ systemPrompt: FACE_SYSTEM_PROMPT, parts, temperature: 0.85, maxOutputTokens: 1600 });
+  return callGemini({ systemPrompt: FACE_SYSTEM_PROMPT, parts, maxOutputTokens: 1600 });
 }
 
 // Vastu Shastra is a real, widely-practiced classical Indian discipline of architectural
@@ -221,7 +230,7 @@ export async function getVastuReadingAnswer({ name, question }: {
   question: string;
 }) {
   const userPrompt = `Client ka naam: ${name}\n\nGhar/Office ka vivaran aur chinta: ${question}`;
-  return callGemini({ systemPrompt: VASTU_SYSTEM_PROMPT, parts: [{ text: userPrompt }], temperature: 0.8, maxOutputTokens: 1200 });
+  return callGemini({ systemPrompt: VASTU_SYSTEM_PROMPT, parts: [{ text: userPrompt }], maxOutputTokens: 1200 });
 }
 
 // Lal Kitab is a real, widely-practiced 19th-century remedial-astrology tradition distinct from
@@ -248,7 +257,7 @@ export async function getLalKitabReadingAnswer({ name, birthDate, birthTime, bir
   question: string;
 }) {
   const userPrompt = `Client ka naam: ${name}\nJanm tithi: ${birthDate}\nJanm samay: ${birthTime}\nJanm sthan: ${birthPlace}\n\nChinta: ${question}`;
-  return callGemini({ systemPrompt: LAL_KITAB_SYSTEM_PROMPT, parts: [{ text: userPrompt }], temperature: 0.8, maxOutputTokens: 1300 });
+  return callGemini({ systemPrompt: LAL_KITAB_SYSTEM_PROMPT, parts: [{ text: userPrompt }], maxOutputTokens: 1300 });
 }
 
 /** Backs admin-created AI personas (see ai-personas.ts) — the studio writes the persona's voice
@@ -260,7 +269,7 @@ export async function getPersonaReadingAnswer({ systemPrompt, name, question }: 
   question: string;
 }) {
   const userPrompt = `Seeker: ${name}\n\nQuestion: ${question}`;
-  return callGemini({ systemPrompt, parts: [{ text: userPrompt }], temperature: 0.8, maxOutputTokens: 1200 });
+  return callGemini({ systemPrompt, parts: [{ text: userPrompt }], maxOutputTokens: 1200 });
 }
 
 /** Backs the AI-powered marketplace practitioners' instant chat (see maybeSendAiChatReply in
@@ -271,5 +280,5 @@ export async function getPractitionerChatReply({ systemPrompt, transcript }: {
   systemPrompt: string;
   transcript: string;
 }) {
-  return callGemini({ systemPrompt, parts: [{ text: transcript }], temperature: 0.85, maxOutputTokens: 500 });
+  return callGemini({ systemPrompt, parts: [{ text: transcript }], maxOutputTokens: 500 });
 }
