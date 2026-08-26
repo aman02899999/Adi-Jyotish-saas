@@ -1,5 +1,6 @@
 import { AI_LAL_KITAB_READING_PRICE, AI_READING_CURRENCY, attachRazorpayOrder, createPendingLalKitabReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
+import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -37,7 +38,9 @@ export async function POST(request: Request) {
   // Card payment is optional: with no Razorpay keys the reading is still created and can be paid
   // from the member's wallet, which is the only way this works on a deployment that has not
   // finished setting up online payments yet.
-  const razorpay = getRazorpay();
+  // A QA bypass account never gets a card order, so it always settles through the
+  // pay-from-wallet route — which recognises the bypass and charges nothing.
+  const razorpay = memberBypassesPayment(member) ? null : getRazorpay();
 
   let order = null;
   if (razorpay) {

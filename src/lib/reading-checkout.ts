@@ -1,6 +1,8 @@
 import "server-only";
 
-import { generateReadingAnswer, payReadingFromWallet, type AiReading } from "@/lib/ai-readings";
+import { generateReadingAnswer, markReadingPaidWithoutCharge, payReadingFromWallet, type AiReading } from "@/lib/ai-readings";
+import { memberBypassesPayment } from "@/lib/payment-bypass";
+import type { MemberIdentity } from "@/lib/member-auth";
 import { quoteWalletPayment } from "@/lib/wallet";
 
 /**
@@ -35,7 +37,17 @@ export type WalletShortfall = {
  * paid, so the member gets a 201 telling them it is being prepared, and the existing retry path
  * picks it up — exactly how the Razorpay verify route already behaves.
  */
-export async function settleReadingFromWallet(memberId: string, reading: AiReading): Promise<Response> {
+export async function settleReadingFromWallet(member: MemberIdentity, reading: AiReading): Promise<Response> {
+  const memberId = member.id;
+
+  // A QA bypass account skips the charge entirely and goes straight to the answer, so the whole
+  // product can be walked end to end without a card or a funded wallet.
+  if (memberBypassesPayment(member)) {
+    const free = await markReadingPaidWithoutCharge({ readingId: reading.id, memberId });
+    if (!free) return Response.json({ error: "Reading not found." }, { status: 404 });
+    return respondWithAnswer(free, { bypass: true });
+  }
+
   const quote = await quoteWalletPayment(memberId, reading.price);
   if (!quote.sufficient) {
     return Response.json({
@@ -48,17 +60,26 @@ export async function settleReadingFromWallet(memberId: string, reading: AiReadi
 
   const paid = await payReadingFromWallet({ readingId: reading.id, memberId });
   if (!paid) return Response.json({ error: "Reading not found." }, { status: 404 });
+  return respondWithAnswer(paid, { bypass: false });
+}
 
+/** Generates and returns the answer for a reading that is already paid for, by whichever route.
+ * A generation failure is never reported as a payment failure — the money has moved and the
+ * reading is marked paid, so the member is told it is being prepared and the existing retry path
+ * picks it up, exactly as the Razorpay verify route already behaves. */
+async function respondWithAnswer(reading: AiReading, { bypass }: { bypass: boolean }): Promise<Response> {
+  const settledBy = bypass ? { bypass: true } : { wallet: true };
   try {
-    const answered = await generateReadingAnswer(paid);
-    return Response.json({ wallet: true, readingId: paid.id, status: answered.status, answer: answered.answer }, { status: 201 });
-  } catch {
+    const answered = await generateReadingAnswer(reading);
+    return Response.json({ ...settledBy, readingId: reading.id, status: answered.status, answer: answered.answer }, { status: 201 });
+  } catch (error) {
     return Response.json({
-      wallet: true,
-      readingId: paid.id,
+      ...settledBy,
+      readingId: reading.id,
       status: "paid",
       answer: null,
-      message: "Your wallet payment is confirmed. Your reading is still being prepared — check back in a moment or refresh.",
+      message: "Your reading is still being prepared — check back in a moment or refresh.",
+      detail: error instanceof Error ? error.message : undefined,
     }, { status: 201 });
   }
 }

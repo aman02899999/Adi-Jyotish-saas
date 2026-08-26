@@ -540,6 +540,25 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
  * request settles the same reading once. Reading status is only advanced after the money actually
  * moves, so a failed debit can never leave a reading marked paid.
  */
+/**
+ * Marks a reading paid without taking any money — used only by accounts carrying the QA payment
+ * bypass (see lib/payment-bypass.ts, which gates it on both a member-document flag and a
+ * deployment env var). The reading is still created and stored exactly like a paid one so it shows
+ * up normally in the dashboard and the admin panel; only the charge is skipped, and the row records
+ * that so it is never mistaken for revenue.
+ */
+export async function markReadingPaidWithoutCharge({ readingId, memberId }: { readingId: string; memberId: string }) {
+  const ref = collection.doc(readingId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const reading = toReading(snap);
+  if (reading.memberId !== memberId) return null;
+  if (reading.status !== "pending_payment") return reading;
+
+  await ref.update({ status: "paid", paidViaBypass: true });
+  return toReading(await ref.get());
+}
+
 export async function payReadingFromWallet({ readingId, memberId }: { readingId: string; memberId: string }) {
   const ref = collection.doc(readingId);
   const snap = await ref.get();

@@ -1,5 +1,7 @@
 import { attachRazorpayOrder, AI_FACE_READING_PRICE, AI_READING_CURRENCY, createPendingFaceReading, reserveReadingId, uploadFaceImage } from "@/lib/ai-readings";
+import { isStorageConfigured } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
+import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
@@ -22,6 +24,12 @@ export async function POST(request: Request) {
 
   const throttle = await checkRateLimit("ai-face-reading-create", `member:${member.id}:ip:${requestIp(request)}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
+  // Without a Storage bucket there is nowhere to put the face photographs, and the Admin SDK would
+  // otherwise throw a raw bucket error that reaches the member as an unexplained 500.
+  if (!isStorageConfigured()) {
+    return Response.json({ error: "Photo uploads are not configured on this site yet. Please try one of the other readings, or contact support." }, { status: 503 });
+  }
 
   let form: FormData;
   try {
@@ -56,7 +64,9 @@ export async function POST(request: Request) {
   // Card payment is optional: with no Razorpay keys the reading is still created and can be paid
   // from the member's wallet, which is the only way this works on a deployment that has not
   // finished setting up online payments yet.
-  const razorpay = getRazorpay();
+  // A QA bypass account never gets a card order, so it always settles through the
+  // pay-from-wallet route — which recognises the bypass and charges nothing.
+  const razorpay = memberBypassesPayment(member) ? null : getRazorpay();
 
   let order = null;
   if (razorpay) {

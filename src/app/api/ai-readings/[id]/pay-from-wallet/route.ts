@@ -30,5 +30,5 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const reading = await getReadingById(id, member.id);
   if (!reading) return Response.json({ error: "Reading not found." }, { status: 404 });
 
-  return settleReadingFromWallet(member.id, reading);
+  return settleReadingFromWallet(member, reading);
 }
