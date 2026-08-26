@@ -1,10 +1,11 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Clock3, Download, HeartHandshake, LoaderCircle, MapPin, Share2, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, Download, HeartHandshake, LoaderCircle, Share2, UserRound, X } from "lucide-react";
 import { Link } from "@/i18n/navigation";
 import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
 import { ShareButtons } from "@/components/share-buttons";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 
 type Breakdown = { varna: number; vashya: number; tara: number; yoni: number; grahaMaitri: number; gana: number; bhakoot: number; nadi: number };
 type TimelineMonth = { monthLabel: string; score: number; tier: "favorable" | "supportive" | "neutral" | "caution"; headline: string };
@@ -151,11 +152,11 @@ export function KundliMatchingForm() {
         <label><span>First person&rsquo;s name</span><div><UserRound size={16} /><input value={nameA} onChange={(event) => setNameA(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Their birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDateA} onChange={(event) => setBirthDateA(event.target.value)} /></div></label>
         <label><span>Their birth time</span><div><Clock3 size={16} /><input type="time" value={birthTimeA} onChange={(event) => setBirthTimeA(event.target.value)} /></div></label>
-        <label><span>Their birth place</span><div><MapPin size={16} /><input value={birthPlaceA} onChange={(event) => setBirthPlaceA(event.target.value)} placeholder="City, country" /></div></label>
+        <label><span>Their birth place</span><PlaceAutocomplete value={birthPlaceA} onChange={setBirthPlaceA} /></label>
         <label><span>Second person&rsquo;s name</span><div><UserRound size={16} /><input value={nameB} onChange={(event) => setNameB(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Their birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDateB} onChange={(event) => setBirthDateB(event.target.value)} /></div></label>
         <label><span>Their birth time</span><div><Clock3 size={16} /><input type="time" value={birthTimeB} onChange={(event) => setBirthTimeB(event.target.value)} /></div></label>
-        <label><span>Their birth place</span><div><MapPin size={16} /><input value={birthPlaceB} onChange={(event) => setBirthPlaceB(event.target.value)} placeholder="City, country" /></div></label>
+        <label><span>Their birth place</span><PlaceAutocomplete value={birthPlaceB} onChange={setBirthPlaceB} /></label>
       </div>
       <TurnstileWidget onVerify={setTurnstileToken} />
       <button type="button" className="button ask-form-card__submit" disabled={loading} onClick={submit}>
