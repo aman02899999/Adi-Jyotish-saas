@@ -70,6 +70,7 @@ button { border: 0; }
 .desktop-nav a.active { color: var(--copper-dark); }
 .desktop-nav a.active::after { right: 0; }
 .header-actions { display: flex; align-items: center; gap: 22px; }
+button.text-link { border: none; background: none; padding: 0; cursor: pointer; font-family: inherit; }
 .language-switcher { display: flex; align-items: center; gap: 5px; color: var(--muted); }
 .language-switcher span { display: flex; align-items: center; gap: 5px; }
 .language-switcher i { color: var(--faint); font-style: normal; }
@@ -85,6 +86,9 @@ button { border: 0; }
 .mobile-menu nav a { padding: 12px 14px; border-radius: 10px; font-size:15px; }
 .mobile-menu nav a:hover { background: var(--paper-deep); }
 .mobile-menu nav a.active { color: var(--copper-dark); font-weight: 700; background: var(--paper-deep); }
+.mobile-menu nav form { display: contents; }
+.mobile-menu nav button.mobile-nav-signout { width: auto; height: auto; display: block; text-align: left; border: none; border-radius: 10px; padding: 12px 14px; font-size: 15px; font-family: inherit; color: inherit; background: transparent; cursor: pointer; }
+.mobile-menu nav button.mobile-nav-signout:hover { background: var(--paper-deep); }
 
 /* marketing hero */
 .hero { min-height: 700px; display: grid; grid-template-columns: .78fr 1.22fr; align-items: center; gap: 20px; padding-block: 52px 56px; }

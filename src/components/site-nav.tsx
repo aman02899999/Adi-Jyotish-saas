@@ -75,6 +75,11 @@ export function SiteNav() {
       <div className="header-actions">
         <LanguageSwitcher compact />
         <Link href={signedInName ? "/dashboard" : "/account"} className="text-link">{signedInName ?? t("signIn")}</Link>
+        {signedInName && (
+          <form action="/api/member/logout" method="post">
+            <button type="submit" className="text-link">{t("signOut")}</button>
+          </form>
+        )}
         <Link href={signedInName ? "/dashboard" : "/account?mode=register"} className="button button--small">
           {signedInName ? t("openYourChart") : t("createYourChart")} <ArrowUpRight size={15} />
         </Link>
@@ -88,6 +93,11 @@ export function SiteNav() {
               <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{t(item.key)}</Link>
             ))}
             <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? t("myAccount") : t("signIn")}</Link>
+            {signedInName && (
+              <form action="/api/member/logout" method="post">
+                <button type="submit" className="mobile-nav-signout">{t("signOut")}</button>
+              </form>
+            )}
             <LanguageSwitcher />
           </nav>
         )}
