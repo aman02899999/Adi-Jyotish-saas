@@ -1,4 +1,4 @@
-import { getKundliMatchById } from "@/lib/kundli-matching";
+import { getKundliMatchById, KundliMatchError } from "@/lib/kundli-matching";
 import { getCurrentMember } from "@/lib/member-auth";
 import { generateMatchingPdf } from "@/lib/matching-pdf";
 import { getStudioSettings } from "@/lib/studio-settings";
@@ -10,7 +10,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
   if (!member) return Response.json({ error: "Please sign in first." }, { status: 401 });
 
   const { id } = await params;
-  const match = await getKundliMatchById(id, member.id);
+  let match: Awaited<ReturnType<typeof getKundliMatchById>>;
+  try {
+    match = await getKundliMatchById(id, member.id);
+  } catch (error) {
+    if (error instanceof KundliMatchError) return Response.json({ error: error.message }, { status: 400 });
+    throw error;
+  }
   if (!match) return Response.json({ error: "Match not found." }, { status: 404 });
 
   const settings = await getStudioSettings();

@@ -1,5 +1,5 @@
 import { orderConfirmationEmailHtml, sendEmail } from "@/lib/email";
-import { getOrderById, getOrderItems, markOrderPaid, OrderNotFoundError } from "@/lib/gemstone-orders";
+import { GEMSTONE_STORE_OPEN, getOrderById, getOrderItems, markOrderPaid, OrderNotFoundError } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 
@@ -8,6 +8,8 @@ export const dynamic = "force-dynamic";
 type VerifyPayload = { razorpay_order_id?: string; razorpay_payment_id?: string; razorpay_signature?: string };
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
+  if (!GEMSTONE_STORE_OPEN) return Response.json({ error: "The gemstone store isn't open yet." }, { status: 503 });
+
   const { id } = await params;
   if (!id) return Response.json({ error: "Invalid order id." }, { status: 400 });
 

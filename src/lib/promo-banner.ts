@@ -9,11 +9,10 @@ export type PromoBanner = {
   message: string;
   ctaLabel: string | null;
   ctaHref: string | null;
-  // "manual" once an admin has ever saved the banner through the admin UI — the festival
-  // auto-scheduler (see lifecycle-automation.ts) treats that as a permanent opt-out and never
-  // touches the banner again, even to turn it off. "auto" (or unset) means the automation still
-  // owns it. festivalKey tracks which festival the automation currently has live, so it knows
-  // exactly when to turn itself back off.
+  // "manual" once an admin has ever saved the banner through the admin UI. "auto"/festivalKey are
+  // legacy fields from a since-removed festival auto-scheduler that used to flip the banner on for
+  // Navratri/Diwali/etc. automatically — kept here only so old Firestore docs that still carry
+  // "auto" continue to type-check; nothing writes "auto" anymore.
   source: "manual" | "auto";
   festivalKey: string | null;
   // ISO string, not a Date — unstable_cache persists its return value through a serialization

@@ -174,8 +174,15 @@ export async function getKundliMatchById(id: string, memberId: string): Promise<
   };
   if (!data.memberId || data.memberId !== memberId) return null;
 
-  const momentA = resolveBirthMoment({ birthDate: data.personABirthDate, birthTime: data.personABirthTime, birthPlace: data.personABirthPlace });
-  const momentB = resolveBirthMoment({ birthDate: data.personBBirthDate, birthTime: data.personBBirthTime, birthPlace: data.personBBirthPlace });
+  let momentA: ReturnType<typeof resolveBirthMoment>;
+  let momentB: ReturnType<typeof resolveBirthMoment>;
+  try {
+    momentA = resolveBirthMoment({ birthDate: data.personABirthDate, birthTime: data.personABirthTime, birthPlace: data.personABirthPlace });
+    momentB = resolveBirthMoment({ birthDate: data.personBBirthDate, birthTime: data.personBBirthTime, birthPlace: data.personBBirthPlace });
+  } catch (error) {
+    if (error instanceof PlaceNotFoundError) throw new KundliMatchError(error.message);
+    throw error;
+  }
   const moonA = moonPlacement(momentA.utcInstant);
   const moonB = moonPlacement(momentB.utcInstant);
   const result = computeAshtakoot({

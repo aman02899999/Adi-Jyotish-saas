@@ -1,5 +1,5 @@
 import { AI_READING_CURRENCY, AI_VARSHPHAL_PRICE, attachRazorpayOrder, createPendingVarshphalReading } from "@/lib/ai-readings";
-import { resolvePlaceToCoordinates } from "@/lib/geo";
+import { AmbiguousPlaceError, resolvePlaceToCoordinates } from "@/lib/geo";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
@@ -38,8 +38,13 @@ export async function POST(request: Request) {
   if (!Number.isInteger(year) || year < currentYear || year > currentYear + 1) {
     return Response.json({ error: "Please choose this year or next year for your Varshphal." }, { status: 400 });
   }
-  if (!resolvePlaceToCoordinates(birthPlace)) {
-    return Response.json({ error: `We couldn't recognize "${birthPlace}" — please try a nearby major city, or add the state/country too.` }, { status: 400 });
+  try {
+    if (!resolvePlaceToCoordinates(birthPlace)) {
+      return Response.json({ error: `We couldn't recognize "${birthPlace}" — please try a nearby major city, or add the state/country too.` }, { status: 400 });
+    }
+  } catch (error) {
+    if (error instanceof AmbiguousPlaceError) return Response.json({ error: error.message }, { status: 400 });
+    throw error;
   }
 
   const reading = await createPendingVarshphalReading({ memberId: member.id, clientName, birthDate, birthTime, birthPlace, year });

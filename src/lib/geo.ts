@@ -103,6 +103,20 @@ const INDIA_STATE_NAMES = new Set(Object.values(INDIA_ADMIN1).map((name) => name
 // candidate, which is what previously produced nonsense matches like "Indianapolis" / "Kindia".
 const NON_SETTLEMENT_SEGMENTS = new Set(["india", "bharat", "in", ...INDIA_STATE_NAMES]);
 
+// Common abbreviations for the countries most likely to show up as a disambiguating segment
+// (e.g. "Toledo, USA") — Intl.DisplayNames only ever returns the full name ("United States"), so
+// without this map an abbreviated segment would never narrow anything.
+const COUNTRY_ALIASES: Record<string, string> = {
+  usa: "united states", us: "united states",
+  uk: "united kingdom",
+  uae: "united arab emirates",
+};
+function countryMatchesSegment(country: string, segment: string): boolean {
+  const countryLower = country.toLowerCase();
+  const alias = COUNTRY_ALIASES[segment];
+  return countryLower.includes(segment) || (alias !== undefined && countryLower.includes(alias));
+}
+
 let cachedCities: CityRecord[] | null = null;
 
 // [name, altName, countryCode, adminCode, population, lat*1e5, lon*1e5] — see
@@ -173,7 +187,7 @@ function pickBest(rows: CityRecord[], otherSegments: string[], rawPlaceText: str
   const narrowed = lowerSegments.length
     ? rows.filter((row) => lowerSegments.some((segment) =>
         (row.province && row.province.toLowerCase().includes(segment)) ||
-        row.country.toLowerCase().includes(segment)
+        countryMatchesSegment(row.country, segment)
       ))
     : [];
 
@@ -220,17 +234,21 @@ export function resolvePlaceToCoordinates(placeText: string): ResolvedPlace | nu
 
   // Segments that just name a country/state (e.g. "India", "Uttar Pradesh") are never searched as
   // if they were a settlement name — they're only used below to disambiguate real city matches.
+  // If every segment is one of these (e.g. the whole input is just "India"), there's no city
+  // candidate left to search at all — falling back to searching them anyway is exactly the bug
+  // this guard exists to prevent (a country/state name matching an unrelated city as a substring,
+  // e.g. "india" prefix-matching "Indianapolis"), so this resolves to "not found" instead.
   const settlementSegments = segments.filter((segment) => !NON_SETTLEMENT_SEGMENTS.has(segment.toLowerCase()));
-  const trySegments = settlementSegments.length ? settlementSegments : segments;
+  if (!settlementSegments.length) return null;
 
-  for (const primary of trySegments) {
+  for (const primary of settlementSegments) {
     const otherSegments = segments.filter((segment) => segment !== primary);
     const exact = exactMatches(primary);
     const bestExact = pickBest(exact, otherSegments, placeText);
     if (bestExact) return toResolvedPlace(bestExact);
   }
 
-  for (const primary of trySegments) {
+  for (const primary of settlementSegments) {
     const otherSegments = segments.filter((segment) => segment !== primary);
     const fuzzy = prefixMatches(primary);
     const bestFuzzy = pickBest(fuzzy, otherSegments, placeText);

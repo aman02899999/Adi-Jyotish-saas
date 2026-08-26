@@ -20,7 +20,7 @@ export default async function AdminAiPersonasPage() {
             <ShieldCheck size={18} />
             <div>
               <strong>Live readings are not configured</strong>
-              <span>GEMINI_API_KEY is not set — every reading here and on /ask, /palm-reading, /tarot-reading, /face-reading, /vastu-consultation, and /lal-kitab-reading will accept payment (or the free credit) but sit stuck as &ldquo;still being prepared&rdquo; until it&rsquo;s set in your hosting provider&rsquo;s environment variables. Once set, the scheduled housekeeping job automatically answers any readings that got stuck in the meantime.</span>
+              <span>GEMINI_API_KEY is not set — every reading here and on /ask, /palm-reading, /tarot-reading, /face-reading, /vastu-consultation, and /lal-kitab-reading will accept payment (or the free credit) but sit stuck as &ldquo;still being prepared&rdquo; until it&rsquo;s set in your hosting provider&rsquo;s environment variables. Once set, a stuck reading completes automatically the next time the member reopens it (or up to 3 attempts total) — there is no background job that retries these on its own, so any reading that already exhausted its attempts and shows &ldquo;failed&rdquo; needs a manual retry from a reading&rsquo;s detail view.</span>
             </div>
           </div>
         )}
