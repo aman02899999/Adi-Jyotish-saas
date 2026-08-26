@@ -2,6 +2,7 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
+import { debitWallet, InsufficientBalanceError, quoteWalletPayment } from "@/lib/wallet";
 import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
 import { getPersonaById } from "@/lib/ai-personas";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
@@ -528,6 +529,34 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
   const reading = toReading(snap);
   if (reading.status !== "pending_payment") return reading;
   await ref.update({ status: "paid", razorpayPaymentId });
+  return toReading(await ref.get());
+}
+
+/**
+ * Pays for an already-created pending reading out of the member's wallet and marks it paid, so a
+ * member with a funded wallet never has to go through a card checkout for a fixed-price reading.
+ *
+ * The debit is keyed on the reading id, which makes it idempotent: a double-submit or a retried
+ * request settles the same reading once. Reading status is only advanced after the money actually
+ * moves, so a failed debit can never leave a reading marked paid.
+ */
+export async function payReadingFromWallet({ readingId, memberId }: { readingId: string; memberId: string }) {
+  const ref = collection.doc(readingId);
+  const snap = await ref.get();
+  if (!snap.exists) return null;
+  const reading = toReading(snap);
+  if (reading.memberId !== memberId) return null;
+  if (reading.status !== "pending_payment") return reading;
+
+  await debitWallet({
+    memberId,
+    amount: reading.price,
+    type: "reading",
+    referenceType: "ai_reading",
+    referenceId: readingId,
+  });
+
+  await ref.update({ status: "paid", paidFromWallet: true });
   return toReading(await ref.get());
 }
 

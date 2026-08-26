@@ -5,10 +5,11 @@ import { Link } from "@/i18n/navigation";
 import { Check, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
+import { useWalletBalance, WalletPayButton, walletShortfallMessage } from "@/components/wallet-pay";
 
 type MemberPrefill = { name: string; email: string };
 type TarotCardDraw = { name: string; position: string; reversed: boolean };
-type OrderData = { readingId: string; orderId: string; amount: number; currency: string; key: string };
+type OrderData = { readingId: string; orderId: string | null; amount: number | null; currency: string; key: string | null };
 
 export function TarotReadingForm({ member, price, currency, onlinePaymentsAvailable }: {
   member: MemberPrefill | null;
@@ -25,6 +26,8 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
   const [error, setError] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
+  const { wallet, refresh: refreshWallet } = useWalletBalance();
+  const [walletPaying, setWalletPaying] = useState(false);
 
   if (!member) {
     return (
@@ -69,7 +72,7 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
         body: JSON.stringify({ clientName, question }),
       });
       const data = await response.json();
-      if (!response.ok || !data.orderId) throw new Error(data.error || "Cards khinchi nahi ja saki.");
+      if (!response.ok || !data.readingId) throw new Error(data.error || "Cards khinchi nahi ja saki.");
       setCards(data.cards);
       setOrder({ readingId: data.readingId, orderId: data.orderId, amount: data.amount, currency: data.currency, key: data.key });
     } catch (caught) {
@@ -79,8 +82,33 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
     }
   }
 
-  async function unlockReading() {
+  /** Settles the drawn spread straight from the wallet — no card, no redirect. A short balance
+   * comes back as a 402 whose message names the exact top-up, which is what the member sees. */
+  async function payFromWallet() {
     if (!order) return;
+    setError("");
+    setWalletPaying(true);
+    try {
+      const response = await fetch(`/api/ai-readings/${order.readingId}/pay-from-wallet`, { method: "POST" });
+      const data = await response.json();
+      if (response.ok) {
+        await refreshWallet();
+        if (data.answer) { setAnswer(data.answer); return; }
+        setWaiting(true);
+        await pollForAnswer(order.readingId, 6);
+        return;
+      }
+      await refreshWallet();
+      setError(walletShortfallMessage(data) ?? data.error ?? "Wallet se payment nahi ho saka.");
+    } catch {
+      setError("Wallet se payment nahi ho saka. Kripya dobara try karein.");
+    } finally {
+      setWalletPaying(false);
+    }
+  }
+
+  async function unlockReading() {
+    if (!order?.orderId || !order.key || order.amount == null) return;
     setError("");
     setPaying(true);
     try {
@@ -162,11 +190,14 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
           ))}
         </div>
         <p className="palm-upload-tip">Yeh teen cards aapke sawaal ke liye khinche gaye hain. Poori Hinglish reading — har card ka matlab, aur Divya ki salah — unlock karne ke liye payment karein.</p>
-        <button type="button" className="button ask-form-card__submit" disabled={paying || !onlinePaymentsAvailable} onClick={unlockReading}>
-          {paying ? "Taiyaar ho raha hai…" : `Pay ${currency} ${price} & poori reading paayein`}
-        </button>
-        {!onlinePaymentsAvailable && <p className="ask-form-card__note">Online payments abhi configure ho rahe hain — kripya thodi der baad try karein.</p>}
-        {onlinePaymentsAvailable && <p className="ask-form-card__note">Secured by Razorpay — aapse sirf confirm karne ke baad hi charge hoga.</p>}
+        <WalletPayButton wallet={wallet} price={price} currency={currency} busy={walletPaying} disabled={paying} onPay={payFromWallet} />
+        {order.orderId && (
+          <button type="button" className="button ask-form-card__submit" disabled={paying || walletPaying || !onlinePaymentsAvailable} onClick={unlockReading}>
+            {paying ? "Taiyaar ho raha hai…" : `Card se pay karein — ${currency} ${price}`}
+          </button>
+        )}
+        {order.orderId && <p className="ask-form-card__note">Secured by Razorpay — aapse sirf confirm karne ke baad hi charge hoga.</p>}
+        {!order.orderId && <p className="ask-form-card__note">Card payments abhi configure ho rahe hain — apne wallet se pay karein.</p>}
         {error && <div className="toast"><Check size={15} />{error}<button onClick={() => setError("")}><X size={14} /></button></div>}
       </div>
     );
