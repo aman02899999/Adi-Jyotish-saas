@@ -44,7 +44,11 @@ const KUNDLI_GLOSSARY: Array<[string, string]> = [
 
 // Same section markers renderKundliReport() actually emits — kept in sync with kundli-engine.ts
 // so this PDF's narrative text is always identical to what the website shows.
-const NARRATIVE_HEADINGS = ["Overview", "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance", "Doshas"];
+const NARRATIVE_HEADINGS = [
+  "Birth Details", "Birth Panchang", "Overview", "Dasha (Planetary Periods)", "Yogas",
+  "Career & Purpose", "Relationships", "Health & Wellbeing", "Wealth & Guidance", "Doshas",
+  "Planetary Strength", "House Lords", "Navamsa (D9)", "Aspects (Drishti)",
+];
 
 function parseNarrativeSections(reportText: string): Array<{ heading: string; body: string }> {
   const lines = reportText.split("\n").map((line) => line.trim());

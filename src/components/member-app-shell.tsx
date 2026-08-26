@@ -16,6 +16,7 @@ import {
   Menu,
   MessageSquareText,
   NotebookPen,
+  ScrollText,
   ShieldCheck,
   Sparkles,
   SunMedium,
@@ -39,6 +40,7 @@ const navGroups = [
     group: "My cosmos",
     items: [
       { label: "Overview", icon: LayoutDashboard, href: "/dashboard" },
+      { label: "My Kundli", icon: ScrollText, href: "/dashboard/kundli" },
       { label: "Family Charts", icon: Users, href: "/dashboard/family" },
       { label: "Predictions", icon: CircleCheck, href: "/dashboard/predictions" },
       { label: "Astro Journal", icon: NotebookPen, href: "/dashboard/journal" },
@@ -73,7 +75,7 @@ const navGroups = [
   },
 ];
 
-type ActiveSection = "Dashboard" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family" | "Predictions" | "Security" | "Journal";
+type ActiveSection = "Dashboard" | "Kundli" | "Consultations" | "Messages" | "Billing" | "Wallet" | "AiReadings" | "GemOrders" | "Wishlist" | "Referrals" | "Family" | "Predictions" | "Security" | "Journal";
 
 function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveSection }) {
   const initials = member.name.split(" ").map((part) => part[0]).join("").slice(0, 2).toUpperCase();
@@ -85,7 +87,7 @@ function MemberNav({ member, active }: { member: MemberIdentity; active: ActiveS
           <div className="app-nav__group" key={navGroup.group}>
             <p className={groupIndex > 0 ? "app-nav__lower" : undefined}>{navGroup.group}</p>
             {navGroup.items.map(({ label, icon: Icon, href }) => {
-              const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions") || (active === "Journal" && label === "Astro Journal");
+              const selected = (active === "Messages" && label === "Studio Inbox") || (active === "Consultations" && label === "My Consultations") || (active === "Dashboard" && label === "Overview") || (active === "Kundli" && label === "My Kundli") || (active === "Wallet" && label === "Wallet") || (active === "AiReadings" && label === "Live Answers") || (active === "GemOrders" && label === "Gemstone Orders") || (active === "Wishlist" && label === "Wishlist") || (active === "Referrals" && label === "Invite & Earn") || (active === "Family" && label === "Family Charts") || (active === "Predictions" && label === "Predictions") || (active === "Journal" && label === "Astro Journal");
               return <Link className={selected ? "active" : ""} href={href} key={label}><Icon size={18} strokeWidth={1.5} /><span>{label}</span></Link>;
             })}
           </div>
