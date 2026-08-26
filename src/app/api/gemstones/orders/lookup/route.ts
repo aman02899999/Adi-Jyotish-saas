@@ -1,9 +1,13 @@
 import { getOrderByNumberScoped, getOrderItems } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  const throttle = await checkRateLimit("gemstone-order-lookup", `ip:${requestIp(request)}`, 20, 600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const { searchParams } = new URL(request.url);
   const orderNumber = searchParams.get("orderNumber")?.trim();
   const email = searchParams.get("email")?.trim();

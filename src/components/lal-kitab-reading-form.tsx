@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Link } from "@/i18n/navigation";
-import { BookOpen, CalendarDays, Check, Clock3, LoaderCircle, MapPin, Sparkles, UserRound, X } from "lucide-react";
+import { BookOpen, CalendarDays, Check, Clock3, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
@@ -153,7 +154,7 @@ export function LalKitabReadingForm({ member, price, currency, onlinePaymentsAva
         <label><span>Aapka naam</span><div><UserRound size={16} /><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Poora naam" /></div></label>
         <label><span>Janm tithi</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
         <label><span>Exact janm samay</span><div><Clock3 size={16} /><input type="time" value={birthTime} onChange={(event) => setBirthTime(event.target.value)} /></div><small>Pata nahi? Jitna nazdeek ho utna samay bharein.</small></label>
-        <label className="wide"><span>Janm sthan</span><div><MapPin size={16} /><input value={birthPlace} onChange={(event) => setBirthPlace(event.target.value)} placeholder="Shehar, desh" /></div></label>
+        <label className="wide"><span>Janm sthan</span><PlaceAutocomplete value={birthPlace} onChange={setBirthPlace} placeholder="Shehar ka naam type karein…" /></label>
         <label className="wide"><span>Aapki chinta</span><textarea rows={4} maxLength={600} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="Jaise: Career mein baar baar rukavat aa rahi hai, iska Lal Kitab upay kya hai?" /><small>{question.length}/600</small></label>
       </div>
       <button type="button" className="button ask-form-card__submit" disabled={loading || !onlinePaymentsAvailable} onClick={submit}>

@@ -534,21 +534,21 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
 const MAX_AI_ATTEMPTS = 3;
 const PERMANENT_FAILURE_MESSAGE = "This reading could not be generated after several attempts. Our team has been notified — please contact support for a refund or a manually prepared reading.";
 
-/** A paid-but-permanently-broken reading (bad image, Gemini quota, whatever) used to sit in "paid"
- * forever and get a fresh Gemini call every single time the 15-minute housekeeping cron's
- * retryUnansweredReadings() swept past it — real, uncapped, recurring API spend for a reading that
- * was never going to succeed. aiAttempts now caps that at MAX_AI_ATTEMPTS: past the cap the reading
- * moves to a terminal "failed" status (which the cron's `status == "paid"` query no longer
- * matches, so it stops being picked up at all) and an admin is notified once instead of the cron
- * quietly retrying it forever.
+/** A paid-but-permanently-broken reading (bad image, Gemini quota, whatever) would otherwise sit
+ * in "paid" forever and get a fresh Gemini call every time it's reopened — real, uncapped,
+ * recurring API spend for a reading that was never going to succeed. There is no background job
+ * retrying these; the only triggers are a member reopening/retrying the reading and the
+ * post-payment verify route. aiAttempts caps retries at MAX_AI_ATTEMPTS: past the cap the reading
+ * moves to a terminal "failed" status and stops accepting further attempts, and an admin is
+ * notified once instead of every retry silently spending Gemini quota forever.
  *
- * Runs as a Firestore transaction rather than a plain read-then-write: the cron sweep, a member's
- * manual retry, and the post-payment verify route can all call this for the same reading at
- * nearly the same time, and a non-transactional increment let concurrent calls read the same
- * stale aiAttempts and both write back the same value — silently letting a reading exceed
- * MAX_AI_ATTEMPTS. The transaction also checks the live status (not the possibly-stale `reading`
- * argument) so a reading that another concurrent call already flipped to "failed" is left alone
- * instead of notifying admins a second time. */
+ * Runs as a Firestore transaction rather than a plain read-then-write: a member's manual retry and
+ * the post-payment verify route can both call this for the same reading at nearly the same time,
+ * and a non-transactional increment let concurrent calls read the same stale aiAttempts and both
+ * write back the same value — silently letting a reading exceed MAX_AI_ATTEMPTS. The transaction
+ * also checks the live status (not the possibly-stale `reading` argument) so a reading that
+ * another concurrent call already flipped to "failed" is left alone instead of notifying admins a
+ * second time. */
 async function recordFailedAttempt(reading: AiReading, error: unknown) {
   const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
   const ref = collection.doc(reading.id);

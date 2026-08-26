@@ -1,4 +1,4 @@
-import { attachRazorpayOrder, CartValidationError, createPendingOrder } from "@/lib/gemstone-orders";
+import { attachRazorpayOrder, CartValidationError, createPendingOrder, GEMSTONE_STORE_OPEN } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
@@ -12,6 +12,8 @@ type CheckoutPayload = {
 };
 
 export async function POST(request: Request) {
+  if (!GEMSTONE_STORE_OPEN) return Response.json({ error: "The gemstone store isn't open yet." }, { status: 503 });
+
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Sign in to complete your purchase." }, { status: 401 });
 

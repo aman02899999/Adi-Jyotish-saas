@@ -1,8 +1,9 @@
 "use client";
 
 import { FormEvent, useState } from "react";
-import { ArrowRight, CalendarDays, Clock3, MapPin, Phone, ShieldCheck } from "lucide-react";
+import { ArrowRight, CalendarDays, Clock3, Phone, ShieldCheck } from "lucide-react";
 import type { MemberIdentity } from "@/lib/member-auth";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 
 export function MemberOnboardingForm({ member, editing = false }: { member: MemberIdentity; editing?: boolean }) {
   const [birthDate, setBirthDate] = useState(member.birthDate ?? "");
@@ -33,7 +34,7 @@ export function MemberOnboardingForm({ member, editing = false }: { member: Memb
     <form className="onboarding-form" onSubmit={submit}>
       <label><span>Birth date</span><div><CalendarDays size={17} /><input type="date" required value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
       <label><span>Exact birth time</span><div><Clock3 size={17} /><input type="time" required value={birthTime} onChange={(event) => setBirthTime(event.target.value)} /></div><small>Use the time shown on your birth record whenever possible.</small></label>
-      <label className="wide"><span>Birth place</span><div><MapPin size={17} /><input required value={birthPlace} onChange={(event) => setBirthPlace(event.target.value)} placeholder="City, state or region, country" /></div></label>
+      <label className="wide"><span>Birth place</span><PlaceAutocomplete size={17} required value={birthPlace} onChange={setBirthPlace} placeholder="Start typing a city — e.g. Noida, Mumbai, Jaipur…" /></label>
       <label className="wide"><span>Phone <i>optional</i></span><div><Phone size={17} /><input value={phone} onChange={(event) => setPhone(event.target.value)} placeholder="For consultation reminders" /></div></label>
       <div className="onboarding-privacy wide"><ShieldCheck size={19} /><span><strong>Private by design</strong><small>Your natal details are encrypted in transit and never shown publicly.</small></span></div>
       {error && <p className="admin-auth-error wide" role="alert">{error}</p>}

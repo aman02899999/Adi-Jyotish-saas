@@ -23,7 +23,7 @@ test("a member can complete the full 3-step booking flow to a confirmed reservat
   await expect(page.getByText("Map your")).toBeVisible();
   await page.locator("input[type=date]").fill("1994-06-15");
   await page.locator("input[type=time]").fill("07:45");
-  await page.getByPlaceholder("City, country").fill("Jaipur, India");
+  await page.getByPlaceholder("Start typing a city…").fill("Jaipur, India");
   await page.getByRole("button", { name: /continue/i }).click();
 
   // Step 3: pick astrologer + time, then reserve

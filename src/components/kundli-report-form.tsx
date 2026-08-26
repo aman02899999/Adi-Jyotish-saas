@@ -2,8 +2,9 @@
 
 import { useState } from "react";
 import { Link } from "@/i18n/navigation";
-import { CalendarDays, Check, Clock3, LoaderCircle, MapPin, Sparkles, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
@@ -168,7 +169,7 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
         <label><span>Your name</span><div><UserRound size={16} /><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
         <label><span>Exact birth time</span><div><Clock3 size={16} /><input type="time" value={birthTime} onChange={(event) => setBirthTime(event.target.value)} /></div><small>Not sure? Enter your closest known time.</small></label>
-        <label className="wide"><span>Birth place</span><div><MapPin size={16} /><input value={birthPlace} onChange={(event) => setBirthPlace(event.target.value)} placeholder="City, country" /></div></label>
+        <label className="wide"><span>Birth place</span><PlaceAutocomplete value={birthPlace} onChange={setBirthPlace} /></label>
       </div>
       <button type="button" className="button ask-form-card__submit" disabled={loading || !onlinePaymentsAvailable} onClick={submit}>
         {loading ? "Opening payment…" : `Pay ${currency} ${price} & get my report`}

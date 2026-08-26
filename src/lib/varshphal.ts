@@ -1,7 +1,7 @@
 import "server-only";
 
 import { computeGrahaPositions, GRAHA_LABELS, type GrahaKey, NAKSHATRAS, RASHIS, ascendantSiderealLongitude, formatDegree, siderealLongitudeOf } from "@/lib/astro-engine";
-import { PlaceNotFoundError, resolvePlaceToCoordinates } from "@/lib/geo";
+import { AmbiguousPlaceError, PlaceNotFoundError, resolvePlaceToCoordinates } from "@/lib/geo";
 import { civilToUtc } from "@/lib/scheduling";
 
 export class VarshphalError extends Error {}
@@ -45,7 +45,13 @@ export type VarshphalChart = {
 export function buildVarshphalChart({ birthDate, birthTime, birthPlace, year }: {
   birthDate: string; birthTime: string; birthPlace: string; year: number;
 }): VarshphalChart {
-  const place = resolvePlaceToCoordinates(birthPlace);
+  let place: ReturnType<typeof resolvePlaceToCoordinates>;
+  try {
+    place = resolvePlaceToCoordinates(birthPlace);
+  } catch (error) {
+    if (error instanceof AmbiguousPlaceError) throw new VarshphalError(error.message);
+    throw error;
+  }
   if (!place) throw new VarshphalError(`We couldn't recognize "${birthPlace}" — please update your birth place and try again.`);
 
   const [birthYear, birthMonth, birthDay] = birthDate.split("-").map(Number);

@@ -2,6 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
+import { signInWithEmailAndPassword } from "@/lib/firebase-client";
 
 export function PractitionerInviteForm({ token, name, email }: { token: string; name: string; email: string }) {
   const [password, setPassword] = useState("");
@@ -23,6 +24,14 @@ export function PractitionerInviteForm({ token, name, email }: { token: string; 
       });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) throw new Error(data.error || "Invitation could not be accepted.");
+
+      const idToken = await signInWithEmailAndPassword(email, password);
+      const sessionResponse = await fetch("/api/auth/practitioner-invite/session", {
+        method: "POST",
+        headers: { "Content-Type": "application/json" },
+        body: JSON.stringify({ idToken }),
+      });
+      if (!sessionResponse.ok) throw new Error("Your account was created — please sign in.");
       window.location.assign("/practitioner");
     } catch (caught) {
       setError(caught instanceof Error ? caught.message : "Something went wrong.");

@@ -1,7 +1,8 @@
 "use client";
 
 import { useState } from "react";
-import { CalendarDays, Check, Clock3, Gem, LoaderCircle, MapPin, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, Gem, LoaderCircle, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 import { GemstoneProductCard } from "@/components/gemstone-product-card";
 import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
 import type { ProductListItem } from "@/lib/gemstones";
@@ -65,7 +66,7 @@ export function GemstoneRecommendationForm({ prefillName }: { prefillName: strin
         <label><span>Your name</span><div><UserRound size={16} /><input value={name} onChange={(event) => setName(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
         <label><span>Birth time</span><div><Clock3 size={16} /><input type="time" value={birthTime} onChange={(event) => setBirthTime(event.target.value)} /></div></label>
-        <label><span>Birth place</span><div><MapPin size={16} /><input value={birthPlace} onChange={(event) => setBirthPlace(event.target.value.slice(0, 180))} placeholder="City, country" /></div></label>
+        <label><span>Birth place</span><PlaceAutocomplete value={birthPlace} onChange={(next) => setBirthPlace(next.slice(0, 180))} /></label>
         <label className="wide"><span>What would you like to improve? <i>optional</i></span><div><MessageCircleQuestion size={16} /><input value={concern} onChange={(event) => setConcern(event.target.value.slice(0, 300))} placeholder="Career, relationships, confidence…" /></div></label>
       </div>
       <p className="legal-note">Your exact birth time and place matter here — they&apos;re what let us compute your real sidereal Moon sign instead of guessing from your birth date alone.</p>

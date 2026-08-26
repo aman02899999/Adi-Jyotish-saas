@@ -15,6 +15,14 @@ import { getRazorpay } from "@/lib/razorpay";
 export class CartValidationError extends Error {}
 export class OrderNotFoundError extends Error {}
 
+/** Single source of truth for whether the storefront can create or complete real orders. The
+ * shop/product/cart/checkout pages already redirect to a "coming soon" screen while this is
+ * false, but that redirect is UI-only — without this flag also gating order creation and payment
+ * verification (see src/app/api/gemstones/orders/route.ts and orders/[id]/verify/route.ts),
+ * anyone who already knows a product/variant id could still complete a real, paid purchase by
+ * calling those APIs directly, entirely bypassing the "coming soon" page. */
+export const GEMSTONE_STORE_OPEN = false;
+
 const FREE_SHIPPING_THRESHOLD = 2000;
 const FLAT_SHIPPING_FEE = 99;
 
@@ -168,9 +176,9 @@ const PENDING_ORDER_TTL_MS = 15 * 60 * 1000;
 /** Self-healing cleanup for checkout abandonment: a pending order reserves stock (and coupon
  * usage) the moment it's created, before payment — if the customer never completes payment
  * (closed the tab, a failed Razorpay attempt with no retry), that reservation would otherwise
- * never be released. Runs on the housekeeping cron (see .github/workflows/cron.yml) as well as
- * opportunistically from a couple of natural trigger points (new checkout attempts, the admin
- * orders list). Reuses updateOrderStatus so stock/coupon release stays in one place. Also fires a
+ * never be released. Runs opportunistically from a couple of natural trigger points (new checkout
+ * attempts, the admin orders list) — no scheduled job drives this. Reuses updateOrderStatus so
+ * stock/coupon release stays in one place. Also fires a
  * one-time "your cart is still here" recovery email — the 15-minute TTL is too short for a
  * pre-expiry reminder to be worth the added complexity, so this nudges the customer back
  * afterwards instead, which is when re-engagement email typically performs best anyway. */

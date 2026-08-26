@@ -9,7 +9,6 @@ import {
   Filter,
   KeyRound,
   Mail,
-  MapPin,
   Plus,
   Search,
   ShieldCheck,
@@ -18,6 +17,7 @@ import {
   Users,
   X,
 } from "lucide-react";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 
 export type AdminMember = {
   id: string; name: string; email: string; phone: string | null; birthDate: string | null;
@@ -102,7 +102,7 @@ export function AdminMembers({ initialMembers }: { initialMembers: AdminMember[]
         <label className="field"><span>Plan</span><select value={form.plan} onChange={e=>setForm({...form,plan:e.target.value})}><option value="member">Member</option><option value="premium">Premium</option><option value="concierge">Concierge</option></select></label>
         <label className="field"><span>Birth date</span><input type="date" value={form.birthDate} onChange={e=>setForm({...form,birthDate:e.target.value})}/></label>
         <label className="field"><span>Birth time</span><input type="time" value={form.birthTime} onChange={e=>setForm({...form,birthTime:e.target.value})}/></label>
-        <label className="field"><span>Birth place</span><div className="input-prefix icon-prefix"><MapPin size={14}/><input value={form.birthPlace} onChange={e=>setForm({...form,birthPlace:e.target.value})} placeholder="City, country"/></div></label>
+        <label className="field"><span>Birth place</span><PlaceAutocomplete size={14} wrapperClassName="input-prefix icon-prefix" value={form.birthPlace} onChange={(next)=>setForm({...form,birthPlace:next})}/></label>
         <div className="form-options field--full"><label><button type="button" className={`switch ${form.active?"on":""}`} onClick={()=>setForm({...form,active:!form.active})}><i/></button><span><strong>Account access</strong><small>{form.active?"Member can sign in":"All sessions will be revoked"}</small></span></label></div>
         <div className="modal-actions field--full"><button type="button" className="button button--ghost" onClick={()=>setOpen(false)}>Cancel</button><button className="button" disabled={saving}>{saving?"Saving…":editing?"Save member":"Create member"}</button></div>
       </form>

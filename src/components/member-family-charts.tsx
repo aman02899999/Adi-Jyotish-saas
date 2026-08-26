@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Link } from "@/i18n/navigation";
-import { CalendarDays, Check, Clock3, LoaderCircle, MapPin, Plus, Trash2, UserRound, Users, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, LoaderCircle, Plus, Trash2, UserRound, Users, X } from "lucide-react";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 
 type ChartSnapshot = { ascendantRashi: string; moonRashi: string; moonNakshatra: string; sunRashi: string };
 type FamilyMember = {
@@ -86,7 +87,7 @@ export function MemberFamilyCharts({ initialFamilyMembers }: { initialFamilyMemb
             <label><span>Relationship <i>(optional)</i></span><div><Users size={16} /><input value={relationship} onChange={(event) => setRelationship(event.target.value)} placeholder="e.g. Daughter, Father, Spouse" /></div></label>
             <label><span>Birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
             <label><span>Birth time</span><div><Clock3 size={16} /><input type="time" value={birthTime} onChange={(event) => setBirthTime(event.target.value)} /></div></label>
-            <label className="wide"><span>Birth place</span><div><MapPin size={16} /><input value={birthPlace} onChange={(event) => setBirthPlace(event.target.value)} placeholder="City, country" /></div></label>
+            <label className="wide"><span>Birth place</span><PlaceAutocomplete value={birthPlace} onChange={setBirthPlace} /></label>
           </div>
           <div className="ask-answer__actions">
             <button type="button" className="button" disabled={loading} onClick={submit}>{loading ? <><LoaderCircle size={16} className="spin" /> Saving…</> : <>Save family member</>}</button>

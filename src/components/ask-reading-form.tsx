@@ -2,7 +2,8 @@
 
 import { useState } from "react";
 import { Link } from "@/i18n/navigation";
-import { CalendarDays, Check, Clock3, LoaderCircle, MapPin, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
+import { CalendarDays, Check, Clock3, LoaderCircle, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
+import { PlaceAutocomplete } from "@/components/place-autocomplete";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
@@ -160,7 +161,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         <label><span>Your name</span><div><UserRound size={16} /><input value={clientName} onChange={(event) => setClientName(event.target.value)} placeholder="Full name" /></div></label>
         <label><span>Birth date</span><div><CalendarDays size={16} /><input type="date" value={birthDate} onChange={(event) => setBirthDate(event.target.value)} /></div></label>
         <label><span>Exact birth time</span><div><Clock3 size={16} /><input type="time" value={birthTime} onChange={(event) => setBirthTime(event.target.value)} /></div><small>Not sure? Enter your closest known time.</small></label>
-        <label className="wide"><span>Birth place</span><div><MapPin size={16} /><input value={birthPlace} onChange={(event) => setBirthPlace(event.target.value)} placeholder="City, country" /></div></label>
+        <label className="wide"><span>Birth place</span><PlaceAutocomplete value={birthPlace} onChange={setBirthPlace} /></label>
         <label className="wide"><span>Your question</span><textarea rows={4} maxLength={600} value={question} onChange={(event) => setQuestion(event.target.value)} placeholder="What would you like Shree Santram Shashtri to look into?" /><small>{question.length}/600</small></label>
       </div>
       <button type="button" className="button ask-form-card__submit" disabled={loading || (!isFreeEligible && !onlinePaymentsAvailable)} onClick={submit}>
