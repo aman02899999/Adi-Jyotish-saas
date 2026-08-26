@@ -2873,7 +2873,11 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .page-builder__fields input, .page-builder__fields textarea { border:1px solid var(--line); border-radius:9px; padding:8px 10px; font-size:14px; color:var(--ink); background:var(--ivory); }
 .page-builder__add { display:flex; flex-wrap:wrap; gap:8px; padding-top:6px; }
 /* ---- full Kundli detail page ---- */
-.kundli-detail { display:grid; gap:26px; padding-bottom:40px; }
+/* minmax(0,1fr) rather than the implicit 1fr: grid items default to min-width:auto, so the wide
+   nowrap tables below would otherwise force the whole column wider than the dashboard scroll
+   area and clip every card's right edge instead of scrolling inside their own container. */
+.kundli-detail { display:grid; grid-template-columns:minmax(0,1fr); gap:26px; padding-bottom:40px; }
+.kundli-detail > * { min-width:0; }
 .kundli-detail__header { display:flex; flex-wrap:wrap; gap:20px; align-items:flex-end; justify-content:space-between; padding:24px; border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg,rgba(247,243,235,.9),rgba(238,229,215,.7)); }
 .kundli-detail__eyebrow { margin:0 0 6px; color:var(--muted); font-size:11px; letter-spacing:.16em; text-transform:uppercase; }
 .kundli-detail__header h1 { margin:0; font:400 34px/1 var(--serif); letter-spacing:-.02em; }
