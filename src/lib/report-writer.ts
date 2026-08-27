@@ -2,6 +2,7 @@ import "server-only";
 
 import { PDFDocument, PDFFont, PDFPage, StandardFonts, rgb } from "pdf-lib";
 import type { GrahaKey } from "@/lib/astro-engine";
+import { pdfSafe, pdfSafeName } from "@/lib/pdf-text";
 
 /**
  * Shared premium-report layout engine, used by kundli-pdf.ts and varshphal-pdf.ts (both real,
@@ -157,7 +158,7 @@ export class ReportWriter {
 
   private runningHeader() {
     this.text(this.runningTitle, MARGIN, this.y, { size: 8, color: MUTED });
-    const right = `${this.reportId} · Page ${this.pageNumber}`;
+    const right = pdfSafe(`${this.reportId} · Page ${this.pageNumber}`);
     this.text(right, PAGE_WIDTH - MARGIN - this.font.widthOfTextAtSize(right, 8), this.y, { size: 8, color: MUTED });
     this.y -= 14;
     this.ruleAt(this.y);
@@ -168,16 +169,21 @@ export class ReportWriter {
     if (this.y - height < MARGIN + 24) this.newPage();
   }
 
+  /** Every glyph this class draws goes through here, so sanitizing at this one point is what
+   * makes the whole report engine safe against text pdf-lib's standard fonts cannot encode —
+   * see pdf-text.ts. Callers that also *measure* text must sanitize before measuring, so that the
+   * width they compute matches the string that actually gets drawn. */
   private text(value: string, x: number, y: number, options: { size?: number; bold?: boolean; oblique?: boolean; color?: Color } = {}) {
     const font = options.oblique ? this.oblique : options.bold ? this.bold : this.font;
-    this.page.drawText(value, { x, y, size: options.size ?? 10, font, color: options.color ?? INK });
+    this.page.drawText(pdfSafe(value), { x, y, size: options.size ?? 10, font, color: options.color ?? INK });
   }
 
   private centeredText(value: string, y: number, options: { size?: number; bold?: boolean; color?: Color } = {}) {
     const size = options.size ?? 10;
     const font = options.bold ? this.bold : this.font;
-    const width = font.widthOfTextAtSize(value, size);
-    this.text(value, (PAGE_WIDTH - width) / 2, y, options);
+    const safe = pdfSafe(value);
+    const width = font.widthOfTextAtSize(safe, size);
+    this.text(safe, (PAGE_WIDTH - width) / 2, y, options);
   }
 
   private ruleAt(y: number, color: Color = RULE, thickness = 1) {
@@ -185,7 +191,7 @@ export class ReportWriter {
   }
 
   private wrap(value: string, size: number, font: PDFFont, maxWidth: number): string[] {
-    const words = value.split(/\s+/).filter(Boolean);
+    const words = pdfSafe(value).split(/\s+/).filter(Boolean);
     const lines: string[] = [];
     let line = "";
     for (const word of words) {
@@ -212,7 +218,7 @@ export class ReportWriter {
     this.page.drawRectangle({ x: 0, y: PAGE_HEIGHT - 8, width: PAGE_WIDTH, height: 8, color: COPPER });
 
     this.page.drawCircle({ x: PAGE_WIDTH / 2, y: PAGE_HEIGHT - 140, size: 42, color: CREAM, borderColor: COPPER, borderWidth: 1.5 });
-    const initials = options.studioName.split(/\s+/).map((word) => word[0]).slice(0, 3).join("");
+    const initials = pdfSafe(options.studioName).split(/\s+/).map((word) => word[0] ?? "").slice(0, 3).join("");
     const initialsWidth = this.bold.widthOfTextAtSize(initials, 22);
     this.text(initials, PAGE_WIDTH / 2 - initialsWidth / 2, PAGE_HEIGHT - 148, { size: 22, bold: true, color: COPPER });
 
@@ -222,7 +228,7 @@ export class ReportWriter {
     this.y = PAGE_HEIGHT - 340;
     this.centeredText("Prepared exclusively for", this.y, { size: 10, color: MUTED });
     this.y -= 26;
-    this.centeredText(options.subjectName, this.y, { size: 26, bold: true });
+    this.centeredText(pdfSafeName(options.subjectName), this.y, { size: 26, bold: true });
     this.y -= 40;
 
     this.ruleAt(this.y, COPPER_LIGHT, 1.5);
@@ -265,7 +271,7 @@ export class ReportWriter {
     const page = this.tocPage;
     let y = this.tocCursorY;
     for (const section of this.sections) {
-      const label = section.title;
+      const label = pdfSafe(section.title);
       const pageLabel = String(section.page);
       page.drawText(label, { x: MARGIN, y, size: 11, font: this.font, color: INK });
       const pageLabelWidth = this.bold.widthOfTextAtSize(pageLabel, 11);

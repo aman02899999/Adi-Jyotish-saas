@@ -4,6 +4,7 @@ import { useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { CalendarDays, Check, Clock3, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { walletShortfallMessage } from "@/components/wallet-pay";
 import { PlaceAutocomplete } from "@/components/place-autocomplete";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
@@ -97,7 +98,18 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
         body: JSON.stringify({ clientName, birthDate, birthTime, birthPlace }),
       });
       const data = await response.json();
-      if (!response.ok || !data.orderId) throw new Error(data.error || "Your report could not be started.");
+      if (!response.ok) throw new Error(data.error || "Your report could not be started.");
+      if (!data.orderId) {
+        // No card order means Razorpay is not configured on this deployment — settle from the
+        // member's wallet instead. A short balance comes back as a 402 naming the exact top-up.
+        const walletPay = await fetch(`/api/ai-readings/${data.readingId}/pay-from-wallet`, { method: "POST" });
+        const walletData = await walletPay.json();
+        if (walletPay.ok) {
+          if (walletData.answer) { setAnswer(walletData.answer); setLoading(false); return; }
+          setWaiting(true); setLoading(false); await pollForAnswer(data.readingId, 6); return;
+        }
+        throw new Error(walletShortfallMessage(walletData) ?? walletData.error ?? "Your report could not be started.");
+      }
       setReportId(data.readingId);
 
       await openRazorpayCheckout({

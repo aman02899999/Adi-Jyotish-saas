@@ -4,6 +4,7 @@ import { useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { Check, LoaderCircle, Plus, ScanFace, Sparkles, UploadCloud, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { walletShortfallMessage } from "@/components/wallet-pay";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
 type MemberPrefill = { name: string; email: string };
@@ -115,7 +116,18 @@ export function FaceReadingForm({ member, price, currency, onlinePaymentsAvailab
       for (const photo of photos) form.append("faceImages", photo.file);
       const response = await fetch("/api/ai-readings/face", { method: "POST", body: form });
       const data = await response.json();
-      if (!response.ok || !data.orderId) throw new Error(data.error || "Aapki report shuru nahi ho saki.");
+      if (!response.ok) throw new Error(data.error || "Aapki report shuru nahi ho saki.");
+      if (!data.orderId) {
+        // No card order means Razorpay is not configured on this deployment — settle from the
+        // member's wallet instead. A short balance comes back as a 402 naming the exact top-up.
+        const walletPay = await fetch(`/api/ai-readings/${data.readingId}/pay-from-wallet`, { method: "POST" });
+        const walletData = await walletPay.json();
+        if (walletPay.ok) {
+          if (walletData.answer) { setAnswer(walletData.answer); setLoading(false); return; }
+          setWaiting(true); setLoading(false); await pollForAnswer(data.readingId, 6); return;
+        }
+        throw new Error(walletShortfallMessage(walletData) ?? walletData.error ?? "Aapki report shuru nahi ho saki.");
+      }
       setReadingId(data.readingId);
 
       await openRazorpayCheckout({

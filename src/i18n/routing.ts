@@ -9,6 +9,17 @@ export const locales = ["en", "hi"] as const;
 export type AppLocale = (typeof locales)[number];
 export const defaultLocale: AppLocale = "en";
 
+/**
+ * What a signed-in member gets unless they pick something else.
+ *
+ * Deliberately different from `defaultLocale`: anonymous visitors and search engines still get
+ * English at unprefixed URLs (so existing links and SEO are untouched), but once someone signs in
+ * they are one of this platform's actual users, and this platform speaks Hinglish — the readings
+ * themselves are written that way. The language switcher overrides this at any time and the
+ * choice is stored on the member, so it is a starting point rather than a lock.
+ */
+export const SIGNED_IN_DEFAULT_LOCALE: AppLocale = "hi";
+
 export const localeNames: Record<AppLocale, string> = {
   en: "English",
   hi: "हिंदी",

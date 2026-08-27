@@ -1,9 +1,9 @@
-import { NextResponse } from "next/server";
+import { logoutRedirect } from "@/lib/logout-redirect";
 import { revokeMemberSession } from "@/lib/member-auth";
 
 export const dynamic = "force-dynamic";
 
-export async function POST(request: Request) {
+export async function POST() {
   await revokeMemberSession();
-  return NextResponse.redirect(new URL("/account", request.url), { status: 303 });
+  return logoutRedirect("/account");
 }

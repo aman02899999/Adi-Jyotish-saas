@@ -107,6 +107,7 @@ export default async function DashboardPage() {
               <div className="chart-progress">
                 <div><small>Lagna (Ascendant)</small><strong>{rashiName(kundli.chart.ascendantRashiIndex)} · {formatDegree(kundli.chart.ascendantDegree)}</strong>{moon && <p>Moon in {rashiName(moon.rashiIndex)}, {NAKSHATRAS[moon.nakshatraIndex]} nakshatra.</p>}</div>
               </div>
+              <Link href="/dashboard/kundli" className="button button--small kundli-card__cta">See full Kundli <ArrowUpRight size={14} /></Link>
             </>
           ) : (
             <div className="kundli-empty">

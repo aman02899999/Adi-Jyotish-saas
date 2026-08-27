@@ -5,6 +5,7 @@ import { Link } from "@/i18n/navigation";
 import { CalendarDays, Check, Clock3, LoaderCircle, MessageCircleQuestion, Sparkles, UserRound, X } from "lucide-react";
 import { PlaceAutocomplete } from "@/components/place-autocomplete";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
+import { walletShortfallMessage } from "@/components/wallet-pay";
 import { ReadingShareNudge } from "@/components/reading-share-nudge";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
@@ -91,7 +92,17 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         return;
       }
 
-      if (!data.orderId) throw new Error(data.error || "Your reading could not be started.");
+      if (!data.orderId) {
+        // No card order means Razorpay is not configured on this deployment — settle from the
+        // member's wallet instead. A short balance comes back as a 402 naming the exact top-up.
+        const walletPay = await fetch(`/api/ai-readings/${data.readingId}/pay-from-wallet`, { method: "POST" });
+        const walletData = await walletPay.json();
+        if (walletPay.ok) {
+          if (walletData.answer) { setAnswer(walletData.answer); setLoading(false); return; }
+          setWaiting(true); setLoading(false); await pollForAnswer(data.readingId, 6); return;
+        }
+        throw new Error(walletShortfallMessage(walletData) ?? walletData.error ?? "Your reading could not be started.");
+      }
       setReadingId(data.readingId);
 
       await openRazorpayCheckout({

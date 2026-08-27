@@ -1,5 +1,6 @@
 import { AI_LAL_KITAB_READING_PRICE, AI_READING_CURRENCY, attachRazorpayOrder, createPendingLalKitabReading } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
+import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -20,9 +21,6 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("ai-lalkitab-reading-create", `member:${member.id}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const razorpay = getRazorpay();
-  if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
-
   const body = (await request.json()) as CreatePayload;
   const clientName = body.clientName?.trim() ?? "";
   const birthDate = body.birthDate?.trim() ?? "";
@@ -37,13 +35,23 @@ export async function POST(request: Request) {
 
   const reading = await createPendingLalKitabReading({ memberId: member.id, clientName, birthDate, birthTime, birthPlace, question });
 
-  const order = await razorpay.orders.create({
-    amount: AI_LAL_KITAB_READING_PRICE * 100,
-    currency: AI_READING_CURRENCY,
-    receipt: `lalkitab-reading-${reading.id}-${Date.now()}`,
-    notes: { memberId: String(member.id), readingId: String(reading.id) },
-  });
-  await attachRazorpayOrder(reading.id, order.id);
+  // Card payment is optional: with no Razorpay keys the reading is still created and can be paid
+  // from the member's wallet, which is the only way this works on a deployment that has not
+  // finished setting up online payments yet.
+  // A QA bypass account never gets a card order, so it always settles through the
+  // pay-from-wallet route — which recognises the bypass and charges nothing.
+  const razorpay = memberBypassesPayment(member) ? null : getRazorpay();
 
-  return Response.json({ readingId: reading.id, orderId: order.id, amount: order.amount, currency: order.currency, key: getRazorpayKeyId() });
+  let order = null;
+  if (razorpay) {
+    order = await razorpay.orders.create({
+      amount: AI_LAL_KITAB_READING_PRICE * 100,
+      currency: AI_READING_CURRENCY,
+      receipt: `lalkitab-reading-${reading.id}-${Date.now()}`,
+      notes: { memberId: String(member.id), readingId: String(reading.id) },
+    });
+    await attachRazorpayOrder(reading.id, order.id);
+  }
+
+  return Response.json({ readingId: reading.id, price: reading.price, currency: reading.currency, orderId: order?.id ?? null, amount: order?.amount ?? null, key: order ? getRazorpayKeyId() : null });
 }

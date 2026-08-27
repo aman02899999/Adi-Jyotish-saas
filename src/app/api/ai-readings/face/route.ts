@@ -1,5 +1,7 @@
 import { attachRazorpayOrder, AI_FACE_READING_PRICE, AI_READING_CURRENCY, createPendingFaceReading, reserveReadingId, uploadFaceImage } from "@/lib/ai-readings";
+import { isStorageConfigured } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
+import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 
@@ -23,8 +25,11 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("ai-face-reading-create", `member:${member.id}:ip:${requestIp(request)}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const razorpay = getRazorpay();
-  if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
+  // Without a Storage bucket there is nowhere to put the face photographs, and the Admin SDK would
+  // otherwise throw a raw bucket error that reaches the member as an unexplained 500.
+  if (!isStorageConfigured()) {
+    return Response.json({ error: "Photo uploads are not configured on this site yet. Please try one of the other readings, or contact support." }, { status: 503 });
+  }
 
   let form: FormData;
   try {
@@ -56,13 +61,23 @@ export async function POST(request: Request) {
 
   const reading = await createPendingFaceReading({ readingId, memberId: member.id, clientName, faceImagePaths, question });
 
-  const order = await razorpay.orders.create({
-    amount: AI_FACE_READING_PRICE * 100,
-    currency: AI_READING_CURRENCY,
-    receipt: `face-reading-${reading.id}-${Date.now()}`,
-    notes: { memberId: String(member.id), readingId: String(reading.id) },
-  });
-  await attachRazorpayOrder(reading.id, order.id);
+  // Card payment is optional: with no Razorpay keys the reading is still created and can be paid
+  // from the member's wallet, which is the only way this works on a deployment that has not
+  // finished setting up online payments yet.
+  // A QA bypass account never gets a card order, so it always settles through the
+  // pay-from-wallet route — which recognises the bypass and charges nothing.
+  const razorpay = memberBypassesPayment(member) ? null : getRazorpay();
 
-  return Response.json({ readingId: reading.id, orderId: order.id, amount: order.amount, currency: order.currency, key: getRazorpayKeyId() });
+  let order = null;
+  if (razorpay) {
+    order = await razorpay.orders.create({
+      amount: AI_FACE_READING_PRICE * 100,
+      currency: AI_READING_CURRENCY,
+      receipt: `face-reading-${reading.id}-${Date.now()}`,
+      notes: { memberId: String(member.id), readingId: String(reading.id) },
+    });
+    await attachRazorpayOrder(reading.id, order.id);
+  }
+
+  return Response.json({ readingId: reading.id, price: reading.price, currency: reading.currency, orderId: order?.id ?? null, amount: order?.amount ?? null, key: order ? getRazorpayKeyId() : null });
 }

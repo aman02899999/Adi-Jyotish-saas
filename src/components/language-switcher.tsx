@@ -16,7 +16,22 @@ export function LanguageSwitcher({ compact }: { compact?: boolean }) {
       {locales.map((item, index) => (
         <span key={item}>
           {index > 0 && <i aria-hidden="true">/</i>}
-          <Link href={pathname} locale={item} className={item === locale ? "active" : undefined}>
+          <Link
+            href={pathname}
+            locale={item}
+            className={item === locale ? "active" : undefined}
+            // next-intl's own cookie already carries the choice for this browser; this also records
+            // it against the signed-in member so it follows them to another device. Fire-and-forget
+            // on purpose — the navigation must not wait on it, and for a signed-out visitor the
+            // route is a deliberate no-op.
+            onClick={() => {
+              void fetch("/api/member/locale", {
+                method: "POST",
+                headers: { "Content-Type": "application/json" },
+                body: JSON.stringify({ locale: item }),
+              }).catch(() => {});
+            }}
+          >
             {compact ? item.toUpperCase() : localeNames[item]}
           </Link>
         </span>

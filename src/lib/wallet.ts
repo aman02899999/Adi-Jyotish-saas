@@ -186,6 +186,64 @@ export async function creditWalletBonus({ memberId, amount, type, referenceType,
   });
 }
 
+/**
+ * What a one-shot wallet purchase would cost this member right now, without moving any money —
+ * so a route can answer "you need ₹150 more" before it creates anything, and the UI can show the
+ * shortfall and a recharge prompt rather than a bare failure.
+ */
+export async function quoteWalletPayment(memberId: string, amount: number): Promise<{ balance: number; price: number; sufficient: boolean; shortfall: number; currency: string }> {
+  const wallet = await getOrCreateWallet(memberId);
+  return {
+    balance: wallet.balance,
+    price: amount,
+    sufficient: wallet.balance >= amount,
+    shortfall: Math.max(0, amount - wallet.balance),
+    currency: wallet.currency,
+  };
+}
+
+/**
+ * Debits a wallet outright for a single fixed-price purchase — a reading, a report, anything
+ * bought once for a known amount. This is the counterpart to createHold/captureHold, which exist
+ * for metered chat where the final cost isn't known up front; paying for a reading that way would
+ * mean reserving and then immediately capturing the identical amount.
+ *
+ * Idempotent per `referenceType`+`referenceId`, using that pair as the entry's document id: a
+ * double-submitted form, a retried request, or a duplicate browser tab re-runs this and gets the
+ * existing balance back instead of being charged twice. That guarantee is the reason callers must
+ * pass a stable reference (the reading's id) rather than letting the entry id be generated.
+ *
+ * Throws InsufficientBalanceError when the wallet cannot cover the amount — callers should
+ * normally quote first so the member sees the shortfall, but the check is repeated inside the
+ * transaction because a quote can go stale between the two calls.
+ */
+export async function debitWallet({ memberId, amount, type, referenceType, referenceId }: {
+  memberId: string;
+  amount: number;
+  type: string;
+  referenceType: string;
+  referenceId: string;
+}): Promise<Wallet> {
+  if (!(amount > 0)) throw new Error("A wallet debit must be for a positive amount.");
+  await getOrCreateWallet(memberId);
+  const walletRef = walletsCollection().doc(memberId);
+  const entryRef = walletRef.collection("entries").doc(`${referenceType}_${referenceId}`);
+
+  return db.runTransaction(async (tx) => {
+    const [walletSnap, entrySnap] = await Promise.all([tx.get(walletRef), tx.get(entryRef)]);
+    if (!walletSnap.exists) throw new Error("Wallet not found.");
+    const wallet = walletFromSnap(walletSnap);
+    if (entrySnap.exists) return wallet; // already paid for this exact thing — idempotent no-op
+    if (wallet.balance < amount) throw new InsufficientBalanceError("Your wallet balance is too low for this purchase.");
+
+    const balanceAfter = wallet.balance - amount;
+    const now = FieldValue.serverTimestamp();
+    tx.set(entryRef, { type, amount: -amount, balanceAfter, referenceType, referenceId, razorpayPaymentId: null, createdAt: now });
+    tx.update(walletRef, { balance: balanceAfter, updatedAt: now });
+    return { ...wallet, balance: balanceAfter };
+  });
+}
+
 /** Reserves funds against a wallet. Throws InsufficientBalanceError if the wallet cannot cover the amount. */
 export async function createHold({ memberId, amount, referenceType }: { memberId: string; amount: number; referenceType: string }): Promise<WalletHold> {
   await getOrCreateWallet(memberId);

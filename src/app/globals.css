@@ -2872,3 +2872,151 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .glossary-strip__label { font-weight:600; color:var(--ink); margin-right:2px; }
 .page-builder__fields input, .page-builder__fields textarea { border:1px solid var(--line); border-radius:9px; padding:8px 10px; font-size:14px; color:var(--ink); background:var(--ivory); }
 .page-builder__add { display:flex; flex-wrap:wrap; gap:8px; padding-top:6px; }
+/* ---- full Kundli detail page ---- */
+/* minmax(0,1fr) rather than the implicit 1fr: grid items default to min-width:auto, so the wide
+   nowrap tables below would otherwise force the whole column wider than the dashboard scroll
+   area and clip every card's right edge instead of scrolling inside their own container. */
+.kundli-detail { display:grid; grid-template-columns:minmax(0,1fr); gap:26px; padding-bottom:40px; }
+.kundli-detail > * { min-width:0; }
+.kundli-detail__header { display:flex; flex-wrap:wrap; gap:20px; align-items:flex-end; justify-content:space-between; padding:24px; border:1px solid var(--line); border-radius:16px; background:linear-gradient(135deg,rgba(247,243,235,.9),rgba(238,229,215,.7)); }
+.kundli-detail__eyebrow { margin:0 0 6px; color:var(--muted); font-size:11px; letter-spacing:.16em; text-transform:uppercase; }
+.kundli-detail__header h1 { margin:0; font:400 34px/1 var(--serif); letter-spacing:-.02em; }
+.kundli-detail__birth { margin:8px 0 0; color:var(--muted); font-size:14px; }
+.kundli-detail__meta { display:grid; grid-template-columns:repeat(2,minmax(0,1fr)); gap:12px 26px; margin:0; }
+.kundli-detail__meta dt { color:var(--muted); font-size:11px; letter-spacing:.1em; text-transform:uppercase; }
+.kundli-detail__meta dd { margin:2px 0 0; font:400 16px var(--serif); color:var(--copper-dark); }
+.kundli-detail__section { padding:22px; border:1px solid var(--line); border-radius:16px; background:rgba(247,243,235,.6); }
+.kundli-detail__section h2 { margin:0 0 14px; font:400 22px/1 var(--serif); letter-spacing:-.02em; }
+.kundli-detail__lede { margin:0 0 14px; max-width:70ch; color:var(--muted); font-size:14px; line-height:1.65; }
+.kundli-detail__caption { margin:10px 0 0; color:var(--muted); font-size:13px; line-height:1.6; }
+.kundli-detail__disclaimer { margin:0; padding:18px 22px; border:1px dashed var(--line); border-radius:14px; max-width:none; color:var(--muted); font-size:12.5px; line-height:1.7; }
+
+.kundli-panchang { display:grid; grid-template-columns:repeat(auto-fill,minmax(180px,1fr)); gap:12px; }
+.kundli-panchang > div { padding:12px 14px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.45); }
+.kundli-panchang small { display:block; color:var(--muted); font-size:10.5px; letter-spacing:.1em; text-transform:uppercase; }
+.kundli-panchang strong { display:block; margin:4px 0 2px; font:400 17px var(--serif); color:var(--copper-dark); }
+.kundli-panchang span { color:var(--faint); font-size:12px; }
+
+.kundli-detail__charts { display:grid; grid-template-columns:repeat(auto-fit,minmax(280px,1fr)); gap:26px; }
+.kundli-detail__charts > div { min-width:0; }
+
+.kundli-table-scroll { overflow-x:auto; margin:0 -6px; padding:0 6px; }
+.kundli-table { width:100%; border-collapse:collapse; font-size:13.5px; }
+.kundli-table th, .kundli-table td { padding:9px 11px; text-align:left; border-bottom:1px solid var(--line); white-space:nowrap; }
+.kundli-table thead th { color:var(--muted); font:600 11px var(--sans); letter-spacing:.09em; text-transform:uppercase; }
+.kundli-table tbody th { font:400 14px var(--serif); color:var(--ink); }
+.kundli-table tbody th small { display:block; color:var(--faint); font:400 11px var(--sans); }
+.kundli-table tbody tr:hover { background:rgba(255,255,255,.45); }
+.kundli-table__num { font-variant-numeric:tabular-nums; }
+.kundli-table__sig { white-space:normal; min-width:200px; color:var(--muted); font-size:12.5px; }
+.kundli-table__bar { width:120px; }
+.kundli-table__flags { display:flex; flex-wrap:wrap; gap:4px; }
+.kundli-table--varga td { font-size:12.5px; }
+
+.dignity-chip { display:inline-block; padding:2px 8px; border-radius:999px; font-size:11.5px; white-space:nowrap; background:rgba(190,136,100,.14); color:var(--copper-dark); }
+.dignity-chip--exalted { background:rgba(72,132,86,.16); color:#2f6b3f; }
+.dignity-chip--moolatrikona, .dignity-chip--own { background:rgba(120,150,90,.16); color:#4e6b32; }
+.dignity-chip--debilitated { background:rgba(168,64,52,.14); color:#8f3629; }
+.dignity-chip--great-enemy, .dignity-chip--enemy { background:rgba(168,110,52,.14); color:#8a5320; }
+
+.kundli-flag { padding:2px 6px; border:1px solid var(--line); border-radius:6px; font-size:11px; color:var(--muted); background:rgba(255,255,255,.5); }
+.kundli-flag--warn { border-color:rgba(168,64,52,.3); color:#8f3629; }
+.kundli-flag--muted { color:var(--faint); }
+
+.bindu-bar { display:block; height:7px; border-radius:999px; background:rgba(83,62,48,.1); overflow:hidden; }
+.bindu-bar > span { display:block; height:100%; border-radius:999px; background:var(--copper-pale); }
+.bindu-bar--strong > span { background:#6f9c74; }
+.bindu-bar--weak > span { background:#c98a72; }
+
+.dasha-current { display:flex; flex-wrap:wrap; align-items:baseline; gap:6px 12px; margin-bottom:16px; padding:14px 16px; border:1px solid rgba(169,88,56,.24); border-radius:12px; background:rgba(190,136,100,.1); }
+.dasha-current > span { color:var(--muted); font-size:11px; letter-spacing:.12em; text-transform:uppercase; }
+.dasha-current strong { font:400 19px var(--serif); color:var(--copper-dark); }
+.dasha-current small { color:var(--muted); font-size:12.5px; }
+
+.dasha-timeline { list-style:none; margin:0; padding:0; display:grid; gap:8px; }
+.dasha-timeline > li { display:grid; grid-template-columns:minmax(120px,1fr) auto auto; gap:6px 14px; align-items:baseline; padding:11px 14px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.4); }
+.dasha-timeline > li.is-current { border-color:rgba(169,88,56,.32); background:rgba(190,136,100,.11); }
+.dasha-timeline strong { font:400 16px var(--serif); }
+.dasha-timeline > li > span { color:var(--muted); font-size:12.5px; font-variant-numeric:tabular-nums; }
+.dasha-timeline > li > small { color:var(--faint); font-size:12px; }
+.dasha-antar { grid-column:1/-1; list-style:none; margin:8px 0 0; padding:10px 0 0; border-top:1px solid var(--line); display:grid; gap:4px; }
+.dasha-antar li { display:flex; justify-content:space-between; gap:12px; padding:4px 8px; border-radius:7px; font-size:12.5px; color:var(--muted); }
+.dasha-antar li.is-current { background:rgba(169,88,56,.13); color:var(--copper-dark); font-weight:600; }
+
+.yoga-grid { display:grid; grid-template-columns:repeat(auto-fill,minmax(260px,1fr)); gap:12px; }
+.yoga-card { padding:15px 16px; border:1px solid var(--line); border-left:3px solid var(--copper-pale); border-radius:11px; background:rgba(255,255,255,.5); }
+.yoga-card--raja, .yoga-card--mahapurusha { border-left-color:var(--gold); }
+.yoga-card--challenging { border-left-color:#c98a72; }
+.yoga-card header { display:flex; align-items:center; justify-content:space-between; gap:10px; margin-bottom:7px; }
+.yoga-card h3 { margin:0; font:400 17px var(--serif); }
+.yoga-strength { padding:2px 8px; border-radius:999px; font-size:10.5px; letter-spacing:.06em; text-transform:uppercase; background:rgba(83,62,48,.09); color:var(--muted); }
+.yoga-strength--strong { background:rgba(72,132,86,.16); color:#2f6b3f; }
+.yoga-card p { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
+.yoga-card__evidence { margin-top:8px !important; padding-top:8px; border-top:1px dotted var(--line); color:var(--faint) !important; font-size:12px !important; }
+
+.dosha-grid { display:grid; grid-template-columns:repeat(auto-fit,minmax(240px,1fr)); gap:12px; }
+.dosha-card { padding:15px 16px; border:1px solid var(--line); border-radius:11px; background:rgba(255,255,255,.5); }
+.dosha-card--present { border-color:rgba(169,88,56,.28); background:rgba(190,136,100,.09); }
+.dosha-card h3 { margin:0 0 7px; font:400 17px var(--serif); }
+.dosha-card p { margin:0; color:var(--muted); font-size:13px; line-height:1.6; }
+
+.kundli-card__cta { margin-top:12px; }
+.kundli-empty-page { padding:32px; text-align:center; }
+.kundli-empty-page h1 { margin:0 0 10px; font:400 30px var(--serif); }
+.kundli-empty-page p { margin:0 auto 18px; max-width:56ch; color:var(--muted); line-height:1.7; }
+
+@media (max-width:640px) {
+  .kundli-detail__header { padding:18px; }
+  .kundli-detail__header h1 { font-size:27px; }
+  .kundli-detail__section { padding:16px; }
+  .kundli-detail__meta { grid-template-columns:1fr 1fr; gap:10px 16px; }
+  .dasha-timeline > li { grid-template-columns:1fr; }
+}
+
+/* ── Pay-from-wallet control (shared by every paid reading form) ─────────────────────────────── */
+/* Two visual states from one component: a normal row when the balance covers the purchase, and an
+   amber "you're short" row that carries the recharge link. The short state is deliberately the
+   louder of the two — it is the one the member has to act on. */
+.wallet-pay {
+  display: grid;
+  grid-template-columns: auto minmax(0, 1fr) auto;
+  align-items: center;
+  gap: 12px;
+  padding: 14px 16px;
+  margin: 14px 0;
+  border: 1px solid var(--rule, #e2ddd6);
+  border-radius: 14px;
+  background: #faf8f5;
+}
+.wallet-pay > svg { color: #a9582f; flex-shrink: 0; }
+.wallet-pay strong { display: block; font-size: 14px; font-weight: 650; }
+.wallet-pay small { display: block; margin-top: 2px; font-size: 12.5px; opacity: .72; line-height: 1.45; }
+.wallet-pay .button { white-space: nowrap; }
+
+.wallet-pay--short {
+  border-color: #e8c9a0;
+  background: #fdf6ec;
+}
+.wallet-pay--short > svg { color: #b4741f; }
+.wallet-pay--short strong { color: #8a5a12; }
+
+@media (max-width: 560px) {
+  .wallet-pay {
+    grid-template-columns: auto minmax(0, 1fr);
+    row-gap: 10px;
+  }
+  .wallet-pay .button { grid-column: 1 / -1; justify-content: center; }
+}
+
+.gemini-health { margin-bottom:12px; padding:12px 14px; border:1px solid var(--line); border-radius:9px; background:var(--ivory); }
+.gemini-health-row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.gemini-health-row > div { display:flex; flex-direction:column; gap:3px; }
+.gemini-health-row strong { font-size:12px; }
+.gemini-health-row small { color:var(--muted); font-size:12px; max-width:62ch; }
+.gemini-health-result { display:flex; align-items:flex-start; gap:8px; margin:10px 0 0; font-size:12px; line-height:1.5; }
+.gemini-health-result svg { flex:none; margin-top:2px; }
+.gemini-health-result.is-good { color:#1c7a4a; }
+.gemini-health-result.is-bad { color:#a13b2e; }
+.gemini-health-detail { display:block; margin-top:4px; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px; word-break:break-word; }
+.gemini-health-spin { animation:gemini-health-spin 1s linear infinite; }
+@keyframes gemini-health-spin { to { transform:rotate(360deg); } }

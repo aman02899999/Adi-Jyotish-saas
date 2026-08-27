@@ -2,12 +2,17 @@ import "server-only";
 
 import { cookies } from "next/headers";
 import { getAuth } from "firebase-admin/auth";
+import { hasLocale } from "next-intl";
+import { locales, SIGNED_IN_DEFAULT_LOCALE } from "@/i18n/routing";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 
 const COOKIE_NAME = "jyotish_member_session";
 const SESSION_DAYS = 14;
 const SESSION_MS = SESSION_DAYS * 24 * 60 * 60 * 1000;
+
+/** next-intl's own locale-detection cookie — the site reads this to pick a language. */
+const LOCALE_COOKIE = "NEXT_LOCALE";
 
 export type MemberIdentity = {
   id: string;
@@ -21,6 +26,8 @@ export type MemberIdentity = {
   onboardingComplete: boolean;
   emailVerified: boolean;
   totpEnabled: boolean;
+  /** QA-only: this member settles every paid flow at zero cost. See lib/payment-bypass.ts. */
+  paymentBypass: boolean;
 };
 
 type MemberDoc = {
@@ -34,6 +41,10 @@ type MemberDoc = {
   onboardingComplete: boolean;
   active: boolean;
   totpEnabled?: boolean;
+  paymentBypass?: boolean;
+  /** The member's chosen interface language. Absent on accounts created before this existed,
+   * which is why the sign-in path falls back to SIGNED_IN_DEFAULT_LOCALE rather than assuming. */
+  locale?: string;
 };
 
 /** Verifies a client-obtained Firebase ID token, creates a long-lived session cookie, and
@@ -57,6 +68,7 @@ export async function createMemberSession(idToken: string, initialName?: string,
       plan: "member",
       onboardingComplete: false,
       active: true,
+      locale: SIGNED_IN_DEFAULT_LOCALE,
       createdAt: FieldValue.serverTimestamp(),
       updatedAt: FieldValue.serverTimestamp(),
       lastLoginAt: FieldValue.serverTimestamp(),
@@ -79,7 +91,37 @@ export async function createMemberSession(idToken: string, initialName?: string,
     maxAge: SESSION_MS / 1000,
   });
 
+  // Signed-in members land in Hinglish unless they have chosen otherwise. This is the audience's
+  // own register — the readings themselves are already written that way — so English is the wrong
+  // thing to greet someone with after they sign in. NEXT_LOCALE is next-intl's own detection
+  // cookie, so setting it here steers the whole site, and the language switcher overwrites it the
+  // moment a member picks something else. Their choice is stored on the member document too, so it
+  // follows them to a new browser rather than living only in this cookie.
+  const stored = (snap.exists ? (snap.data() as MemberDoc).locale : null) ?? SIGNED_IN_DEFAULT_LOCALE;
+  const preferred = hasLocale(locales, stored) ? stored : SIGNED_IN_DEFAULT_LOCALE;
+  store.set(LOCALE_COOKIE, preferred, {
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: SESSION_MS / 1000,
+  });
+
   return uid;
+}
+
+/** Records a member's language choice so it survives a new browser or device, and mirrors it into
+ * the detection cookie the rest of the site reads. */
+export async function setMemberLocale(memberId: string, locale: string) {
+  if (!hasLocale(locales, locale)) return false;
+  await db.collection("members").doc(memberId).update({ locale, updatedAt: FieldValue.serverTimestamp() });
+  const store = await cookies();
+  store.set(LOCALE_COOKIE, locale, {
+    sameSite: "lax",
+    secure: process.env.NODE_ENV === "production",
+    path: "/",
+    maxAge: SESSION_MS / 1000,
+  });
+  return true;
 }
 
 export async function getCurrentMember(): Promise<MemberIdentity | null> {
@@ -113,6 +155,9 @@ export async function getCurrentMember(): Promise<MemberIdentity | null> {
     onboardingComplete: data.onboardingComplete,
     emailVerified,
     totpEnabled: data.totpEnabled === true,
+    // Read straight off the member document, which only the Admin SDK can write — there is no
+    // route that lets a member set this on themselves. See lib/payment-bypass.ts.
+    paymentBypass: data.paymentBypass === true,
   };
 }
 

@@ -41,6 +41,16 @@ if (process.env.NODE_ENV !== "production") {
 export const storage = getStorage(getFirebaseAdminApp());
 export const bucket = () => storage.bucket();
 
+/** Whether a Storage bucket is actually configured on this deployment. Photo uploads (palm and
+ * face readings) are the only features that need one, and without FIREBASE_STORAGE_BUCKET the
+ * Admin SDK throws a raw "Bucket name not specified or invalid" from deep inside `bucket()` —
+ * which surfaced to members as a bare 500 on upload, with nothing explaining what went wrong.
+ * Callers check this first so they can answer the same way every other unconfigured dependency
+ * does: a clear 503 naming what is missing. */
+export function isStorageConfigured() {
+  return Boolean(process.env.FIREBASE_STORAGE_BUCKET);
+}
+
 /** gRPC FAILED_PRECONDITION: thrown for a missing composite index, and (transiently) while a
  * just-deployed one is still building. Distinguishes that from real query bugs. */
 export function isIndexBuildingError(error: unknown): boolean {
