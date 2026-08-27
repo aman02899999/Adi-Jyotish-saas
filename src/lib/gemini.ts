@@ -282,3 +282,83 @@ export async function getPractitionerChatReply({ systemPrompt, transcript }: {
 }) {
   return callGemini({ systemPrompt, parts: [{ text: transcript }], maxOutputTokens: 500 });
 }
+
+/** Google's errors are a JSON envelope whose one useful line ("API key not valid...") is buried in
+ * a wrapper of type URLs and metadata. Truncating the raw body cuts it off mid-object and shows an
+ * admin nothing actionable, so pull out the message when there is one and fall back to raw text. */
+function readGeminiErrorMessage(body: string) {
+  try {
+    const message = JSON.parse(body)?.error?.message;
+    if (typeof message === "string" && message.trim()) return message.trim().slice(0, 400);
+  } catch {
+    // Not JSON — an HTML error page from a proxy, say. The raw text is the best we have.
+  }
+  return body.trim().slice(0, 400);
+}
+
+export type GeminiHealth =
+  | { status: "unconfigured"; model: string }
+  | { status: "ok"; model: string; latencyMs: number; usageToday: number; dailyLimit: number }
+  | { status: "error"; model: string; httpStatus: number | null; detail: string };
+
+/**
+ * Proves the configured key actually answers, rather than merely existing.
+ *
+ * `isGeminiConfigured()` only reads the environment variable, so a key that is present but
+ * revoked, mistyped, restricted to the wrong referrer, or out of quota looks identical to a
+ * healthy one — the admin sees no warning at all, while every member who pays for a reading gets
+ * "still being prepared" forever. That gap is the single hardest thing to diagnose about this
+ * integration, because nothing on any page distinguishes the two states.
+ *
+ * So this sends one real request to the same MODEL and ENDPOINT the readings use, and reports
+ * exactly what came back. It deliberately does NOT claim daily budget: it is a handful of tokens,
+ * an operator checking their own configuration should not be able to eat into members' allowance,
+ * and a check that fails *because* the budget is exhausted would report the wrong problem. It
+ * reports today's usage against the limit separately instead, which is the same information
+ * without conflating it with key validity.
+ */
+export async function checkGeminiHealth(): Promise<GeminiHealth> {
+  const apiKey = process.env.GEMINI_API_KEY;
+  if (!apiKey) return { status: "unconfigured", model: MODEL };
+
+  const startedAt = Date.now();
+  try {
+    const response = await fetch(`${ENDPOINT}?key=${apiKey}`, {
+      method: "POST",
+      headers: { "Content-Type": "application/json" },
+      body: JSON.stringify({
+        contents: [{ role: "user", parts: [{ text: "Reply with the single word: OK" }] }],
+        generationConfig: { maxOutputTokens: 8 },
+      }),
+      // Without this the check inherits the platform request timeout and the admin watches a
+      // spinner for a minute before learning anything.
+      signal: AbortSignal.timeout(20_000),
+    });
+
+    if (!response.ok) {
+      const body = await response.text().catch(() => "");
+      return { status: "error", model: MODEL, httpStatus: response.status, detail: readGeminiErrorMessage(body) || response.statusText };
+    }
+
+    const data = await response.json();
+    const text = data?.candidates?.[0]?.content?.parts?.map((part: { text?: string }) => part.text ?? "").join("").trim();
+    if (!text) {
+      return { status: "error", model: MODEL, httpStatus: response.status, detail: "The request succeeded but the model returned no text." };
+    }
+
+    const today = new Date().toISOString().slice(0, 10);
+    const usage = await db.collection("geminiUsage").doc(today).get().catch(() => null);
+    return {
+      status: "ok",
+      model: MODEL,
+      latencyMs: Date.now() - startedAt,
+      usageToday: (usage?.data() as { count?: number } | undefined)?.count ?? 0,
+      dailyLimit: DAILY_CALL_LIMIT,
+    };
+  } catch (error) {
+    const detail = error instanceof Error
+      ? (error.name === "TimeoutError" ? "The request to Gemini timed out after 20 seconds." : error.message)
+      : "The request to Gemini failed.";
+    return { status: "error", model: MODEL, httpStatus: null, detail: detail.slice(0, 400) };
+  }
+}

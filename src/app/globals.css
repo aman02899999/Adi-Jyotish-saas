@@ -3007,3 +3007,16 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
   }
   .wallet-pay .button { grid-column: 1 / -1; justify-content: center; }
 }
+
+.gemini-health { margin-bottom:12px; padding:12px 14px; border:1px solid var(--line); border-radius:9px; background:var(--ivory); }
+.gemini-health-row { display:flex; align-items:center; justify-content:space-between; gap:16px; flex-wrap:wrap; }
+.gemini-health-row > div { display:flex; flex-direction:column; gap:3px; }
+.gemini-health-row strong { font-size:12px; }
+.gemini-health-row small { color:var(--muted); font-size:12px; max-width:62ch; }
+.gemini-health-result { display:flex; align-items:flex-start; gap:8px; margin:10px 0 0; font-size:12px; line-height:1.5; }
+.gemini-health-result svg { flex:none; margin-top:2px; }
+.gemini-health-result.is-good { color:#1c7a4a; }
+.gemini-health-result.is-bad { color:#a13b2e; }
+.gemini-health-detail { display:block; margin-top:4px; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px; word-break:break-word; }
+.gemini-health-spin { animation:gemini-health-spin 1s linear infinite; }
+@keyframes gemini-health-spin { to { transform:rotate(360deg); } }

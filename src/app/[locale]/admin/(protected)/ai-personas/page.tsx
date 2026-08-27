@@ -1,5 +1,6 @@
 import { ShieldCheck } from "lucide-react";
 import { AdminAiPersonas } from "@/components/admin-ai-personas";
+import { AdminGeminiHealth } from "@/components/admin-gemini-health";
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
 import { getAllPersonasAdmin } from "@/lib/ai-personas";
@@ -24,6 +25,7 @@ export default async function AdminAiPersonasPage() {
             </div>
           </div>
         )}
+        <AdminGeminiHealth />
         <AdminAiPersonas initialPersonas={personas} />
       </div>
     </AdminShell>
