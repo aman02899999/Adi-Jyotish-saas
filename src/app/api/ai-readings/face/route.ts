@@ -4,6 +4,7 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { FACE_MAX_EDGE, prepareReadingImage } from "@/lib/reading-image";
 
 export const dynamic = "force-dynamic";
 
@@ -11,11 +12,20 @@ const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 const MAX_IMAGES = 5;
 
-function readImageFile(file: FormDataEntryValue | null): { buffer: Promise<Buffer>; mimeType: string } | { error: string } {
+/** Downscaled here, before storage, for the same reasons as the palm route: a reading retries up
+ * to three times, and face readings accept up to five photos — so this is where the platform's
+ * single largest Gemini request gets its cost cut, once, rather than on every attempt. */
+async function readImageFile(file: FormDataEntryValue | null): Promise<{ buffer: Buffer; mimeType: string } | { error: string }> {
   if (!(file instanceof File)) return { error: "Please upload a clear photo of your face." };
   if (!ALLOWED_MIME_TYPES.has(file.type)) return { error: "Your photos must be JPEG, PNG, or WebP." };
   if (file.size > MAX_IMAGE_BYTES) return { error: "Each photo must be under 6MB." };
-  return { buffer: file.arrayBuffer().then(Buffer.from), mimeType: file.type };
+
+  try {
+    const prepared = await prepareReadingImage(Buffer.from(await file.arrayBuffer()), FACE_MAX_EDGE);
+    return { buffer: Buffer.from(prepared.base64, "base64"), mimeType: prepared.mimeType };
+  } catch {
+    return { error: "One of those photos could not be read. Please try a different image." };
+  }
 }
 
 export async function POST(request: Request) {
@@ -47,16 +57,16 @@ export async function POST(request: Request) {
   if (files.length === 0) return Response.json({ error: "Please upload at least one photo of your face." }, { status: 400 });
   if (files.length > MAX_IMAGES) return Response.json({ error: `Please upload at most ${MAX_IMAGES} photos.` }, { status: 400 });
 
-  const images: { buffer: Promise<Buffer>; mimeType: string }[] = [];
+  const images: { buffer: Buffer; mimeType: string }[] = [];
   for (const file of files) {
-    const image = readImageFile(file);
+    const image = await readImageFile(file);
     if ("error" in image) return Response.json({ error: image.error }, { status: 400 });
     images.push(image);
   }
 
   const readingId = reserveReadingId();
   const faceImagePaths = await Promise.all(images.map(async (image, index) =>
-    uploadFaceImage({ memberId: member.id, readingId, index, buffer: await image.buffer, mimeType: image.mimeType }),
+    uploadFaceImage({ memberId: member.id, readingId, index, buffer: image.buffer, mimeType: image.mimeType }),
   ));
 
   const reading = await createPendingFaceReading({ readingId, memberId: member.id, clientName, faceImagePaths, question });
