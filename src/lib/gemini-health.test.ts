@@ -32,8 +32,10 @@ async function loadCheck() {
   return checkGeminiHealth;
 }
 
-function stubFetch(impl: (url: string, init: RequestInit) => Promise<Response> | Response) {
-  const spy = vi.fn(impl as never);
+type FetchImpl = (url: string, init: RequestInit) => Promise<Response> | Response;
+
+function stubFetch(impl: FetchImpl) {
+  const spy = vi.fn<FetchImpl>(impl);
   vi.stubGlobal("fetch", spy);
   return spy;
 }
@@ -93,7 +95,7 @@ describe("checkGeminiHealth", () => {
     const fetchSpy = stubFetch(() => geminiResponse({ candidates: [{ content: { parts: [{ text: "OK" }] } }] }));
     await (await loadCheck())();
     expect(fetchSpy).toHaveBeenCalledTimes(1);
-    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const [, init] = fetchSpy.mock.calls[0];
     const body = JSON.parse(String(init.body));
     // Small enough that the check costs essentially nothing against the account's quota.
     expect(body.generationConfig.maxOutputTokens).toBeLessThanOrEqual(16);
@@ -102,7 +104,7 @@ describe("checkGeminiHealth", () => {
   it("sends no deprecated sampling parameters", async () => {
     const fetchSpy = stubFetch(() => geminiResponse({ candidates: [{ content: { parts: [{ text: "OK" }] } }] }));
     await (await loadCheck())();
-    const [, init] = fetchSpy.mock.calls[0] as [string, RequestInit];
+    const [, init] = fetchSpy.mock.calls[0];
     const body = JSON.parse(String(init.body));
     expect(body.generationConfig).not.toHaveProperty("temperature");
     expect(body.generationConfig).not.toHaveProperty("topP");
