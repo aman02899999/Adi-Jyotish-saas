@@ -33,8 +33,9 @@ export const NAKSHATRAS = [
   "Mula", "Purva Ashadha", "Uttara Ashadha", "Shravana", "Dhanishta", "Shatabhisha", "Purva Bhadrapada", "Uttara Bhadrapada", "Revati",
 ] as const;
 
-export const GRAHAS = ["sun", "moon", "mars", "mercury", "jupiter", "venus", "saturn", "rahu", "ketu"] as const;
-export type GrahaKey = (typeof GRAHAS)[number];
+import { GRAHAS, type GrahaKey } from "./astronomy/grahas";
+
+export { GRAHAS, type GrahaKey };
 
 export const GRAHA_LABELS: Record<GrahaKey, string> = {
   sun: "Surya (Sun)", moon: "Chandra (Moon)", mars: "Mangal (Mars)", mercury: "Budh (Mercury)",
