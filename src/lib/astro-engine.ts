@@ -1,7 +1,7 @@
 import "server-only";
 
 import * as Astronomy from "astronomy-engine";
-import { ayanamsha, normalize360, siderealLongitude as packageSiderealLongitude } from "panchanga";
+import { normalize360 } from "panchanga";
 
 /**
  * Real sidereal (Vedic) astronomical engine — no AI. Planetary positions come from
@@ -34,6 +34,7 @@ export const NAKSHATRAS = [
 ] as const;
 
 import { GRAHAS, type GrahaKey } from "./astronomy/grahas";
+import { getAstronomyProvider } from "./astronomy/provider";
 
 export { GRAHAS, type GrahaKey };
 
@@ -74,10 +75,16 @@ export function tropicalLongitudeOf(date: Date, graha: Extract<GrahaKey, "sun" |
 }
 
 export function siderealLongitudeOf(date: Date, graha: GrahaKey): number {
-  if (graha === "rahu") return normalize360(meanLunarNodeTropicalLongitude(date) - ayanamsha(date, { nutation: true }));
-  if (graha === "ketu") return normalize360(siderealLongitudeOf(date, "rahu") + 180);
-  const body = BODY_BY_GRAHA[graha]!;
-  return packageSiderealLongitude(date, body);
+  const provider = getAstronomyProvider("swiss");
+  const position = provider
+    .getPlanetPositions(date)
+    .find((p) => p.graha === graha);
+
+  if (!position) {
+    throw new Error(`Swiss Ephemeris position unavailable for ${graha}`);
+  }
+
+  return normalize360(position.longitude);
 }
 
 export function rashiIndexOf(longitude: number) {
@@ -112,22 +119,16 @@ export function formatDegree(longitude: number) {
  * ecliptic longitude (the Sun is on the horizon by definition), which holds to
  * within a fraction of a degree since the Sun's ecliptic latitude is ~0.
  */
-export function ascendantSiderealLongitude(date: Date, lat: number, lon: number) {
-  const time = Astronomy.MakeTime(date);
-  const gstHours = Astronomy.SiderealTime(time);
-  const ramcDeg = normalize360(gstHours * 15 + lon);
-  const ramcRad = ramcDeg * Astronomy.DEG2RAD;
-  const obliquityRad = Astronomy.e_tilt(time).tobl * Astronomy.DEG2RAD;
-  const latRad = lat * Astronomy.DEG2RAD;
+export function ascendantSiderealLongitude(
+  date: Date,
+  lat: number,
+  lon: number
+): number {
+  const provider = getAstronomyProvider("swiss");
 
-  // Signs verified empirically: the un-negated y/x gives the Descendant (off by ~180°),
-  // confirmed by comparing against the Sun's own ecliptic longitude at the exact moment
-  // of sunrise (the Sun IS the ecliptic/horizon crossing point at that instant).
-  const y = Math.cos(ramcRad);
-  const x = -(Math.sin(obliquityRad) * Math.tan(latRad) + Math.cos(obliquityRad) * Math.sin(ramcRad));
-  const ascendantTropical = normalize360(Math.atan2(y, x) * Astronomy.RAD2DEG);
-
-  return normalize360(ascendantTropical - ayanamsha(date, { nutation: true }));
+  return normalize360(
+    provider.getAscendant(date, lat, lon)
+  );
 }
 
 export function sunriseSunset(date: Date, lat: number, lon: number) {
