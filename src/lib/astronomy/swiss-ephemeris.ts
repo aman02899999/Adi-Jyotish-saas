@@ -1,18 +1,12 @@
 import {
-  calculateHouses,
-  calculatePosition,
-  dateToJulianDay,
-  getAyanamsaExUt,
-  setSiderealMode,
-} from "@swisseph/node";
-
-import {
   CalculationFlag,
   HouseSystem,
   LunarPoint,
   Planet,
   SiderealMode,
 } from "@swisseph/core";
+
+import { getSwissNode } from "./swiss-node";
 
 import type {
   AstronomyPlanetPosition,
@@ -23,10 +17,11 @@ import type { GrahaKey } from "./grahas";
 
 type SwissPlanetGraha = Exclude<GrahaKey, "ketu">;
 
-// ADI JYOTISH GURU STANDARD:
-// Swiss Ephemeris must explicitly use Lahiri / Chitrapaksha.
-// Without this call Swiss Ephemeris defaults to Fagan/Bradley.
-setSiderealMode(SiderealMode.Lahiri);
+function getSwiss() {
+  const swiss = getSwissNode();
+  swiss.setSiderealMode(SiderealMode.Lahiri);
+  return swiss;
+}
 
 
 const PLANETS: Record<SwissPlanetGraha, Planet | LunarPoint> = {
@@ -60,7 +55,7 @@ function isRetrograde(
 }
 
 function getLahiriAyanamsa(jd: number): number {
-  return getAyanamsaExUt(
+  return getSwiss().getAyanamsaExUt(
     jd,
     CalculationFlag.SwissEphemeris
   );
@@ -72,7 +67,7 @@ const PLANET_FLAGS =
 
 export const swissEphemerisProvider: AstronomyProvider = {
   getPlanetPositions(date: Date): AstronomyPlanetPosition[] {
-    const jd = dateToJulianDay(date);
+    const jd = getSwiss().dateToJulianDay(date);
     const ayanamsa = getLahiriAyanamsa(jd);
 
     const positions: AstronomyPlanetPosition[] = [];
@@ -89,7 +84,7 @@ export const swissEphemerisProvider: AstronomyProvider = {
     ] as const;
 
     for (const graha of grahas) {
-      const result = calculatePosition(
+      const result = getSwiss().calculatePosition(
         jd,
         PLANETS[graha],
         PLANET_FLAGS
@@ -140,9 +135,9 @@ export const swissEphemerisProvider: AstronomyProvider = {
     latitude: number,
     longitude: number
   ): number {
-    const jd = dateToJulianDay(date);
+    const jd = getSwiss().dateToJulianDay(date);
 
-    const houses = calculateHouses(
+    const houses = getSwiss().calculateHouses(
       jd,
       latitude,
       longitude,
@@ -157,7 +152,7 @@ export const swissEphemerisProvider: AstronomyProvider = {
   },
 
   getAyanamsa(date: Date): number {
-    const jd = dateToJulianDay(date);
+    const jd = getSwiss().dateToJulianDay(date);
 
     return getLahiriAyanamsa(jd);
   },
