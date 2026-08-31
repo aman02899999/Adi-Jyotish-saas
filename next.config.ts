@@ -36,7 +36,9 @@ const nextConfig: NextConfig = {
   poweredByHeader: false,
   // firebase-admin's grpc/protobuf dependency tree defeats bundler tracing when inlined;
   // externalizing lets the platform's own Node-module resolution handle it at runtime.
-  serverExternalPackages: ["firebase-admin", "google-gax", "@grpc/grpc-js", "@sentry/nextjs"],
+  // @swisseph/node is a native addon and must remain on the Node side of the server bundle;
+  // bundling it into page-data collection triggers the missing-prebuild error in production builds.
+  serverExternalPackages: ["firebase-admin", "google-gax", "@grpc/grpc-js", "@sentry/nextjs", "@swisseph/node"],
   // AVIF isn't in Next's default format list (slower to encode) but is typically 20-30% smaller
   // than WebP for photographic content — worth it here since gemstone/blog/practitioner photos
   // make up most of the page weight on this site. Next still falls back to WebP/original per the

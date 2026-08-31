@@ -74,11 +74,28 @@ export function tropicalLongitudeOf(date: Date, graha: Extract<GrahaKey, "sun" |
   return normalize360(Astronomy.Ecliptic(Astronomy.GeoVector(Astronomy.Body.Moon, date, true)).elon);
 }
 
-export function siderealLongitudeOf(date: Date, graha: GrahaKey): number {
+const PLANET_POSITION_CACHE = new Map<number, Map<GrahaKey, { graha: GrahaKey; longitude: number; speedLongitude: number; isRetrograde: boolean }>>();
+
+function getCachedPlanetPositions(date: Date) {
+  const key = date.getTime();
+  const cached = PLANET_POSITION_CACHE.get(key);
+  if (cached) {
+    return cached;
+  }
+
   const provider = getAstronomyProvider("swiss");
-  const position = provider
-    .getPlanetPositions(date)
-    .find((p) => p.graha === graha);
+  const map = new Map<GrahaKey, { graha: GrahaKey; longitude: number; speedLongitude: number; isRetrograde: boolean }>();
+
+  for (const position of provider.getPlanetPositions(date)) {
+    map.set(position.graha, position);
+  }
+
+  PLANET_POSITION_CACHE.set(key, map);
+  return map;
+}
+
+export function siderealLongitudeOf(date: Date, graha: GrahaKey): number {
+  const position = getCachedPlanetPositions(date).get(graha);
 
   if (!position) {
     throw new Error(`Swiss Ephemeris position unavailable for ${graha}`);
@@ -142,20 +159,21 @@ const RETROGRADE_SAMPLE_DAYS = 1;
 
 /**
  * Whether a graha appears retrograde (apparent backward motion through the zodiac) at the given
- * moment — interpretively significant in Jyotish, and previously omitted entirely from this
- * engine. The Sun and Moon never appear retrograde from Earth by definition (geocentric, so this
- * is a real astronomical fact, not a simplification); Rahu/Ketu are computed here as the mean
- * lunar node, which regresses through the zodiac continuously, so they're always retrograde.
- * Everything else is measured directly: sample the longitude a day either side of the date and
- * check whether it moved backward (handling the 360°/0° wrap).
+ * moment — interpretively significant in Jyotish. The Sun and Moon never appear retrograde from
+ * Earth by definition; Rahu/Ketu remain retrograde by Jyotish convention; every other planet uses
+ * the Swiss planetary longitude speed directly, which matches the core heliocentric/ephemeris
+ * calculation and avoids recalculating the same chart multiple times.
  */
 export function isRetrograde(date: Date, graha: GrahaKey): boolean {
   if (graha === "sun" || graha === "moon") return false;
   if (graha === "rahu" || graha === "ketu") return true;
-  const before = siderealLongitudeOf(new Date(date.getTime() - RETROGRADE_SAMPLE_DAYS * 86_400_000), graha);
-  const after = siderealLongitudeOf(new Date(date.getTime() + RETROGRADE_SAMPLE_DAYS * 86_400_000), graha);
-  const delta = ((after - before + 180) % 360 + 360) % 360 - 180;
-  return delta < 0;
+
+  const position = getCachedPlanetPositions(date).get(graha);
+  if (!position) {
+    throw new Error(`Swiss Ephemeris position unavailable for ${graha}`);
+  }
+
+  return position.speedLongitude < 0;
 }
 
 export type GrahaPosition = {
@@ -169,8 +187,15 @@ export type GrahaPosition = {
 };
 
 export function computeGrahaPositions(date: Date): GrahaPosition[] {
+  const positionsByGraha = getCachedPlanetPositions(date);
+
   return GRAHAS.map((graha) => {
-    const longitude = siderealLongitudeOf(date, graha);
+    const position = positionsByGraha.get(graha);
+    if (!position) {
+      throw new Error(`Swiss Ephemeris position unavailable for ${graha}`);
+    }
+
+    const longitude = normalize360(position.longitude);
     return {
       graha,
       longitude,
@@ -178,7 +203,7 @@ export function computeGrahaPositions(date: Date): GrahaPosition[] {
       degreeInRashi: degreeWithinRashi(longitude),
       nakshatraIndex: nakshatraIndexOf(longitude),
       pada: nakshatraPadaOf(longitude),
-      isRetrograde: isRetrograde(date, graha),
+      isRetrograde: position.isRetrograde,
     };
   });
 }
