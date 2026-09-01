@@ -2,7 +2,7 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
+import { db, withFirebaseFallback } from "@/lib/firestore";
 
 export type HomeHeroContent = {
   eyebrow: string;
@@ -55,18 +55,20 @@ const CTA_HREF_FIELDS = new Set<keyof HomeHeroContent>(["primaryCtaHref", "secon
  * fresh deploy (or a doc that only has some fields set) renders identically to before this
  * system existed — nothing on the homepage can go blank from a missing Firestore doc. */
 async function fetchHomeHeroContent(): Promise<HomeHeroContent> {
-  const doc = await collection.doc("home-hero").get();
-  if (!doc.exists) return DEFAULT_HERO;
-  const data = doc.data() as Partial<HomeHeroContent>;
-  // Only pull the fields HomeHeroContent actually declares — the doc also carries an
-  // updatedAt Firestore Timestamp (see updateHomeHeroContent) that has no place leaking into
-  // this plain content object.
-  const result = { ...DEFAULT_HERO };
-  for (const key of Object.keys(DEFAULT_HERO) as (keyof HomeHeroContent)[]) {
-    const value = data[key];
-    if (typeof value === "string" && value !== "") result[key] = value;
-  }
-  return result;
+  return withFirebaseFallback(async () => {
+    const doc = await collection.doc("home-hero").get();
+    if (!doc.exists) return DEFAULT_HERO;
+    const data = doc.data() as Partial<HomeHeroContent>;
+    // Only pull the fields HomeHeroContent actually declares — the doc also carries an
+    // updatedAt Firestore Timestamp (see updateHomeHeroContent) that has no place leaking into
+    // this plain content object.
+    const result = { ...DEFAULT_HERO };
+    for (const key of Object.keys(DEFAULT_HERO) as (keyof HomeHeroContent)[]) {
+      const value = data[key];
+      if (typeof value === "string" && value !== "") result[key] = value;
+    }
+    return result;
+  }, DEFAULT_HERO, "getHomeHeroContent");
 }
 
 // Same content for every visitor — cached at runtime (not build time, so no Firebase credentials
@@ -91,10 +93,12 @@ export async function updateHomeHeroContent(patch: Partial<HomeHeroContent>): Pr
 }
 
 async function fetchFooterContent(): Promise<FooterContent> {
-  const doc = await collection.doc("footer").get();
-  if (!doc.exists) return DEFAULT_FOOTER;
-  const data = doc.data() as Partial<FooterContent>;
-  return { ...DEFAULT_FOOTER, ...(data.blurb ? { blurb: data.blurb } : {}) };
+  return withFirebaseFallback(async () => {
+    const doc = await collection.doc("footer").get();
+    if (!doc.exists) return DEFAULT_FOOTER;
+    const data = doc.data() as Partial<FooterContent>;
+    return { ...DEFAULT_FOOTER, ...(data.blurb ? { blurb: data.blurb } : {}) };
+  }, DEFAULT_FOOTER, "getFooterContent");
 }
 
 // Rendered via SiteFooter on nearly every page — same rationale as getHomeHeroContent above.

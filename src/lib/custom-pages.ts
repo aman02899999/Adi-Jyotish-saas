@@ -1,7 +1,7 @@
 import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
+import { db, withFirebaseFallback } from "@/lib/firestore";
 
 export class CustomPageError extends Error {}
 
@@ -67,14 +67,18 @@ export async function getCustomPageById(id: string): Promise<CustomPage | null> 
 }
 
 export async function getPublishedCustomPageBySlug(slug: string): Promise<CustomPage | null> {
-  const snap = await collection.where("slug", "==", slug).where("published", "==", true).limit(1).get();
-  if (snap.empty) return null;
-  return toCustomPage(snap.docs[0]);
+  return withFirebaseFallback(async () => {
+    const snap = await collection.where("slug", "==", slug).where("published", "==", true).limit(1).get();
+    if (snap.empty) return null;
+    return toCustomPage(snap.docs[0]);
+  }, null, `getPublishedCustomPageBySlug:${slug}`);
 }
 
 export async function getPublishedCustomPages(): Promise<CustomPage[]> {
-  const snap = await collection.where("published", "==", true).get();
-  return snap.docs.map(toCustomPage);
+  return withFirebaseFallback(async () => {
+    const snap = await collection.where("published", "==", true).get();
+    return snap.docs.map(toCustomPage);
+  }, [], "getPublishedCustomPages");
 }
 
 export async function createCustomPage(input: { title: string; metaDescription: string }): Promise<CustomPage> {
