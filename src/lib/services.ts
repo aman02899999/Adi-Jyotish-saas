@@ -114,13 +114,39 @@ export async function seedServices() {
 }
 
 export async function getAllServices(): Promise<Service[]> {
-  await seedServices();
-  const snap = await db.collection("services").orderBy("featured", "desc").orderBy("title", "asc").get();
-  return snap.docs.map(fromDoc);
+  try {
+    await seedServices();
+    const snap = await db.collection("services").orderBy("featured", "desc").orderBy("title", "asc").get();
+    return snap.docs.map(fromDoc);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Project Id")) {
+      console.warn("getAllServices: Firebase project unavailable; returning seed defaults.", error);
+      return starterServices.map((service) => ({
+        ...service,
+        id: service.slug,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
+    throw error;
+  }
 }
 
 export async function getPublishedServices(): Promise<Service[]> {
-  await seedServices();
-  const snap = await db.collection("services").where("active", "==", true).orderBy("featured", "desc").orderBy("title", "asc").get();
-  return snap.docs.map(fromDoc);
+  try {
+    await seedServices();
+    const snap = await db.collection("services").where("active", "==", true).orderBy("featured", "desc").orderBy("title", "asc").get();
+    return snap.docs.map(fromDoc);
+  } catch (error) {
+    if (error instanceof Error && error.message.includes("Project Id")) {
+      console.warn("getPublishedServices: Firebase project unavailable; returning starter services.", error);
+      return starterServices.map((service) => ({
+        ...service,
+        id: service.slug,
+        createdAt: new Date(),
+        updatedAt: new Date(),
+      }));
+    }
+    throw error;
+  }
 }

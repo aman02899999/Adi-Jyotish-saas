@@ -38,6 +38,36 @@ if (process.env.NODE_ENV !== "production") {
   globalForFirestore.__firestoreDb = db;
 }
 
+export function isFirebaseProjectConfigured() {
+  if (process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) return true;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
+  if (!raw) return false;
+  try {
+    const parsed = JSON.parse(raw) as { project_id?: string };
+    return Boolean(parsed.project_id);
+  } catch {
+    return false;
+  }
+}
+
+export function isMissingFirebaseProjectError(error: unknown) {
+  if (typeof error !== "object" || error === null) return false;
+  const message = "message" in error && typeof error.message === "string" ? error.message : "";
+  return message.includes("Unable to detect a Project Id") || message.includes("Project Id") || message.includes("Could not load the default credentials") || message.includes("project id");
+}
+
+export async function withFirebaseFallback<T>(operation: () => Promise<T>, fallback: T, label: string): Promise<T> {
+  try {
+    return await operation();
+  } catch (error) {
+    if (isMissingFirebaseProjectError(error)) {
+      console.warn(`${label}: Firebase project unavailable; using fallback.`, error);
+      return fallback;
+    }
+    throw error;
+  }
+}
+
 export const storage = getStorage(getFirebaseAdminApp());
 export const bucket = () => storage.bucket();
 

@@ -1,7 +1,7 @@
 import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
+import { db, withFirebaseFallback } from "@/lib/firestore";
 import { tropicalLongitudeOf } from "@/lib/astro-engine";
 import { dateInTimeZone } from "@/lib/scheduling";
 import { getStudioSettings } from "@/lib/studio-settings";
@@ -165,26 +165,30 @@ export async function getDailyHoroscope(sign: ZodiacSignKey): Promise<DailyHoros
   const signIndex = ZODIAC_SIGNS.findIndex((entry) => entry.key === sign);
   const date = await todayCivilDate();
   const docId = `${sign}_${date}`;
-  const ref = db.collection("dailyHoroscopes").doc(docId);
+  const fallbackContent = generateHoroscopeText(signIndex);
 
-  const existing = await ref.get();
-  if (existing.exists) {
-    const data = existing.data() as { sign: string; date: string; content: string; createdAt: FirebaseFirestore.Timestamp };
+  return withFirebaseFallback(async () => {
+    const ref = db.collection("dailyHoroscopes").doc(docId);
+
+    const existing = await ref.get();
+    if (existing.exists) {
+      const data = existing.data() as { sign: string; date: string; content: string; createdAt: FirebaseFirestore.Timestamp };
+      return { id: docId, sign: data.sign, date: data.date, content: data.content, createdAt: data.createdAt?.toDate() ?? new Date() };
+    }
+
+    const content = fallbackContent;
+    // create() rather than set() so a concurrent request for the same sign+date races safely —
+    // the loser's create() throws (doc already exists) and we just re-read what won.
+    try {
+      await ref.create({ sign, date, content, createdAt: FieldValue.serverTimestamp() });
+    } catch {
+      // Already created by a concurrent request — fall through to read it below.
+    }
+
+    const finalSnap = await ref.get();
+    const data = finalSnap.data() as { sign: string; date: string; content: string; createdAt: FirebaseFirestore.Timestamp };
     return { id: docId, sign: data.sign, date: data.date, content: data.content, createdAt: data.createdAt?.toDate() ?? new Date() };
-  }
-
-  const content = generateHoroscopeText(signIndex);
-  // create() rather than set() so a concurrent request for the same sign+date races safely —
-  // the loser's create() throws (doc already exists) and we just re-read what won.
-  try {
-    await ref.create({ sign, date, content, createdAt: FieldValue.serverTimestamp() });
-  } catch {
-    // Already created by a concurrent request — fall through to read it below.
-  }
-
-  const finalSnap = await ref.get();
-  const data = finalSnap.data() as { sign: string; date: string; content: string; createdAt: FirebaseFirestore.Timestamp };
-  return { id: docId, sign: data.sign, date: data.date, content: data.content, createdAt: data.createdAt?.toDate() ?? new Date() };
+  }, { id: docId, sign, date, content: fallbackContent, createdAt: new Date() }, "getDailyHoroscope");
 }
 
 export const HOROSCOPE_PERIODS = ["today", "tomorrow", "week", "month"] as const;
@@ -228,16 +232,18 @@ export async function getHoroscopeForPeriod(sign: ZodiacSignKey, period: Horosco
 }
 
 async function readOrCreateHoroscope(docId: string, sign: string, date: string, generate: () => string): Promise<string> {
-  const ref = db.collection("dailyHoroscopes").doc(docId);
-  const existing = await ref.get();
-  if (existing.exists) return (existing.data() as { content: string }).content;
+  return withFirebaseFallback(async () => {
+    const ref = db.collection("dailyHoroscopes").doc(docId);
+    const existing = await ref.get();
+    if (existing.exists) return (existing.data() as { content: string }).content;
 
-  const content = generate();
-  try {
-    await ref.create({ sign, date, content, createdAt: FieldValue.serverTimestamp() });
-  } catch {
-    // Already created by a concurrent request — fall through to read it below.
-  }
-  const finalSnap = await ref.get();
-  return (finalSnap.data() as { content: string }).content;
+    const content = generate();
+    try {
+      await ref.create({ sign, date, content, createdAt: FieldValue.serverTimestamp() });
+    } catch {
+      // Already created by a concurrent request — fall through to read it below.
+    }
+    const finalSnap = await ref.get();
+    return (finalSnap.data() as { content: string }).content;
+  }, generate(), `readOrCreateHoroscope:${docId}`);
 }
