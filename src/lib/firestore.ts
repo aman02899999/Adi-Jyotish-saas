@@ -35,10 +35,10 @@ const globalForFirestore = globalThis as typeof globalThis & {
  */
 function normalizePrivateKey(value: string): string {
   return value
-    .replace(/\\\\n/g, "\n")
     .replace(/\\n/g, "\n")
-    .replace(/\\r\\n/g, "\n")
-    .replace(/\\r/g, "\n");
+    .replace(/\n/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
 }
 
 function fallbackApp(): App {
