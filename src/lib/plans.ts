@@ -136,11 +136,32 @@ async function backfillRazorpayIds(plan: MembershipPlan): Promise<MembershipPlan
   }
 }
 
+function fallbackPlans(): MembershipPlan[] {
+  const now = new Date();
+  return starterPlans.map((plan) => ({
+    ...plan,
+    id: plan.key,
+    currency: "INR",
+    razorpayPlanIdMonthly: null,
+    razorpayPlanIdYearly: null,
+    createdAt: now,
+    updatedAt: now,
+  }));
+}
+
 export async function getAllPlans(): Promise<MembershipPlan[]> {
-  await seedMembershipPlans();
-  const snap = await plansCollection().orderBy("sortOrder", "asc").get();
-  const plans = snap.docs.map((doc) => planFromSnap(doc));
-  return Promise.all(plans.map(backfillRazorpayIds));
+  try {
+    await seedMembershipPlans();
+    const snap = await plansCollection().orderBy("sortOrder", "asc").get();
+    const plans = snap.docs.map((doc) => planFromSnap(doc));
+    return Promise.all(plans.map(backfillRazorpayIds));
+  } catch (error) {
+    // /pricing is public marketing content. When Firebase is unavailable or misconfigured,
+    // the still-visible Free tier plus the built-in starter plans keep the page alive; any
+    // real subscribe attempt will fail clearly in the API instead.
+    console.warn("getAllPlans: Firebase unavailable; returning starter plans.", error);
+    return fallbackPlans();
+  }
 }
 
 export async function getPublicPlans(): Promise<MembershipPlan[]> {

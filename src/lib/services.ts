@@ -113,22 +113,26 @@ export async function seedServices() {
   }
 }
 
+function seedDefaults() {
+  return starterServices.map((service) => ({
+    ...service,
+    id: service.slug,
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  }));
+}
+
 export async function getAllServices(): Promise<Service[]> {
   try {
     await seedServices();
     const snap = await db.collection("services").orderBy("featured", "desc").orderBy("title", "asc").get();
     return snap.docs.map(fromDoc);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Project Id")) {
-      console.warn("getAllServices: Firebase project unavailable; returning seed defaults.", error);
-      return starterServices.map((service) => ({
-        ...service,
-        id: service.slug,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-    }
-    throw error;
+    // Public catalogue pages must not 500 because Firebase is unavailable, misconfigured,
+    // or temporarily unreachable. Seeding writes are also intentionally idempotent, so the
+    // fallback below is safe for every public reader.
+    console.warn("getAllServices: Firebase unavailable; returning seed defaults.", error);
+    return seedDefaults();
   }
 }
 
@@ -138,15 +142,7 @@ export async function getPublishedServices(): Promise<Service[]> {
     const snap = await db.collection("services").where("active", "==", true).orderBy("featured", "desc").orderBy("title", "asc").get();
     return snap.docs.map(fromDoc);
   } catch (error) {
-    if (error instanceof Error && error.message.includes("Project Id")) {
-      console.warn("getPublishedServices: Firebase project unavailable; returning starter services.", error);
-      return starterServices.map((service) => ({
-        ...service,
-        id: service.slug,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      }));
-    }
-    throw error;
+    console.warn("getPublishedServices: Firebase unavailable; returning starter services.", error);
+    return seedDefaults();
   }
 }

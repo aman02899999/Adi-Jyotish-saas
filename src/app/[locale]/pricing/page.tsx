@@ -16,7 +16,10 @@ export const metadata: Metadata = {
 };
 
 export default async function PricingPage() {
-  const [plans, member] = await Promise.all([getPublicPlans(), getCurrentMember()]);
+  // A stale/invalid session cookie must never 500 a public marketing page. Without a
+  // valid cookie getCurrentMember is a cheap null anyway; when Firebase is down it
+  // simply renders as anonymous until the dependency recovers.
+  const [plans, member] = await Promise.all([getPublicPlans(), getCurrentMember().catch(() => null)]);
   const subscription = member ? await getMemberSubscription(member.id) : null;
 
   return (
