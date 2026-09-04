@@ -1,36 +1,20 @@
 import "server-only";
 
-import { cert, getApps, initializeApp } from "firebase-admin/app";
 import { getAuth } from "firebase-admin/auth";
-
-export function isFirebaseConfigured() {
-  return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY);
-}
-
-function getFirebaseAdminApp() {
-  const existing = getApps()[0];
-  if (existing) return existing;
-
-  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (!raw) return null;
-  const serviceAccount = JSON.parse(raw) as { project_id: string; client_email: string; private_key: string };
-  return initializeApp({
-    credential: cert({
-      projectId: serviceAccount.project_id,
-      clientEmail: serviceAccount.client_email,
-      privateKey: serviceAccount.private_key.replace(/\\n/g, "\n"),
-    }),
-  });
-}
+import { getFirebaseAdminApp, isFirebaseConfigured } from "@/lib/firestore";
 
 export type GoogleIdentity = { uid: string; email: string; name: string; picture: string | null };
 
+/** Returns the same shared, lazily-created Admin app used by Firestore/Storage. */
+function firebaseApp() {
+  return getFirebaseAdminApp();
+}
+
 /** Returns null both when Firebase isn't configured and when the token fails verification — callers treat both as "cannot sign in with Google right now." */
 export async function verifyFirebaseIdToken(idToken: string): Promise<GoogleIdentity | null> {
-  const app = getFirebaseAdminApp();
-  if (!app) return null;
+  if (!isFirebaseConfigured()) return null;
   try {
-    const decoded = await getAuth(app).verifyIdToken(idToken);
+    const decoded = await getAuth(firebaseApp()).verifyIdToken(idToken);
     if (!decoded.email) return null;
     return {
       uid: decoded.uid,

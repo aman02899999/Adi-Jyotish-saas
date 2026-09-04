@@ -17,7 +17,9 @@ export const metadata: Metadata = {
 };
 
 export default async function KundliPage() {
-  const member = await getCurrentMember();
+  // Public page: don't let a valid-looking but stale session cookie (or a degraded
+  // Firebase dependency) prevent the landing page from rendering.
+  const member = await getCurrentMember().catch(() => null);
 
   return (
     <main className="marketing-page">

@@ -1,59 +1,166 @@
 import "server-only";
 
-import { cert, getApps, initializeApp } from "firebase-admin/app";
-import { getFirestore } from "firebase-admin/firestore";
+import { cert, getApps, initializeApp, type App } from "firebase-admin/app";
+import { getFirestore, type Firestore } from "firebase-admin/firestore";
 import { getStorage } from "firebase-admin/storage";
 
-// Deliberately does not throw when FIREBASE_SERVICE_ACCOUNT_KEY is absent: this module is
-// imported by every route (including ones that only reach Firestore inside request handlers),
-// and Next.js's build-time "collect page data" step loads every route module regardless of its
-// runtime `dynamic` config. Falling back to `initializeApp()` (application-default credential
-// resolution) keeps that import side-effect-free — credential errors only surface if the app
-// genuinely tries to make a Firestore/Storage call without real credentials at request time.
-function getFirebaseAdminApp() {
+// Deliberate, single source of truth for the Firebase Admin app. The client SDK
+// (src/lib/firebase-client.ts) uses the browser SDK and never touches this module;
+// server code that needs Auth, Firestore, or Storage should all come through here
+// so the Admin SDK is initialized exactly once per runtime.
+
+export class FirebaseConfigError extends Error {
+  constructor(message: string) {
+    super(message);
+    this.name = "FirebaseConfigError";
+  }
+}
+
+type ServiceAccountShape = {
+  project_id?: unknown;
+  client_email?: unknown;
+  private_key?: unknown;
+};
+
+const globalForFirestore = globalThis as typeof globalThis & {
+  __firebaseAdminApp?: App;
+  __firestoreDb?: Firestore;
+};
+
+/**
+ * Normalize the private key that arrives from an environment variable. The Admin SDK
+ * accepts PEM text with real newlines; Vercel environment variables commonly carry it
+ * either as a JSON-escaped string (`\n`) or with literal newlines. We accept both
+ * without logging anything.
+ */
+function normalizePrivateKey(value: string): string {
+  return value
+    .replace(/\\n/g, "\n")
+    .replace(/\n/g, "\n")
+    .replace(/\r\n/g, "\n")
+    .replace(/\r/g, "\n");
+}
+
+function fallbackApp(): App {
+  return initializeApp({ storageBucket: process.env.FIREBASE_STORAGE_BUCKET });
+}
+
+/**
+ * Returns the shared Firebase Admin App. Never logs credential data.
+ *
+ * A malformed or incomplete service-account secret is treated as a configuration
+ * error: we log the *category* of failure but continue with an unauthenticated app so
+ * importing this module never crashes pages that could otherwise still render. The
+ * business operation that eventually needs Firebase will fail with a normal
+ * Firebase/Admin error at request time instead.
+ */
+export function getFirebaseAdminApp(): App {
+  if (globalForFirestore.__firebaseAdminApp) return globalForFirestore.__firebaseAdminApp;
+
   const existing = getApps()[0];
-  if (existing) return existing;
+  if (existing) {
+    globalForFirestore.__firebaseAdminApp = existing;
+    return existing;
+  }
 
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
-  if (!raw) return initializeApp({ storageBucket: process.env.FIREBASE_STORAGE_BUCKET });
+  if (!raw || raw.trim() === "") {
+    globalForFirestore.__firebaseAdminApp = fallbackApp();
+    return globalForFirestore.__firebaseAdminApp;
+  }
 
-  const serviceAccount = JSON.parse(raw) as { project_id: string; client_email: string; private_key: string };
-  return initializeApp({
+  let parsed: ServiceAccountShape;
+  try {
+    parsed = JSON.parse(raw) as ServiceAccountShape;
+  } catch {
+    console.error(
+      "[firebase] FIREBASE_SERVICE_ACCOUNT_KEY is not valid JSON; Firebase operations will fail until the secret is replaced. No credential contents were logged.",
+    );
+    globalForFirestore.__firebaseAdminApp = fallbackApp();
+    return globalForFirestore.__firebaseAdminApp;
+  }
+
+  const projectId = typeof parsed.project_id === "string" ? parsed.project_id.trim() : "";
+  const clientEmail = typeof parsed.client_email === "string" ? parsed.client_email.trim() : "";
+  const privateKey = typeof parsed.private_key === "string" ? parsed.private_key : "";
+
+  if (!projectId || !clientEmail || !privateKey) {
+    console.error(
+      "[firebase] FIREBASE_SERVICE_ACCOUNT_KEY is missing project_id/client_email/private_key; Firebase operations will fail until the secret is replaced. No credential contents were logged.",
+    );
+    globalForFirestore.__firebaseAdminApp = fallbackApp();
+    return globalForFirestore.__firebaseAdminApp;
+  }
+
+  globalForFirestore.__firebaseAdminApp = initializeApp({
     credential: cert({
-      projectId: serviceAccount.project_id,
-      clientEmail: serviceAccount.client_email,
-      privateKey: serviceAccount.private_key.replace(/\\n/g, "\n"),
+      projectId,
+      clientEmail,
+      privateKey: normalizePrivateKey(privateKey),
     }),
     storageBucket: process.env.FIREBASE_STORAGE_BUCKET,
   });
+  return globalForFirestore.__firebaseAdminApp;
 }
 
-const globalForFirestore = globalThis as typeof globalThis & {
-  __firestoreDb?: FirebaseFirestore.Firestore;
-};
-
-export const db = globalForFirestore.__firestoreDb ?? getFirestore(getFirebaseAdminApp());
-
-if (process.env.NODE_ENV !== "production") {
-  globalForFirestore.__firestoreDb = db;
+export function getFirestoreDb(): Firestore {
+  if (!globalForFirestore.__firestoreDb) {
+    globalForFirestore.__firestoreDb = getFirestore(getFirebaseAdminApp());
+  }
+  return globalForFirestore.__firestoreDb;
 }
 
-export function isFirebaseProjectConfigured() {
+export const db = getFirestoreDb();
+
+export function isFirebaseServiceAccountPresent(): boolean {
+  return Boolean(process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim());
+}
+
+export function isFirebaseConfigured(): boolean {
+  if (!isFirebaseServiceAccountPresent()) return false;
+  const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY!;
+  try {
+    const parsed = JSON.parse(raw) as ServiceAccountShape;
+    return typeof parsed.project_id === "string" &&
+      typeof parsed.client_email === "string" &&
+      typeof parsed.private_key === "string";
+  } catch {
+    return false;
+  }
+}
+
+export function isFirebaseProjectConfigured(): boolean {
   if (process.env.FIREBASE_PROJECT_ID || process.env.GCLOUD_PROJECT || process.env.GOOGLE_CLOUD_PROJECT) return true;
   const raw = process.env.FIREBASE_SERVICE_ACCOUNT_KEY;
   if (!raw) return false;
   try {
-    const parsed = JSON.parse(raw) as { project_id?: string };
+    const parsed = JSON.parse(raw) as ServiceAccountShape;
     return Boolean(parsed.project_id);
   } catch {
     return false;
   }
 }
 
-export function isMissingFirebaseProjectError(error: unknown) {
+export function isMissingFirebaseProjectError(error: unknown): boolean {
   if (typeof error !== "object" || error === null) return false;
   const message = "message" in error && typeof error.message === "string" ? error.message : "";
-  return message.includes("Unable to detect a Project Id") || message.includes("Project Id") || message.includes("Could not load the default credentials") || message.includes("project id");
+  const code = "code" in error ? (error as { code: unknown }).code : undefined;
+  const normalised = message.trim().toLowerCase();
+  // Firebase/Admin SDK error codes: 7=PERMISSION_DENIED, 16=UNAUTHENTICATED,
+  // 14=UNAVAILABLE, 13=INTERNAL, 9=FAILED_PRECONDITION, 3=INVALID_ARGUMENT,
+  // 2=UNKNOWN. For public read fallbacks this is intentionally a broad set so a
+  // missing IAM grant, an unreachable backend, or a misconfigured project all
+  // degrade the optional section rather than 500ing a marketing page.
+  if ([2, 3, 7, 9, 13, 14, 16].includes(Number(code))) return true;
+  return (
+    normalised.includes("unable to detect a project id") ||
+    normalised.includes("project id") ||
+    normalised.includes("could not load the default credentials") ||
+    normalised.includes("permission") ||
+    normalised.includes("insufficient permission") ||
+    normalised.includes("bucket name not specified") ||
+    normalised.includes("invalid argument")
+  );
 }
 
 export async function withFirebaseFallback<T>(operation: () => Promise<T>, fallback: T, label: string): Promise<T> {
@@ -61,23 +168,22 @@ export async function withFirebaseFallback<T>(operation: () => Promise<T>, fallb
     return await operation();
   } catch (error) {
     if (isMissingFirebaseProjectError(error)) {
-      console.warn(`${label}: Firebase project unavailable; using fallback.`, error);
+      console.warn(`${label}: Firebase unavailable; using fallback.`, error);
       return fallback;
     }
     throw error;
   }
 }
 
-export const storage = getStorage(getFirebaseAdminApp());
-export const bucket = () => storage.bucket();
+/** Lazily resolved Storage bucket; only initialized when an upload/download needs it. */
+export function getStorageBucket() {
+  return getStorage(getFirebaseAdminApp()).bucket();
+}
 
-/** Whether a Storage bucket is actually configured on this deployment. Photo uploads (palm and
- * face readings) are the only features that need one, and without FIREBASE_STORAGE_BUCKET the
- * Admin SDK throws a raw "Bucket name not specified or invalid" from deep inside `bucket()` —
- * which surfaced to members as a bare 500 on upload, with nothing explaining what went wrong.
- * Callers check this first so they can answer the same way every other unconfigured dependency
- * does: a clear 503 naming what is missing. */
-export function isStorageConfigured() {
+/** Backwards-compatible alias used by media upload/generation modules. */
+export const bucket = () => getStorageBucket();
+
+export function isStorageConfigured(): boolean {
   return Boolean(process.env.FIREBASE_STORAGE_BUCKET);
 }
 
