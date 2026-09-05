@@ -19,6 +19,15 @@ test.describe("account privacy controls", () => {
     await page.getByRole("button", { name: /create my chart/i }).click();
     await expect(page).toHaveURL(/\/(dashboard|onboarding)/, { timeout: 15_000 });
 
+    // A brand-new member lands on /onboarding, and DashboardLayout bounces anyone with an
+    // incomplete birth profile back there — complete onboarding the same way global-setup does
+    // (the real profile API, sharing this page's session cookies) so /dashboard/security renders.
+    const onboardRes = await page.request.put("/api/member/profile", {
+      headers: { origin: new URL(page.url()).origin },
+      data: { birthDate: "1994-06-15", birthTime: "07:45", birthPlace: "Jaipur, India" },
+    });
+    expect(onboardRes.ok()).toBe(true);
+
     await page.goto("/dashboard/security");
     await expect(page.getByRole("heading", { name: "Download your data" })).toBeVisible({ timeout: 15_000 });
 
@@ -45,8 +54,10 @@ test.describe("account privacy controls", () => {
     await expect(confirmButton).toBeDisabled();
     await page.getByPlaceholder("DELETE").fill("DELETE");
     await expect(confirmButton).toBeEnabled();
+    // Signed-in members carry the NEXT_LOCALE=hi cookie, so "/" may land on "/hi" — assert on
+    // the notice param, not the exact path.
     await confirmButton.click();
-    await expect(page).toHaveURL(/\/\?notice=account-deleted/, { timeout: 20_000 });
+    await expect(page).toHaveURL(/notice=account-deleted/, { timeout: 20_000 });
 
     // The session is dead: a protected page bounces to sign-in (renders nothing for a guest).
     await page.goto("/dashboard/security");
