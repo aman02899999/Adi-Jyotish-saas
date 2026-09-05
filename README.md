@@ -72,6 +72,16 @@ Firebase Auth (email/password + Google) across member/practitioner/admin, 2FA (T
 portals, CSRF protection, per-route rate limiting, Cloudflare Turnstile CAPTCHA on anonymous free
 tools, encrypted practitioner payout details, and role-based admin permissions.
 
+### Privacy self-service (DPDP/GDPR-style rights)
+From **Dashboard → Security** a member can download a complete JSON export of everything stored
+about them (profile, birth details, bookings, invoices, readings, wallet ledger, orders, chats —
+TOTP secrets and internal flags excluded), and permanently delete their own account: typed
+confirmation plus a live 2FA code when enabled, wallet-balance/live-chat/live-subscription
+safety gates, hard deletion of everything the member alone owns (including uploaded palm/face
+photos in Storage and the Firebase Auth user), and anonymization — not deletion — of the
+financial records the business must legally retain (bookings, invoices, gemstone orders, gift
+cards). See `src/lib/account-deletion.ts` / `src/lib/account-privacy.ts`.
+
 ### Internationalization
 English (default, unprefixed URLs) and Hindi (`/hi/...`, Hinglish tone) via next-intl, with a
 language switcher and locale-aware SEO (hreflang, sitemap).

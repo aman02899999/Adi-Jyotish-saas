@@ -1680,6 +1680,19 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .two-factor-disable { padding:0 19px 4px; }
 .two-factor-disable .field { max-width:280px; margin-bottom:10px; }
 .two-factor-challenge-hint { display:flex; align-items:center; gap:10px; margin-bottom:19px; padding:13px; border:1px solid rgba(169,88,56,.18); border-radius:9px; color:var(--copper-dark); background:rgba(169,88,56,.06); font-size:13px; line-height:1.5; }
+.settings-card + .settings-card { margin-top:16px; }
+.danger-zone-card { border-color:rgba(165,71,59,.28); }
+.danger-zone-card header > svg { color:#a5473b; }
+.danger-zone-card header p { color:#a5473b; }
+.danger-zone-trigger { color:#a5473b; border-color:rgba(165,71,59,.35); }
+.danger-zone-trigger:hover { color:#8c3b30; background:rgba(165,71,59,.06); }
+.danger-zone-confirm { background:#a5473b; border-color:#a5473b; }
+.danger-zone-confirm:hover { background:#8c3b30; }
+.danger-zone-confirm:disabled { opacity:.5; cursor:not-allowed; }
+.danger-zone-blockers { margin-bottom:12px; padding:11px 13px; border:1px solid rgba(165,71,59,.25); border-radius:9px; background:rgba(165,71,59,.06); }
+.danger-zone-blockers p { display:flex; align-items:flex-start; gap:7px; margin:0; color:#8c3b30; font-size:12.5px; line-height:1.55; }
+.danger-zone-blockers p + p { margin-top:6px; }
+.danger-zone-blockers svg { flex:none; margin-top:2px; }
 .settings-fields { display:grid; grid-template-columns:1fr 1fr; gap:14px; padding:20px; }
 .settings-fields label,.policy-settings label > div { display:flex; flex-direction:column; gap:7px; }
 .settings-fields label > span { font-size:12px; font-weight:700; }

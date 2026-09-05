@@ -10,3 +10,4 @@ tsconfig.tsbuildinfo
 firebase-debug.log
 firestore-debug.log
 /.lighthouseci
+supabase_keys.env
