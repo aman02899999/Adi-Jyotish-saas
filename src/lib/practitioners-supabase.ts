@@ -1,6 +1,6 @@
 import "server-only";
 
-import { query, queryModels } from "@/lib/postgres";
+import { query, queryModel, queryModels } from "@/lib/postgres";
 
 /**
  * Postgres data access behind the practitioner directory, the published reviews
@@ -111,6 +111,24 @@ export async function getPractitionersInSupabase(activeOnly: boolean, includeDem
   );
   // email is citext; the ::text cast above keeps it a plain string for callers.
   return rows.map((row) => ({ ...row, hasPortalAccess: row.firebaseUid !== null }));
+}
+
+/** The minimum the booking flow needs to confirm an astrologer can take a reading. */
+export type PractitionerAvailabilityRow = { id: string; name: string; active: boolean };
+
+/**
+ * One practitioner by id, or null.
+ *
+ * Booking creation asks for exactly this and nothing more — pulling the whole
+ * PractitionerRow would fetch a dozen columns the caller discards. The caller
+ * still owns the `active` check, so a deactivated practitioner is a 404 from the
+ * route rather than a silent refusal here.
+ */
+export async function getPractitionerAvailabilityInSupabase(id: string): Promise<PractitionerAvailabilityRow | null> {
+  return queryModel<PractitionerAvailabilityRow>(
+    `select id, name, active from public.practitioners where id = $1`,
+    [id],
+  );
 }
 
 export async function getAvailabilityRulesInSupabase(practitionerIds: string[]): Promise<AvailabilityRuleRow[]> {

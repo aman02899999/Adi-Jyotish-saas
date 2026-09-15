@@ -13,6 +13,10 @@ import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 import { createBookingRecord, SlotUnavailableError, type BookingRecord as NewBookingRecord } from "@/lib/booking-creation";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { listBookingsInSupabase } from "@/lib/bookings-supabase";
+import { getServiceByIdInSupabase } from "@/lib/services-supabase";
+import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -77,6 +81,9 @@ export async function GET() {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "bookings")) return Response.json({ error: "Booking permission required." }, { status: 403 });
 
+  if (isSupabaseCutoverActive()) {
+    return Response.json(await listBookingsInSupabase());
+  }
   const snap = await db.collection("bookings").orderBy("scheduledAt", "desc").get();
   return Response.json(snap.docs.map(bookingFromDoc));
 }
@@ -122,12 +129,25 @@ export async function POST(request: Request) {
   }
 
   await seedServices();
-  const [serviceSnap, practitionerSnap] = await Promise.all([
-    db.collection("services").doc(serviceId).get(),
-    db.collection("practitioners").doc(practitionerId).get(),
-  ]);
-  const service = serviceSnap.exists ? { id: serviceSnap.id, ...(serviceSnap.data() as { title: string; price: number; duration: number; active: boolean }) } : null;
-  const practitioner = practitionerSnap.exists ? { id: practitionerSnap.id, ...(practitionerSnap.data() as { name: string; active: boolean }) } : null;
+  let service: { id: string; title: string; price: number; duration: number; active: boolean } | null;
+  let practitioner: { id: string; name: string; active: boolean } | null;
+  if (isSupabaseCutoverActive()) {
+    const [serviceRow, practitionerRow] = await Promise.all([
+      getServiceByIdInSupabase(serviceId),
+      getPractitionerAvailabilityInSupabase(practitionerId),
+    ]);
+    service = serviceRow
+      ? { id: serviceRow.id, title: serviceRow.title, price: serviceRow.price, duration: serviceRow.duration, active: serviceRow.active }
+      : null;
+    practitioner = practitionerRow;
+  } else {
+    const [serviceSnap, practitionerSnap] = await Promise.all([
+      db.collection("services").doc(serviceId).get(),
+      db.collection("practitioners").doc(practitionerId).get(),
+    ]);
+    service = serviceSnap.exists ? { id: serviceSnap.id, ...(serviceSnap.data() as { title: string; price: number; duration: number; active: boolean }) } : null;
+    practitioner = practitionerSnap.exists ? { id: practitionerSnap.id, ...(practitionerSnap.data() as { name: string; active: boolean }) } : null;
+  }
   if (!service || !service.active) return Response.json({ error: "This reading is not currently available." }, { status: 404 });
   if (!practitioner || !practitioner.active) return Response.json({ error: "This astrologer is not currently available." }, { status: 404 });
   const available = await validateAvailableSlot({ date: bookingDate, duration: service.duration, practitionerId, startsAt: scheduledAt });

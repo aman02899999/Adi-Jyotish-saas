@@ -2,7 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
-import { queryModels, withTransaction } from "@/lib/postgres";
+import { query, queryModel, queryModels, withTransaction } from "@/lib/postgres";
 
 /**
  * Postgres data access for bookings.
@@ -203,4 +203,132 @@ export async function insertBookingInSupabase(values: BookingInsert): Promise<Bo
     if (!row) throw new Error("insertBookingInSupabase returned no row");
     return bookingRowFromSql(row);
   });
+}
+
+// ------------------------------------------------------------------ reads and edits
+
+/** numeric comes back as a string from node-postgres; a string price breaks every
+ * discount and total calculated downstream. */
+const BOOKING_NUMERIC = ["servicePrice"] as const;
+
+/** Every booking, newest appointment first — the admin Bookings table's order. */
+export async function listBookingsInSupabase(): Promise<BookingRow[]> {
+  return queryModels<BookingRow>(
+    `select ${BOOKING_COLUMNS} from public.bookings order by scheduled_at desc`,
+    [],
+    BOOKING_NUMERIC,
+  );
+}
+
+export async function getBookingByIdInSupabase(id: string): Promise<BookingRow | null> {
+  return queryModel<BookingRow>(
+    `select ${BOOKING_COLUMNS} from public.bookings where id = $1`,
+    [id],
+    BOOKING_NUMERIC,
+  );
+}
+
+export type BookingPatch = {
+  status?: string;
+  scheduledAt?: Date;
+  /** `undefined` leaves notes alone; `null` clears them. */
+  notes?: string | null;
+};
+
+/**
+ * Applies an admin edit, re-running the overlap test when the appointment moves.
+ *
+ * Firestore wrapped this in a transaction, which auto-retries when a concurrent
+ * write invalidates a read. Postgres does not retry, so the serialisation has to
+ * be explicit: the same per-practitioner advisory lock the insert path takes.
+ * Without it two admins rescheduling the same astrologer to the same slot would
+ * both pass the conflict check and both commit.
+ *
+ * Returns null when the booking is gone, so the route can answer 404 rather than
+ * treating a vanished row as a successful no-op.
+ */
+export async function updateBookingInSupabase(id: string, patch: BookingPatch): Promise<BookingRow | null> {
+  return withTransaction(async (client) => {
+    const existing = await client.query<{ practitioner_id: string; service_duration: number }>(
+      `select practitioner_id, service_duration from public.bookings where id = $1`,
+      [id],
+    );
+    const row = existing.rows[0];
+    if (!row) return null;
+    // Nothing ever reassigns a booking to another practitioner, so reading this
+    // before the lock is safe.
+    const practitionerId = row.practitioner_id;
+    const duration = Number(row.service_duration ?? 0);
+
+    if (patch.scheduledAt) {
+      await client.query(`select pg_advisory_xact_lock(hashtextextended($1, 0))`, [`booking:${practitionerId}`]);
+      const endsAt = new Date(patch.scheduledAt.getTime() + duration * 60000);
+      const conflict = await client.query<{ id: string }>(
+        `select b.id
+           from public.bookings b
+          where b.practitioner_id = $1
+            and b.id <> $2
+            and b.status <> 'cancelled'
+            and b.scheduled_at < $3
+            and b.scheduled_at + make_interval(mins => b.service_duration) > $4
+          limit 1`,
+        [practitionerId, id, endsAt, patch.scheduledAt],
+      );
+      if (conflict.rows.length) throw new BookingSlotConflictError();
+    }
+
+    const sets = ["updated_at = now()"];
+    const params: unknown[] = [id];
+    if (patch.status !== undefined) {
+      params.push(patch.status);
+      sets.push(`status = $${params.length}`);
+    }
+    if (patch.scheduledAt) {
+      params.push(patch.scheduledAt);
+      sets.push(`scheduled_at = $${params.length}`);
+    }
+    if (patch.notes !== undefined) {
+      params.push(patch.notes);
+      sets.push(`notes = $${params.length}`);
+    }
+
+    const updated = await client.query<BookingSqlRow>(
+      `update public.bookings set ${sets.join(", ")} where id = $1 returning ${BOOKING_COLUMNS}`,
+      params,
+    );
+    const updatedRow = updated.rows[0];
+    if (!updatedRow) return null;
+    return bookingRowFromSql(updatedRow);
+  });
+}
+
+/**
+ * Financial rows still pointing at a booking.
+ *
+ * Five tables reference `bookings`, all `ON DELETE SET NULL`, so a delete would
+ * quietly drop the link on invoices, payments, reviews, message threads and
+ * predictions instead of failing. Detaching money from the booking it was raised
+ * for is the part that is not recoverable after the fact, so the route blocks on
+ * those two and lets the rest fall away.
+ */
+export type BookingFinancialDependents = { invoices: number; payments: number };
+
+export async function countBookingFinancialDependentsInSupabase(id: string): Promise<BookingFinancialDependents> {
+  const { rows } = await query<{ invoices: number; payments: number }>(
+    `select
+       (select count(*)::int from public.invoices where booking_id = $1) as invoices,
+       (select count(*)::int from public.payments where booking_id = $1) as payments`,
+    [id],
+  );
+  const row = rows[0];
+  return { invoices: Number(row?.invoices ?? 0), payments: Number(row?.payments ?? 0) };
+}
+
+/** Deletes a booking and returns its reference for the audit trail, or null if it was already gone. */
+export async function deleteBookingInSupabase(id: string): Promise<string | null> {
+  const { rows } = await query<{ reference: string }>(
+    `delete from public.bookings where id = $1 returning reference`,
+    [id],
+  );
+  return rows[0]?.reference ?? null;
 }
