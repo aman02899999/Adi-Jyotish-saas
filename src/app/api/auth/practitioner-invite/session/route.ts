@@ -1,8 +1,8 @@
-import { getAuth } from "firebase-admin/auth";
 import { createPractitionerSession, findPractitionerByUid, getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { checkTwoFactorGate } from "@/lib/two-factor";
+import { verifyAuthToken } from "@/lib/auth-verify";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +20,7 @@ export async function POST(request: Request) {
 
   let uid: string;
   try {
-    uid = (await getAuth().verifyIdToken(body.idToken, true)).uid;
+    uid = (await verifyAuthToken(body.idToken)).uid;
   } catch {
     return Response.json({ error: "Sign-in could not be completed." }, { status: 401 });
   }
@@ -30,7 +30,7 @@ export async function POST(request: Request) {
 
   const existing = await findPractitionerByUid(uid);
   if (existing) {
-    const challengeToken = await checkTwoFactorGate("practitioner", uid, body.idToken, existing.ref);
+    const challengeToken = await checkTwoFactorGate("practitioner", uid, body.idToken);
     if (challengeToken) {
       await clearAuthFailures(authThrottle.keyHash);
       return Response.json({ error: "This account requires additional verification — please sign in from the practitioner login page instead." }, { status: 409 });

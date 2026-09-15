@@ -219,12 +219,16 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
     tx.update(bookingRef, { paymentStatus: "paid", updatedAt: now });
   });
 
+  // Guarded like the email below it: the payment transaction has already committed
+  // by this point, so an inbox write that throws would 500 the webhook and have
+  // Razorpay retry an event that succeeded. A missing notification is worth logging
+  // and moving on; re-processing a captured payment is not.
   await sendBookingNotification({
     memberEmail: invoice.customerEmail,
     bookingId: row.bookingId,
     subject: `${invoice.description} · ${invoice.number}`,
     body: `Payment received for invoice ${invoice.number}. Amount: ${invoice.currency} ${invoice.amount}. Thank you—your receipt is now available in Billing.`,
-  });
+  }).catch((error) => console.error("Booking notification failed", error));
   await sendEmail({
     to: invoice.customerEmail,
     subject: `Payment received · ${invoice.number}`,

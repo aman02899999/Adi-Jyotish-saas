@@ -2,6 +2,19 @@ import "server-only";
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import {
+  CouponRenameConflictError,
+  couponCodeTakenInSupabase,
+  getCouponByIdInSupabase,
+  getCouponForCheckoutInSupabase,
+  getCouponsForAdminInSupabase,
+  insertCouponInSupabase,
+  renameCouponInSupabase,
+  updateCouponInSupabase,
+  type CouponRow,
+} from "@/lib/gemstone-coupons-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { isUniqueViolation } from "@/lib/postgres";
 
 export class CouponError extends Error {}
 
@@ -57,11 +70,13 @@ function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestor
 }
 
 export async function getAllCouponsAdmin(): Promise<GemstoneCoupon[]> {
+  if (isSupabaseCutoverActive()) return getCouponsForAdminInSupabase();
   const snap = await couponsCol.orderBy("createdAt", "desc").get();
   return snap.docs.map(fromDoc);
 }
 
 export async function getCouponById(id: string) {
+  if (isSupabaseCutoverActive()) return getCouponByIdInSupabase(id);
   const snap = await couponsCol.doc(id).get();
   return snap.exists ? fromDoc(snap) : null;
 }
@@ -92,13 +107,38 @@ export async function createCoupon(payload: CouponPayload) {
   if (discountValue <= 0) throw new CouponError("Discount value must be greater than zero.");
   if (discountType === "percent" && discountValue > 100) throw new CouponError("Percentage discounts cannot exceed 100.");
 
-  const ref = couponsCol.doc(code);
-  const existing = await ref.get();
-  if (existing.exists) throw new CouponError("A coupon with this code already exists.");
-
   const startsAt = payload.startsAt ? new Date(payload.startsAt) : null;
   const expiresAt = payload.expiresAt ? new Date(payload.expiresAt) : null;
   if (startsAt && expiresAt && startsAt >= expiresAt) throw new CouponError("Start date must be before the expiry date.");
+
+  if (isSupabaseCutoverActive()) {
+    if (await couponCodeTakenInSupabase(code)) throw new CouponError("A coupon with this code already exists.");
+    try {
+      return await insertCouponInSupabase({
+        id: code,
+        code,
+        description: (payload.description ?? "").trim().slice(0, 300),
+        discountType,
+        discountValue,
+        minOrderAmount: Math.max(0, Number(payload.minOrderAmount) || 0),
+        maxDiscountAmount: payload.maxDiscountAmount != null ? Math.max(0, Number(payload.maxDiscountAmount)) : null,
+        usageLimit: payload.usageLimit != null ? Math.max(0, Number(payload.usageLimit)) : null,
+        perCustomerLimit: payload.perCustomerLimit != null ? Math.max(0, Number(payload.perCustomerLimit)) : null,
+        startsAt,
+        expiresAt,
+        active: payload.active ?? true,
+      });
+    } catch (error) {
+      // The pre-check races a concurrent save; code is UNIQUE and is also the
+      // primary key, so the constraint is the real guard.
+      if (isUniqueViolation(error)) throw new CouponError("A coupon with this code already exists.");
+      throw error;
+    }
+  }
+
+  const ref = couponsCol.doc(code);
+  const existing = await ref.get();
+  if (existing.exists) throw new CouponError("A coupon with this code already exists.");
 
   await ref.set({
     code,
@@ -121,6 +161,48 @@ export async function createCoupon(payload: CouponPayload) {
 }
 
 export async function updateCoupon(id: string, payload: CouponPayload) {
+  if (isSupabaseCutoverActive()) {
+    const current = await getCouponByIdInSupabase(id);
+    if (!current) throw new CouponError("Coupon not found.");
+    const existing = current as GemstoneCoupon;
+
+    const discountType = payload.discountType === "flat" || payload.discountType === "percent" ? payload.discountType : existing.discountType;
+    const discountValue = payload.discountValue != null ? Math.max(0, Number(payload.discountValue) || 0) : existing.discountValue;
+    if (discountType === "percent" && discountValue > 100) throw new CouponError("Percentage discounts cannot exceed 100.");
+
+    const nextCode = payload.code ? normalizeCode(payload.code) : existing.code;
+    const startsAt = payload.startsAt !== undefined ? (payload.startsAt ? new Date(payload.startsAt) : null) : existing.startsAt;
+    const expiresAt = payload.expiresAt !== undefined ? (payload.expiresAt ? new Date(payload.expiresAt) : null) : existing.expiresAt;
+    if (startsAt && expiresAt && startsAt >= expiresAt) throw new CouponError("Start date must be before the expiry date.");
+
+    const values = {
+      code: nextCode,
+      description: payload.description !== undefined ? payload.description.trim().slice(0, 300) : existing.description,
+      discountType,
+      discountValue,
+      minOrderAmount: payload.minOrderAmount != null ? Math.max(0, Number(payload.minOrderAmount) || 0) : existing.minOrderAmount,
+      maxDiscountAmount: payload.maxDiscountAmount !== undefined ? (payload.maxDiscountAmount != null ? Math.max(0, Number(payload.maxDiscountAmount)) : null) : existing.maxDiscountAmount,
+      usageLimit: payload.usageLimit !== undefined ? (payload.usageLimit != null ? Math.max(0, Number(payload.usageLimit)) : null) : existing.usageLimit,
+      perCustomerLimit: payload.perCustomerLimit !== undefined ? (payload.perCustomerLimit != null ? Math.max(0, Number(payload.perCustomerLimit)) : null) : existing.perCustomerLimit,
+      startsAt,
+      expiresAt,
+      active: payload.active ?? existing.active,
+    };
+
+    try {
+      if (nextCode !== existing.code) return await renameCouponInSupabase(id, nextCode, values);
+      const updated = await updateCouponInSupabase(id, values);
+      if (!updated) throw new CouponError("Coupon not found.");
+      return updated;
+    } catch (error) {
+      if (error instanceof CouponRenameConflictError) {
+        throw new CouponError(error.code === "not_found" ? "Coupon not found." : "A coupon with this code already exists.");
+      }
+      if (isUniqueViolation(error)) throw new CouponError("A coupon with this code already exists.");
+      throw error;
+    }
+  }
+
   const ref = couponsCol.doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new CouponError("Coupon not found.");
@@ -173,11 +255,17 @@ export async function updateCoupon(id: string, payload: CouponPayload) {
 }
 
 /** Pure validation — does not consume usage. Usage is recorded once an order actually pays. */
+async function readCouponFromFirestore(code: string): Promise<GemstoneCoupon | null> {
+  const snap = await couponsCol.doc(code).get();
+  return snap.exists ? fromDoc(snap) : null;
+}
+
 export async function validateCoupon(code: string, subtotal: number): Promise<{ coupon: GemstoneCoupon; discountAmount: number }> {
   const normalized = normalizeCode(code);
-  const snap = await couponsCol.doc(normalized).get();
-  if (!snap.exists) throw new CouponError("This coupon code is not valid.");
-  const coupon = fromDoc(snap);
+  const coupon: GemstoneCoupon | CouponRow | null = isSupabaseCutoverActive()
+    ? await getCouponForCheckoutInSupabase(normalized)
+    : await readCouponFromFirestore(normalized);
+  if (!coupon) throw new CouponError("This coupon code is not valid.");
   if (!coupon.active) throw new CouponError("This coupon code is not valid.");
 
   const now = new Date();

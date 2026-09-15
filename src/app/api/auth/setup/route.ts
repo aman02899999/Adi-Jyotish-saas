@@ -1,7 +1,10 @@
-import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { ALL_ADMIN_PERMISSIONS, createAdminSession, getAdminCount, getCurrentAdmin, normalizeEmail, recordAudit } from "@/lib/admin-auth";
+import { verifyAuthToken } from "@/lib/auth-verify";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { createAdminInSupabase } from "@/lib/admin-auth-supabase";
+import { upsertSystemRoleInSupabase } from "@/lib/admin-roles-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -19,30 +22,37 @@ export async function POST(request: Request) {
 
   let decoded;
   try {
-    decoded = await getAuth().verifyIdToken(body.idToken, true);
+    decoded = await verifyAuthToken(body.idToken);
   } catch {
     return Response.json({ error: "Sign-in could not be completed." }, { status: 401 });
   }
   const email = normalizeEmail(decoded.email ?? "");
   if (!email) return Response.json({ error: "Your account has no verified email address." }, { status: 400 });
 
-  await db.collection("adminRoles").doc("owner").set({
-    name: "Owner",
-    isSystem: true,
-    permissions: ALL_ADMIN_PERMISSIONS.map((permission) => permission.key),
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-  }, { merge: true });
+  const ownerPermissions = ALL_ADMIN_PERMISSIONS.map((permission) => permission.key);
+  if (isSupabaseCutoverActive()) {
+    await upsertSystemRoleInSupabase("owner", "Owner", ownerPermissions);
+    // stampLogin: bootstrap signs the new owner straight in.
+    await createAdminInSupabase({ id: decoded.uid, name, email, role: "owner", stampLogin: true });
+  } else {
+    await db.collection("adminRoles").doc("owner").set({
+      name: "Owner",
+      isSystem: true,
+      permissions: ownerPermissions,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    }, { merge: true });
 
-  await db.collection("adminUsers").doc(decoded.uid).set({
-    name,
-    email,
-    role: "owner",
-    active: true,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-    lastLoginAt: FieldValue.serverTimestamp(),
-  });
+    await db.collection("adminUsers").doc(decoded.uid).set({
+      name,
+      email,
+      role: "owner",
+      active: true,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      lastLoginAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   await createAdminSession(body.idToken);
   const admin = await getCurrentAdmin();

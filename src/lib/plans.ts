@@ -3,7 +3,17 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getRazorpay } from "@/lib/razorpay";
+import {
+  getAllPlansFromSupabase,
+  getPlanByIdFromSupabase,
+  insertPlanInSupabase,
+  seedPlansInSupabase,
+  updatePlanInSupabase,
+  updatePlanRazorpayIdsInSupabase,
+} from "@/lib/plans-supabase";
 import { getStudioSettings } from "@/lib/studio-settings";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { isUniqueViolation } from "@/lib/postgres";
 import { toSlug } from "@/lib/services";
 
 export type MembershipPlan = {
@@ -95,6 +105,12 @@ const starterPlans: Array<Omit<MembershipPlan, "id" | "currency" | "razorpayPlan
  * is: `create()` fails silently (caught) if the plan already exists — no separate uniqueness check needed. */
 export async function seedMembershipPlans(): Promise<void> {
   const settings = await getStudioSettings();
+  if (isSupabaseCutoverActive()) {
+    // on conflict do nothing inside the helper replaces the create-and-swallow
+    // pattern below, so seeding is atomic rather than error-code dependent.
+    await seedPlansInSupabase(starterPlans.map((plan) => ({ ...plan, currency: settings.currency })));
+    return;
+  }
   await Promise.all(starterPlans.map(async (plan) => {
     const ref = plansCollection().doc(plan.key);
     try {
@@ -128,7 +144,11 @@ async function backfillRazorpayIds(plan: MembershipPlan): Promise<MembershipPlan
     if (razorpayIds.razorpayPlanIdMonthly === plan.razorpayPlanIdMonthly && razorpayIds.razorpayPlanIdYearly === plan.razorpayPlanIdYearly) {
       return plan;
     }
-    await plansCollection().doc(plan.id).update({ ...razorpayIds, updatedAt: FieldValue.serverTimestamp() });
+    if (isSupabaseCutoverActive()) {
+      await updatePlanRazorpayIdsInSupabase(plan.id, razorpayIds);
+    } else {
+      await plansCollection().doc(plan.id).update({ ...razorpayIds, updatedAt: FieldValue.serverTimestamp() });
+    }
     return { ...plan, ...razorpayIds };
   } catch (error) {
     console.error(`Could not sync Razorpay plan ids for "${plan.key}":`, error instanceof Error ? error.message : error);
@@ -152,8 +172,9 @@ function fallbackPlans(): MembershipPlan[] {
 export async function getAllPlans(): Promise<MembershipPlan[]> {
   try {
     await seedMembershipPlans();
-    const snap = await plansCollection().orderBy("sortOrder", "asc").get();
-    const plans = snap.docs.map((doc) => planFromSnap(doc));
+    const plans = isSupabaseCutoverActive()
+      ? await getAllPlansFromSupabase()
+      : (await plansCollection().orderBy("sortOrder", "asc").get()).docs.map((doc) => planFromSnap(doc));
     return Promise.all(plans.map(backfillRazorpayIds));
   } catch (error) {
     // /pricing is public marketing content. When Firebase is unavailable or misconfigured,
@@ -170,6 +191,7 @@ export async function getPublicPlans(): Promise<MembershipPlan[]> {
 }
 
 export async function getPlanById(id: string): Promise<MembershipPlan | null> {
+  if (isSupabaseCutoverActive()) return getPlanByIdFromSupabase(id);
   const snap = await plansCollection().doc(id).get();
   return snap.exists ? planFromSnap(snap) : null;
 }
@@ -232,11 +254,10 @@ export async function createPlan(payload: PlanPayload): Promise<MembershipPlan> 
   const settings = await getStudioSettings();
   const key = payload.key?.trim() ? toSlug(payload.key) : toSlug(name);
 
-  const ref = plansCollection().doc(key);
-  const existing = await ref.get();
-  if (existing.exists) throw new Error("A plan with this key already exists.");
-
-  await ref.set({
+  // Normalization happens once, before the branch, so both data layers receive
+  // identical values — a divergence here would mean the same admin form produces
+  // different rows depending on which database is live.
+  const draft = {
     key,
     name,
     tagline: payload.tagline?.trim() ?? "",
@@ -249,6 +270,29 @@ export async function createPlan(payload: PlanPayload): Promise<MembershipPlan> 
     highlighted: payload.highlighted ?? false,
     active: payload.active ?? true,
     sortOrder: Math.max(0, Number(payload.sortOrder) || 0),
+  };
+
+  if (isSupabaseCutoverActive()) {
+    let created: MembershipPlan;
+    try {
+      created = await insertPlanInSupabase(draft);
+    } catch (error) {
+      // Let the unique index decide rather than read-then-write: two admins
+      // creating the same key concurrently can no longer both succeed.
+      if (isUniqueViolation(error)) throw new Error("A plan with this key already exists.");
+      throw error;
+    }
+    const razorpayIds = await ensureRazorpayPlans(created);
+    await updatePlanRazorpayIdsInSupabase(created.id, razorpayIds);
+    return { ...created, ...razorpayIds };
+  }
+
+  const ref = plansCollection().doc(key);
+  const existing = await ref.get();
+  if (existing.exists) throw new Error("A plan with this key already exists.");
+
+  await ref.set({
+    ...draft,
     razorpayPlanIdMonthly: null,
     razorpayPlanIdYearly: null,
     createdAt: FieldValue.serverTimestamp(),
@@ -264,9 +308,10 @@ export async function createPlan(payload: PlanPayload): Promise<MembershipPlan> 
 export async function updatePlan(id: string, payload: PlanPayload): Promise<MembershipPlan> {
   const existing = await getPlanById(id);
   if (!existing) throw new Error("Plan not found.");
-  const ref = plansCollection().doc(id);
 
-  await ref.update({
+  // Merged once, before the branch, so both layers apply the same "fall back to
+  // the stored value when the field is absent" rule.
+  const next = {
     name: payload.name?.trim() || existing.name,
     tagline: payload.tagline?.trim() ?? existing.tagline,
     description: payload.description?.trim() ?? existing.description,
@@ -277,8 +322,17 @@ export async function updatePlan(id: string, payload: PlanPayload): Promise<Memb
     highlighted: payload.highlighted ?? existing.highlighted,
     active: payload.active ?? existing.active,
     sortOrder: payload.sortOrder != null ? Math.max(0, Number(payload.sortOrder) || 0) : existing.sortOrder,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  };
+
+  if (isSupabaseCutoverActive()) {
+    const updated = await updatePlanInSupabase(id, next);
+    const razorpayIds = await ensureRazorpayPlans(updated);
+    await updatePlanRazorpayIdsInSupabase(id, razorpayIds);
+    return { ...updated, ...razorpayIds };
+  }
+
+  const ref = plansCollection().doc(id);
+  await ref.update({ ...next, updatedAt: FieldValue.serverTimestamp() });
 
   const updated = planFromSnap(await ref.get());
   const razorpayIds = await ensureRazorpayPlans(updated);

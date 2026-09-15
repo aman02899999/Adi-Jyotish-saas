@@ -1,6 +1,8 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getAllServices, toSlug } from "@/lib/services";
+import { createServiceInSupabase } from "@/lib/services-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 
 export const dynamic = "force-dynamic";
@@ -47,8 +49,12 @@ export async function POST(request: Request) {
     active: body.active ?? true,
     featured: body.featured ?? false,
   };
-  const ref = db.collection("services").doc(slug);
-  await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  if (isSupabaseCutoverActive()) {
+    await createServiceInSupabase(doc);
+  } else {
+    const ref = db.collection("services").doc(slug);
+    await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  }
 
   const created = { ...doc, id: slug, createdAt: new Date(), updatedAt: new Date() };
   await recordAudit(admin, "service.created", "service", created.id, { title: created.title });

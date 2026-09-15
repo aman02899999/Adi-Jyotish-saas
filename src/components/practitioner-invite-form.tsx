@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
-import { signInWithEmailAndPassword } from "@/lib/firebase-client";
+import { signInWithEmailAndPassword } from "@/lib/auth-client";
 
 export function PractitionerInviteForm({ token, name, email }: { token: string; name: string; email: string }) {
   const [password, setPassword] = useState("");

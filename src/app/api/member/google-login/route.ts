@@ -1,8 +1,7 @@
-import { getAuth } from "firebase-admin/auth";
-import { db } from "@/lib/firestore";
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkTwoFactorGate } from "@/lib/two-factor";
+import { verifyAuthToken } from "@/lib/auth-verify";
 
 export const dynamic = "force-dynamic";
 
@@ -19,12 +18,12 @@ export async function POST(request: Request) {
 
   let uid: string;
   try {
-    uid = (await getAuth().verifyIdToken(body.idToken, true)).uid;
+    uid = (await verifyAuthToken(body.idToken)).uid;
   } catch {
     return Response.json({ error: "Google sign-in could not be verified. Please try again." }, { status: 401 });
   }
 
-  const challengeToken = await checkTwoFactorGate("member", uid, body.idToken, db.collection("members").doc(uid));
+  const challengeToken = await checkTwoFactorGate("member", uid, body.idToken);
   if (challengeToken) return Response.json({ requiresTotp: true, challengeToken });
 
   try {

@@ -2,6 +2,38 @@ import "server-only";
 
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import {
+  getActiveProductSlugsInSupabase,
+  getActiveVariantsInSupabase,
+  getActiveCatalogRowsInSupabase,
+  getCategoriesWithProductCountInSupabase,
+  getCategoryBySlugInSupabase,
+  getCatalogRowBySlugInSupabase,
+  getCatalogRowsByIdsInSupabase,
+  getCatalogRowsBySlugsInSupabase,
+  getImagesInSupabase,
+  getPublishedRatingTotalsInSupabase,
+  getRelatedCatalogRowsInSupabase,
+} from "@/lib/gemstones-supabase";
+import {
+  categoryHasProductsInSupabase,
+  categorySlugTakenInSupabase,
+  deleteCategoryInSupabase,
+  deleteProductInSupabase,
+  getImagesForAdminInSupabase,
+  getProductForAdminInSupabase,
+  getVariantsForAdminInSupabase,
+  insertCategoryInSupabase,
+  insertProductInSupabase,
+  productHasOrderItemsInSupabase,
+  productSlugTakenInSupabase,
+  replaceProductImagesInSupabase,
+  replaceProductVariantsInSupabase,
+  updateCategoryInSupabase,
+  updateProductInSupabase,
+} from "@/lib/gemstones-admin-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { isUniqueViolation } from "@/lib/postgres";
 import { toSlug } from "@/lib/services";
 import { seedGemstoneCatalog } from "@/lib/gemstones-seed";
 
@@ -138,6 +170,7 @@ function fromVariantDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseF
 /* ---------------------------------- categories ---------------------------------- */
 
 export async function getAllCategoriesAdmin(): Promise<Array<GemstoneCategory & { productCount: number }>> {
+  if (isSupabaseCutoverActive()) return getCategoriesWithProductCountInSupabase(false);
   await seedGemstoneCatalog();
   const snap = await categoriesCol.orderBy("sortOrder", "asc").orderBy("createdAt", "asc").get();
   const categories = snap.docs.map(fromCategoryDoc);
@@ -153,6 +186,7 @@ export async function getActiveCategories(): Promise<Array<GemstoneCategory & { 
 }
 
 export async function getCategoryBySlug(slug: string) {
+  if (isSupabaseCutoverActive()) return getCategoryBySlugInSupabase(slug);
   const snap = await categoriesCol.where("slug", "==", slug).limit(1).get();
   if (snap.empty) return null;
   return fromCategoryDoc(snap.docs[0]);
@@ -164,6 +198,25 @@ export async function createCategory(payload: CategoryPayload) {
   const name = payload.name?.trim().slice(0, 200);
   if (!name) throw new GemstoneError("Category name is required.");
   const slug = payload.slug?.trim() ? toSlug(payload.slug) : toSlug(name);
+
+  if (isSupabaseCutoverActive()) {
+    if (await categorySlugTakenInSupabase(slug)) throw new GemstoneError("A category with this slug already exists.");
+    try {
+      return await insertCategoryInSupabase({
+        name,
+        slug,
+        description: capText(payload.description, 2000),
+        imageUrl: payload.imageUrl || null,
+        sortOrder: Math.max(0, finiteOrZero(payload.sortOrder)),
+        active: payload.active ?? true,
+      });
+    } catch (error) {
+      // The pre-check above races with a concurrent save; slug is UNIQUE, so the
+      // constraint is the real guard and is reported the same way.
+      if (isUniqueViolation(error)) throw new GemstoneError("A category with this slug already exists.");
+      throw error;
+    }
+  }
 
   const existing = await categoriesCol.where("slug", "==", slug).limit(1).get();
   if (!existing.empty) throw new GemstoneError("A category with this slug already exists.");
@@ -184,6 +237,28 @@ export async function createCategory(payload: CategoryPayload) {
 }
 
 export async function updateCategory(id: string, payload: CategoryPayload) {
+  if (isSupabaseCutoverActive()) {
+    const patch: Parameters<typeof updateCategoryInSupabase>[1] = {};
+    if (payload.name?.trim()) patch.name = payload.name.trim().slice(0, 200);
+    if (payload.slug?.trim()) {
+      const slug = toSlug(payload.slug);
+      if (await categorySlugTakenInSupabase(slug, id)) throw new GemstoneError("A category with this slug already exists.");
+      patch.slug = slug;
+    }
+    if (payload.description !== undefined) patch.description = capText(payload.description, 2000);
+    if (payload.imageUrl !== undefined) patch.imageUrl = payload.imageUrl || null;
+    if (payload.sortOrder != null) patch.sortOrder = Math.max(0, finiteOrZero(payload.sortOrder));
+    if (payload.active !== undefined) patch.active = payload.active;
+    try {
+      const updated = await updateCategoryInSupabase(id, patch);
+      if (!updated) throw new GemstoneError("Category not found.");
+      return updated;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new GemstoneError("A category with this slug already exists.");
+      throw error;
+    }
+  }
+
   const ref = categoriesCol.doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new GemstoneError("Category not found.");
@@ -207,6 +282,14 @@ export async function updateCategory(id: string, payload: CategoryPayload) {
 }
 
 export async function deleteCategory(id: string) {
+  if (isSupabaseCutoverActive()) {
+    if (await categoryHasProductsInSupabase(id)) {
+      throw new GemstoneError("This category still has products in it. Move or delete those products first.");
+    }
+    await deleteCategoryInSupabase(id);
+    return;
+  }
+
   const inUse = await productsCol.where("categoryId", "==", id).limit(1).get();
   if (!inUse.empty) throw new GemstoneError("This category still has products in it. Move or delete those products first.");
   await categoriesCol.doc(id).delete();
@@ -233,6 +316,7 @@ export type VariantInput = {
  * product doc's own ref.set()/ref.update() already committed - leaving an orphaned or
  * half-updated product in Firestore behind a generic "could not be created/updated" error. */
 function validateVariants(variants: VariantInput[]) {
+  if (!variants.length) throw new GemstoneError("Every product needs at least one weight/price variant.");
   for (const variant of variants) {
     if (typeof variant.label !== "string") throw new GemstoneError("Every variant needs a label.");
     if (typeof variant.sku !== "string") throw new GemstoneError("Every variant needs a SKU.");
@@ -244,20 +328,57 @@ function validateImages(images: ImageInput[]) {
   }
 }
 
+/** Variant field rules, normalised once and shared by both providers. Keeping
+ * this above the branch is what stops the Firestore and Postgres paths drifting
+ * apart on rounding, defaults or trimming. */
+function normalizeVariantInput(variant: VariantInput) {
+  return {
+    id: variant.id,
+    label: variant.label.trim() || "Standard",
+    weightCarat: variant.weightCarat?.trim() ?? "",
+    weightRatti: variant.weightRatti?.trim() ?? "",
+    certificationLevel: variant.certificationLevel?.trim() ?? "",
+    price: Math.max(0, Math.round(finiteOrZero(variant.price))),
+    compareAtPrice: variant.compareAtPrice != null && finiteOrZero(variant.compareAtPrice) > 0 ? Math.round(finiteOrZero(variant.compareAtPrice)) : null,
+    stockQuantity: Math.max(0, Math.round(finiteOrZero(variant.stockQuantity))),
+    sku: variant.sku.trim(),
+    active: variant.active ?? true,
+  };
+}
+
+/** sortOrder is the position in the submitted list, not a caller-supplied value —
+ * the admin form reorders by dragging, so the array order is the source of truth. */
+function normalizeImageInput(image: ImageInput, index: number) {
+  return {
+    id: image.id,
+    url: image.url,
+    alt: image.alt ?? "",
+    sortOrder: index,
+    isPrimary: Boolean(image.isPrimary),
+  };
+}
+
 async function replaceProductImages(productId: string, images: ImageInput[]) {
+  const normalized = images.map(normalizeImageInput);
+  if (isSupabaseCutoverActive()) {
+    await replaceProductImagesInSupabase(productId, normalized);
+    return;
+  }
+
   const col = imagesCol(productId);
   const existingSnap = await col.get();
-  const keepIds = new Set(images.filter((image) => image.id).map((image) => image.id!));
+  const keepIds = new Set(normalized.filter((image) => image.id).map((image) => image.id!));
 
   const batch = db.batch();
   existingSnap.docs.forEach((doc) => {
     if (!keepIds.has(doc.id)) batch.delete(doc.ref);
   });
-  images.forEach((image, index) => {
-    if (image.id) {
-      batch.update(col.doc(image.id), { url: image.url, alt: image.alt ?? "", sortOrder: index, isPrimary: Boolean(image.isPrimary) });
+  normalized.forEach((image) => {
+    const { id, ...values } = image;
+    if (id) {
+      batch.update(col.doc(id), values);
     } else {
-      batch.set(col.doc(), { productId, url: image.url, alt: image.alt ?? "", sortOrder: index, isPrimary: Boolean(image.isPrimary), createdAt: FieldValue.serverTimestamp() });
+      batch.set(col.doc(), { productId, ...values, createdAt: FieldValue.serverTimestamp() });
     }
   });
   await batch.commit();
@@ -269,10 +390,15 @@ async function replaceProductImages(productId: string, images: ImageInput[]) {
  * without gemstones.ts itself depending on the wishlist module. */
 async function replaceProductVariants(productId: string, variants: VariantInput[]): Promise<{ priceDropped: boolean; backInStock: boolean }> {
   if (!variants.length) throw new GemstoneError("Every product needs at least one weight/price variant.");
+  const normalized = variants.map(normalizeVariantInput);
+  if (isSupabaseCutoverActive()) {
+    return replaceProductVariantsInSupabase(productId, normalized);
+  }
+
   const col = variantsCol(productId);
   const existingSnap = await col.get();
   const existingById = new Map(existingSnap.docs.map((doc) => [doc.id, doc.data() as { price?: number; stockQuantity?: number }]));
-  const keepIds = new Set(variants.filter((variant) => variant.id).map((variant) => variant.id!));
+  const keepIds = new Set(normalized.filter((variant) => variant.id).map((variant) => variant.id!));
 
   let priceDropped = false;
   let backInStock = false;
@@ -281,26 +407,16 @@ async function replaceProductVariants(productId: string, variants: VariantInput[
   existingSnap.docs.forEach((doc) => {
     if (!keepIds.has(doc.id)) batch.delete(doc.ref);
   });
-  for (const variant of variants) {
-    const values = {
-      productId,
-      label: variant.label.trim() || "Standard",
-      weightCarat: variant.weightCarat?.trim() ?? "",
-      weightRatti: variant.weightRatti?.trim() ?? "",
-      certificationLevel: variant.certificationLevel?.trim() ?? "",
-      price: Math.max(0, Math.round(finiteOrZero(variant.price))),
-      compareAtPrice: variant.compareAtPrice != null && finiteOrZero(variant.compareAtPrice) > 0 ? Math.round(finiteOrZero(variant.compareAtPrice)) : null,
-      stockQuantity: Math.max(0, Math.round(finiteOrZero(variant.stockQuantity))),
-      sku: variant.sku.trim(),
-      active: variant.active ?? true,
-    };
-    const prior = variant.id ? existingById.get(variant.id) : undefined;
+  for (const entry of normalized) {
+    const { id, ...rest } = entry;
+    const values = { productId, ...rest };
+    const prior = id ? existingById.get(id) : undefined;
     if (prior) {
       if (typeof prior.price === "number" && values.price < prior.price) priceDropped = true;
       if ((prior.stockQuantity ?? 0) <= 0 && values.stockQuantity > 0) backInStock = true;
     }
-    if (variant.id) {
-      batch.update(col.doc(variant.id), { ...values, updatedAt: FieldValue.serverTimestamp() });
+    if (id) {
+      batch.update(col.doc(id), { ...values, updatedAt: FieldValue.serverTimestamp() });
     } else {
       batch.set(col.doc(), { ...values, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     }
@@ -363,6 +479,16 @@ export async function getAllProductsAdmin() {
 }
 
 export async function getProductAdminById(id: string): Promise<{ product: GemstoneProduct; images: GemstoneProductImage[]; variants: GemstoneProductVariant[] } | null> {
+  if (isSupabaseCutoverActive()) {
+    const product = await getProductForAdminInSupabase(id);
+    if (!product) return null;
+    const [images, variants] = await Promise.all([
+      getImagesForAdminInSupabase(id),
+      getVariantsForAdminInSupabase(id),
+    ]);
+    return { product, images, variants };
+  }
+
   const ref = productsCol.doc(id);
   const snap = await ref.get();
   if (!snap.exists) return null;
@@ -381,10 +507,49 @@ export async function createProduct(payload: ProductPayload) {
   const sku = payload.sku?.trim();
   if (!sku) throw new GemstoneError("SKU is required.");
   const slug = payload.slug?.trim() ? toSlug(payload.slug) : toSlug(name);
-  const existingSlug = await productsCol.where("slug", "==", slug).limit(1).get();
-  if (!existingSlug.empty) throw new GemstoneError("A product with this slug already exists.");
   validateVariants(payload.variants ?? []);
   if (payload.images?.length) validateImages(payload.images);
+
+  if (isSupabaseCutoverActive()) {
+    if (await productSlugTakenInSupabase(slug)) throw new GemstoneError("A product with this slug already exists.");
+    try {
+      const product = await insertProductInSupabase({
+        categoryId: payload.categoryId,
+        name,
+        slug,
+        shortDescription: capText(payload.shortDescription, 300),
+        description: capText(payload.description, 4000),
+        benefits: capText(payload.benefits, 2000),
+        whoShouldWear: capText(payload.whoShouldWear, 1000),
+        recommendedZodiac: capText(payload.recommendedZodiac, 200),
+        recommendedPlanets: capText(payload.recommendedPlanets, 200),
+        origin: capText(payload.origin, 200),
+        color: capText(payload.color, 100),
+        treatment: capText(payload.treatment, 200),
+        certification: capText(payload.certification, 200),
+        certificateUrl: capText(payload.certificateUrl, 500),
+        currency: "INR",
+        sku,
+        featured: payload.featured ?? false,
+        trending: payload.trending ?? false,
+        bestseller: payload.bestseller ?? false,
+        active: payload.active ?? true,
+        metaTitle: capText(payload.metaTitle, 200),
+        metaDescription: capText(payload.metaDescription, 300),
+      });
+      // Same order as the Firestore path: the product row first, then its
+      // variants, so a variant write never references a missing parent.
+      await replaceProductVariants(product.id, payload.variants ?? []);
+      if (payload.images?.length) await replaceProductImages(product.id, payload.images);
+      return product;
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new GemstoneError("A product with this slug already exists.");
+      throw error;
+    }
+  }
+
+  const existingSlug = await productsCol.where("slug", "==", slug).limit(1).get();
+  if (!existingSlug.empty) throw new GemstoneError("A product with this slug already exists.");
 
   const ref = productsCol.doc();
   await ref.set({
@@ -422,6 +587,51 @@ export async function createProduct(payload: ProductPayload) {
 }
 
 export async function updateProduct(id: string, payload: ProductPayload) {
+  if (isSupabaseCutoverActive()) {
+    if (payload.variants) validateVariants(payload.variants);
+    if (payload.images) validateImages(payload.images);
+    const current = await getProductForAdminInSupabase(id);
+    if (!current) throw new GemstoneError("Product not found.");
+
+    let nextSlug = current.slug;
+    if (payload.slug?.trim()) {
+      nextSlug = toSlug(payload.slug);
+      if (await productSlugTakenInSupabase(nextSlug, id)) throw new GemstoneError("A product with this slug already exists.");
+    }
+
+    try {
+      const product = await updateProductInSupabase(id, {
+        categoryId: payload.categoryId ?? current.categoryId,
+        name: payload.name?.trim().slice(0, 200) || current.name,
+        slug: nextSlug,
+        shortDescription: payload.shortDescription !== undefined ? capText(payload.shortDescription, 300) : current.shortDescription,
+        description: payload.description !== undefined ? capText(payload.description, 4000) : current.description,
+        benefits: payload.benefits !== undefined ? capText(payload.benefits, 2000) : current.benefits,
+        whoShouldWear: payload.whoShouldWear !== undefined ? capText(payload.whoShouldWear, 1000) : current.whoShouldWear,
+        recommendedZodiac: payload.recommendedZodiac !== undefined ? capText(payload.recommendedZodiac, 200) : current.recommendedZodiac,
+        recommendedPlanets: payload.recommendedPlanets !== undefined ? capText(payload.recommendedPlanets, 200) : current.recommendedPlanets,
+        origin: payload.origin !== undefined ? capText(payload.origin, 200) : current.origin,
+        color: payload.color !== undefined ? capText(payload.color, 100) : current.color,
+        treatment: payload.treatment !== undefined ? capText(payload.treatment, 200) : current.treatment,
+        certification: payload.certification !== undefined ? capText(payload.certification, 200) : current.certification,
+        certificateUrl: payload.certificateUrl !== undefined ? capText(payload.certificateUrl, 500) : (current.certificateUrl ?? ""),
+        sku: payload.sku?.trim() || current.sku,
+        featured: payload.featured ?? current.featured,
+        trending: payload.trending ?? current.trending,
+        bestseller: payload.bestseller ?? current.bestseller,
+        active: payload.active ?? current.active,
+        metaTitle: payload.metaTitle !== undefined ? capText(payload.metaTitle, 200) : current.metaTitle,
+        metaDescription: payload.metaDescription !== undefined ? capText(payload.metaDescription, 300) : current.metaDescription,
+      });
+      const wishlistTrigger = payload.variants ? await replaceProductVariants(id, payload.variants) : null;
+      if (payload.images) await replaceProductImages(id, payload.images);
+      return { product: product ?? current, wishlistTrigger };
+    } catch (error) {
+      if (isUniqueViolation(error)) throw new GemstoneError("A product with this slug already exists.");
+      throw error;
+    }
+  }
+
   const ref = productsCol.doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new GemstoneError("Product not found.");
@@ -501,6 +711,17 @@ export async function duplicateProduct(id: string) {
 }
 
 export async function deleteProduct(id: string) {
+  if (isSupabaseCutoverActive()) {
+    // gemstone_order_items.product_id is not a foreign key, so nothing stops the
+    // delete at the database level — this check is the only thing standing between
+    // an admin click and orphaned order lines.
+    if (await productHasOrderItemsInSupabase(id)) {
+      throw new GemstoneError("This product has existing orders and cannot be deleted. Archive it instead.");
+    }
+    await deleteProductInSupabase(id);
+    return;
+  }
+
   // Collection-group lookup — requires a Firestore collection-group index on "items.productId" (see firestore.indexes.json).
   // This check gates a destructive action, so a missing/still-building index must fail closed
   // (block the delete) rather than silently treating the lookup as "no orders reference it".
@@ -565,6 +786,16 @@ export type ProductFilters = {
 
 type CatalogRow = { product: GemstoneProduct; categoryName: string; categorySlug: string };
 
+function groupByProductId<T extends { productId: string }>(rows: T[]): Map<string, T[]> {
+  const grouped = new Map<string, T[]>();
+  for (const row of rows) {
+    const list = grouped.get(row.productId) ?? [];
+    list.push(row);
+    grouped.set(row.productId, list);
+  }
+  return grouped;
+}
+
 /** Fetches variants/images/ratings per product directly from their subcollections (no collection-group
  * query needed) and assembles the storefront card shape. Review ratings are pulled via a top-level
  * `gemstoneReviews` query chunked to respect Firestore's 30-item `in` limit. */
@@ -572,21 +803,38 @@ async function decorateProducts(products: CatalogRow[]): Promise<ProductListItem
   if (!products.length) return [];
   const ids = products.map((row) => row.product.id);
 
-  const [variantSnaps, imageSnaps, reviewChunkSnaps] = await Promise.all([
-    Promise.all(ids.map((id) => variantsCol(id).where("active", "==", true).get())),
-    Promise.all(ids.map((id) => imagesCol(id).orderBy("sortOrder", "asc").get())),
-    Promise.all(chunk(ids, 30).map((batch) => reviewsCol.where("productId", "in", batch).where("status", "==", "published").get())),
-  ]);
+  let variantsByProduct: Map<string, GemstoneProductVariant[]>;
+  let imagesByProduct: Map<string, GemstoneProductImage[]>;
+  let ratingByProduct: Map<string, { sum: number; count: number }>;
 
-  const variantsByProduct = new Map(ids.map((id, index) => [id, variantSnaps[index].docs.map(fromVariantDoc)]));
-  const imagesByProduct = new Map(ids.map((id, index) => [id, imageSnaps[index].docs.map(fromImageDoc)]));
+  if (isSupabaseCutoverActive()) {
+    // Three queries for the whole page instead of two per product. Ratings are
+    // summed in SQL rather than pulled row by row.
+    const [variants, images, ratings] = await Promise.all([
+      getActiveVariantsInSupabase(ids),
+      getImagesInSupabase(ids),
+      getPublishedRatingTotalsInSupabase(ids),
+    ]);
+    variantsByProduct = groupByProductId(variants);
+    imagesByProduct = groupByProductId(images);
+    ratingByProduct = ratings;
+  } else {
+    const [variantSnaps, imageSnaps, reviewChunkSnaps] = await Promise.all([
+      Promise.all(ids.map((id) => variantsCol(id).where("active", "==", true).get())),
+      Promise.all(ids.map((id) => imagesCol(id).orderBy("sortOrder", "asc").get())),
+      Promise.all(chunk(ids, 30).map((batch) => reviewsCol.where("productId", "in", batch).where("status", "==", "published").get())),
+    ]);
 
-  const ratingByProduct = new Map<string, { sum: number; count: number }>();
-  for (const reviewSnap of reviewChunkSnaps) {
-    for (const doc of reviewSnap.docs) {
-      const data = doc.data() as { productId: string; rating: number };
-      const current = ratingByProduct.get(data.productId) ?? { sum: 0, count: 0 };
-      ratingByProduct.set(data.productId, { sum: current.sum + data.rating, count: current.count + 1 });
+    variantsByProduct = new Map(ids.map((id, index) => [id, variantSnaps[index].docs.map(fromVariantDoc)]));
+    imagesByProduct = new Map(ids.map((id, index) => [id, imageSnaps[index].docs.map(fromImageDoc)]));
+
+    ratingByProduct = new Map<string, { sum: number; count: number }>();
+    for (const reviewSnap of reviewChunkSnaps) {
+      for (const doc of reviewSnap.docs) {
+        const data = doc.data() as { productId: string; rating: number };
+        const current = ratingByProduct.get(data.productId) ?? { sum: 0, count: 0 };
+        ratingByProduct.set(data.productId, { sum: current.sum + data.rating, count: current.count + 1 });
+      }
     }
   }
 
@@ -628,16 +876,24 @@ async function decorateProducts(products: CatalogRow[]): Promise<ProductListItem
  * previous SQL behaviour. This avoids needing a large matrix of Firestore composite indexes for every
  * optional filter combination. */
 export async function getProductCatalog(filters: ProductFilters = {}): Promise<{ items: ProductListItem[]; total: number; page: number; pageSize: number }> {
-  await seedGemstoneCatalog();
+  let rows: CatalogRow[];
+  if (isSupabaseCutoverActive()) {
+    // Seeding writes the demo catalog into Firestore. Under cutover the catalog was
+    // copied wholesale, so seeding would only create rows nothing reads any more.
+    // The category join comes with the rows, so no second query is needed.
+    rows = await getActiveCatalogRowsInSupabase();
+  } else {
+    await seedGemstoneCatalog();
 
-  const [productSnap, categorySnap] = await Promise.all([productsCol.where("active", "==", true).get(), categoriesCol.get()]);
-  const categoryById = new Map(categorySnap.docs.map((doc) => [doc.id, fromCategoryDoc(doc)]));
+    const [productSnap, categorySnap] = await Promise.all([productsCol.where("active", "==", true).get(), categoriesCol.get()]);
+    const categoryById = new Map(categorySnap.docs.map((doc) => [doc.id, fromCategoryDoc(doc)]));
 
-  let rows: CatalogRow[] = productSnap.docs.map((doc) => {
-    const product = fromProductDoc(doc);
-    const category = categoryById.get(product.categoryId);
-    return { product, categoryName: category?.name ?? "Uncategorized", categorySlug: category?.slug ?? "" };
-  });
+    rows = productSnap.docs.map((doc) => {
+      const product = fromProductDoc(doc);
+      const category = categoryById.get(product.categoryId);
+      return { product, categoryName: category?.name ?? "Uncategorized", categorySlug: category?.slug ?? "" };
+    });
+  }
 
   if (filters.category) rows = rows.filter((row) => row.categorySlug === filters.category);
   if (filters.featured) rows = rows.filter((row) => row.product.featured);
@@ -691,6 +947,29 @@ export async function getProductCatalog(filters: ProductFilters = {}): Promise<{
 }
 
 export async function getProductBySlug(slug: string) {
+  if (isSupabaseCutoverActive()) {
+    const row = await getCatalogRowBySlugInSupabase(slug);
+    if (!row || !row.product.active) return null;
+
+    const [images, variants, ratings] = await Promise.all([
+      getImagesInSupabase([row.product.id]),
+      getActiveVariantsInSupabase([row.product.id]),
+      getPublishedRatingTotalsInSupabase([row.product.id]),
+    ]);
+    const rating = ratings.get(row.product.id);
+    return {
+      ...row.product,
+      categoryName: row.categoryName,
+      categorySlug: row.categorySlug,
+      images,
+      // Already price-ordered by the query; sorted again so both providers return
+      // the same order regardless of how the rows arrived.
+      variants: [...variants].sort((a, b) => a.price - b.price),
+      ratingAverage: rating ? Math.round((rating.sum / rating.count) * 10) / 10 : 0,
+      ratingCount: rating?.count ?? 0,
+    };
+  }
+
   await seedGemstoneCatalog();
   const snap = await productsCol.where("slug", "==", slug).limit(1).get();
   if (snap.empty) return null;
@@ -722,6 +1001,10 @@ export async function getProductBySlug(slug: string) {
 }
 
 export async function getRelatedProducts(categoryId: string, excludeProductId: string, limit = 4): Promise<ProductListItem[]> {
+  if (isSupabaseCutoverActive()) {
+    return decorateProducts(await getRelatedCatalogRowsInSupabase(categoryId, excludeProductId, limit));
+  }
+
   const snap = await productsCol.where("categoryId", "==", categoryId).where("active", "==", true).limit(limit + 1).get();
   const categoryDoc = await categoriesCol.doc(categoryId).get();
   const category = categoryDoc.exists ? fromCategoryDoc(categoryDoc) : null;
@@ -736,6 +1019,7 @@ export async function getRelatedProducts(categoryId: string, excludeProductId: s
 
 export async function getProductsByIds(ids: string[]): Promise<ProductListItem[]> {
   if (!ids.length) return [];
+  if (isSupabaseCutoverActive()) return decorateProducts((await getCatalogRowsByIdsInSupabase(ids)).filter((row) => row.product.active));
   const snaps = await db.getAll(...ids.map((id) => productsCol.doc(id)));
   const products = snaps.filter((snap) => snap.exists).map((snap) => fromProductDoc(snap)).filter((product) => product.active);
 
@@ -751,6 +1035,7 @@ export async function getProductsByIds(ids: string[]): Promise<ProductListItem[]
 }
 
 export async function getAllActiveProductSlugs() {
+  if (isSupabaseCutoverActive()) return getActiveProductSlugsInSupabase();
   const snap = await productsCol.where("active", "==", true).get();
   return snap.docs.map((doc) => {
     const data = doc.data() as { slug: string; updatedAt?: Timestamp };
@@ -760,6 +1045,15 @@ export async function getAllActiveProductSlugs() {
 
 export async function getProductsBySlugs(slugs: string[]): Promise<ProductListItem[]> {
   if (!slugs.length) return [];
+  if (isSupabaseCutoverActive()) {
+    // One `= any(...)` query replaces the Firestore path's chunked `in` queries,
+    // and the result is re-ordered by the caller's slug list below so the page
+    // keeps the order it asked for.
+    const supabaseRows = (await getCatalogRowsBySlugsInSupabase(slugs)).filter((row) => row.product.active);
+    const decorated = await decorateProducts(supabaseRows);
+    const bySlug = new Map(decorated.map((item) => [item.slug, item]));
+    return slugs.map((slug) => bySlug.get(slug)).filter((item): item is ProductListItem => Boolean(item));
+  }
   const snaps = await Promise.all(chunk(slugs, 30).map((batch) => productsCol.where("slug", "in", batch).get()));
   const products = snaps.flatMap((snap) => snap.docs.map(fromProductDoc)).filter((product) => product.active);
 

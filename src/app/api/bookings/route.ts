@@ -1,4 +1,3 @@
-import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { seedServices } from "@/lib/services";
 import { getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
@@ -13,10 +12,9 @@ import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
+import { createBookingRecord, SlotUnavailableError, type BookingRecord as NewBookingRecord } from "@/lib/booking-creation";
 
 export const dynamic = "force-dynamic";
-
-class SlotUnavailableError extends Error {}
 
 type BookingPayload = {
   serviceId?: string;
@@ -31,33 +29,7 @@ type BookingPayload = {
   notes?: string;
 };
 
-export type BookingRecord = {
-  id: string;
-  reference: string;
-  serviceId: string | null;
-  serviceTitle: string;
-  servicePrice: number;
-  serviceDuration: number;
-  practitionerId: string | null;
-  practitionerName: string | null;
-  clientName: string;
-  clientEmail: string;
-  clientPhone: string | null;
-  birthDate: string;
-  birthTime: string;
-  birthPlace: string;
-  scheduledAt: Date;
-  notes: string | null;
-  status: string;
-  paymentStatus: string;
-  kundliSummary: string | null;
-  kundliGeneratedAt: Date | null;
-  varshphalSummary: string | null;
-  varshphalYear: number | null;
-  varshphalGeneratedAt: Date | null;
-  createdAt: Date;
-  updatedAt: Date;
-};
+export type BookingRecord = NewBookingRecord;
 
 export function bookingFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): BookingRecord {
   const data = doc.data() as Record<string, unknown>;
@@ -170,84 +142,28 @@ export async function POST(request: Request) {
 
   let created: BookingRecord;
   try {
-    created = await db.runTransaction(async (tx) => {
-      const endsAt = new Date(scheduledAt.getTime() + service.duration * 60000);
-      // Firestore can't express "starts + duration > x" server-side, so pull this practitioner's
-      // non-cancelled bookings starting before our end time and check overlap client-side. The
-      // transaction still guarantees atomicity: if a concurrent booking commits in between, this
-      // transaction is retried automatically by the SDK against fresh reads.
-      const candidatesSnap = await tx.get(
-        bookingsRef.where("practitionerId", "==", practitionerId).where("status", "!=", "cancelled").where("scheduledAt", "<", endsAt),
-      );
-      const conflict = candidatesSnap.docs.some((doc) => {
-        const data = doc.data();
-        const bookedStart = (data.scheduledAt as FirebaseFirestore.Timestamp).toDate();
-        const bookedEnd = new Date(bookedStart.getTime() + (data.serviceDuration as number) * 60000);
-        return bookedEnd > scheduledAt;
-      });
-      if (conflict) throw new SlotUnavailableError();
-
-      const ref = bookingsRef.doc();
-      const now = FieldValue.serverTimestamp();
-      tx.set(ref, {
-        reference,
-        serviceId: service.id,
-        serviceTitle: service.title,
-        servicePrice,
-        serviceDuration: service.duration,
-        practitionerId: practitioner.id,
-        practitionerName: practitioner.name,
-        clientName,
-        clientEmail,
-        clientPhone: clientPhone || null,
-        birthDate,
-        birthTime,
-        birthPlace,
-        scheduledAt,
-        notes: notes || null,
-        status: "pending",
-        paymentStatus: "unpaid",
-        kundliSummary: null,
-        kundliGeneratedAt: null,
-        varshphalSummary: null,
-        varshphalYear: null,
-        varshphalGeneratedAt: null,
-        createdAt: now,
-        updatedAt: now,
-      });
-      return {
-        id: ref.id,
-        reference,
-        serviceId: service.id,
-        serviceTitle: service.title,
-        servicePrice,
-        serviceDuration: service.duration,
-        practitionerId: practitioner.id,
-        practitionerName: practitioner.name,
-        clientName,
-        clientEmail,
-        clientPhone: clientPhone || null,
-        birthDate,
-        birthTime,
-        birthPlace,
-        scheduledAt,
-        notes: notes || null,
-        status: "pending",
-        paymentStatus: "unpaid",
-        kundliSummary: null,
-        kundliGeneratedAt: null,
-        varshphalSummary: null,
-        varshphalYear: null,
-        varshphalGeneratedAt: null,
-        createdAt: new Date(),
-        updatedAt: new Date(),
-      } satisfies BookingRecord;
+    created = await createBookingRecord({
+      reference,
+      serviceId: service.id,
+      serviceTitle: service.title,
+      servicePrice,
+      serviceDuration: service.duration,
+      practitionerId: practitioner.id,
+      practitionerName: practitioner.name,
+      clientName,
+      clientEmail,
+      clientPhone: clientPhone || null,
+      birthDate,
+      birthTime,
+      birthPlace,
+      scheduledAt,
+      notes: notes || null,
     });
   } catch (error) {
     if (error instanceof SlotUnavailableError) {
       return Response.json({ error: "This time was just reserved by someone else. Choose another slot." }, { status: 409 });
     }
-    console.error("Booking transaction failed", error instanceof Error ? error.message : "unknown error");
+    console.error("Booking creation failed", error instanceof Error ? error.message : "unknown error");
     return Response.json({ error: "Booking could not be completed." }, { status: 500 });
   }
 
