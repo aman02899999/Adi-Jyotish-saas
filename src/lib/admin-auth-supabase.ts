@@ -35,7 +35,8 @@ export async function getActiveAdminInSupabase(uid: string): Promise<ActiveAdmin
 }
 
 export type AuditLogInsert = {
-  adminId: string;
+  /** Null for entries raised by a member rather than an administrator. */
+  adminId: string | null;
   adminName: string;
   action: string;
   entityType: string;

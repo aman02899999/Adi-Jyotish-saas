@@ -6,6 +6,8 @@ import {
   countBookingFinancialDependentsInSupabase,
   deleteBookingInSupabase,
   getBookingByIdInSupabase,
+  getBookingsByEmailInSupabase,
+  getBookingsSinceInSupabase,
   insertBookingInSupabase,
   listBookingsInSupabase,
   updateBookingInSupabase,
@@ -220,6 +222,51 @@ describeDb("booking reads, edits and deletes (live database)", () => {
       [P3, target],
     );
     expect(rows[0].n).toBe(1);
+  });
+
+  it("lists a member's own bookings by email, ignoring case", async () => {
+    // client_email is citext: matching case-insensitively is what lets a member who
+    // typed their address differently on two bookings still see both.
+    // Inserted earliest-appointment-first, so the expected descending order is the
+    // reverse of insertion order and a missing `order by` cannot pass by luck.
+    await insertBookingInSupabase({ ...insertValues(at(8), `${P}mail2`), clientEmail: "Member@test.example" });
+    await insertBookingInSupabase({ ...insertValues(at(9), `${P}mail1`), clientEmail: "Member@Test.Example" });
+    await insertBookingInSupabase({ ...insertValues(at(7), `${P}mail3`), clientEmail: "someone.else@example.test" });
+
+    const mine = await getBookingsByEmailInSupabase("member@test.example");
+    // Newest appointment first — asserted on the array itself, not a sorted copy.
+    expect(mine.map((b) => b.reference)).toEqual([`${P}mail1`, `${P}mail2`]);
+
+    expect(await getBookingsByEmailInSupabase("nobody@example.test")).toEqual([]);
+  });
+
+  it("filters the export by creation date, and returns everything for null", async () => {
+    const old = (await insertBookingInSupabase(insertValues(at(6), `${P}old`))).id;
+    const fresh = (await insertBookingInSupabase(insertValues(at(5), `${P}fresh`))).id;
+    await query(`update public.bookings set created_at = now() - interval '100 days' where id = $1`, [old]);
+
+    const since = (await getBookingsSinceInSupabase(new Date(Date.now() - 30 * 86400000))).filter((b) => b.reference.startsWith(P));
+    const refs = since.map((b) => b.reference);
+    expect(refs).toContain(`${P}fresh`);
+    expect(refs).not.toContain(`${P}old`);
+
+    const all = (await getBookingsSinceInSupabase(null)).filter((b) => b.reference.startsWith(P));
+    expect(all.map((b) => b.reference)).toEqual(expect.arrayContaining([`${P}old`, `${P}fresh`]));
+    // Newest creation first, so two exports of the same range are comparable.
+    const created = all.map((b) => b.createdAt.getTime());
+    expect(created).toEqual([...created].sort((a, b) => b - a));
+
+    expect(fresh).toBeTruthy();
+
+    // A booking created exactly on the boundary belongs in the range: the filter is
+    // `>=`, so a "30d" export covers the full 30 days rather than 30 days minus an
+    // instant. Pinning created_at to the same instant the query uses makes that
+    // distinction observable instead of a coin toss on `now()`.
+    const boundary = new Date(Date.now() - 30 * 86400000);
+    const edge = (await insertBookingInSupabase(insertValues(at(4), `${P}edge`))).id;
+    await query(`update public.bookings set created_at = $2 where id = $1`, [edge, boundary]);
+    const atBoundary = (await getBookingsSinceInSupabase(boundary)).filter((b) => b.reference.startsWith(P));
+    expect(atBoundary.map((b) => b.reference)).toContain(`${P}edge`);
   });
 
   it("deletes a booking and hands back its reference once", async () => {

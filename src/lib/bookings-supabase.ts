@@ -228,6 +228,38 @@ export async function getBookingByIdInSupabase(id: string): Promise<BookingRow |
   );
 }
 
+/**
+ * A member's own bookings, newest appointment first.
+ *
+ * client_email is citext, so this matches case-insensitively where Firestore
+ * matched exactly. That is a deliberate superset: a member who typed their email
+ * with different capitalisation at two points still sees both bookings, and no
+ * one can reach a booking they do not own by changing case.
+ */
+export async function getBookingsByEmailInSupabase(email: string): Promise<BookingRow[]> {
+  return queryModels<BookingRow>(
+    `select ${BOOKING_COLUMNS} from public.bookings where client_email = $1 order by scheduled_at desc`,
+    [email],
+    BOOKING_NUMERIC,
+  );
+}
+
+/**
+ * Bookings created on or after `from`, newest first, for the CSV export.
+ *
+ * `null` means the whole table. The Firestore query had no orderBy at all, so
+ * the export came out in whatever order the collection returned; a deterministic
+ * order costs nothing and makes two exports of the same range comparable.
+ */
+export async function getBookingsSinceInSupabase(from: Date | null): Promise<BookingRow[]> {
+  const where = from ? " where created_at >= $1" : "";
+  return queryModels<BookingRow>(
+    `select ${BOOKING_COLUMNS} from public.bookings${where} order by created_at desc`,
+    from ? [from] : [],
+    BOOKING_NUMERIC,
+  );
+}
+
 export type BookingPatch = {
   status?: string;
   scheduledAt?: Date;

@@ -174,7 +174,9 @@ export async function revokeCurrentSession() {
 }
 
 export async function recordAudit(
-  admin: Pick<AdminIdentity, "id" | "name">,
+  // id is nullable because a member-initiated action has no administrator behind
+  // it; audit_logs.admin_id allows null and the Firestore path wrote null too.
+  admin: { id: string | null; name: string },
   action: string,
   entityType: string,
   entityId?: string | number,
