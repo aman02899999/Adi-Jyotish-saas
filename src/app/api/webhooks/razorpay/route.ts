@@ -13,6 +13,29 @@ import { processReferralReward } from "@/lib/referrals";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { rechargeWallet } from "@/lib/wallet";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  completeInvoiceRefundInSupabase,
+  confirmInvoicePaymentInSupabase,
+  getInvoiceByIdInSupabase,
+} from "@/lib/billing-supabase";
+import {
+  applySubscriptionChargeInSupabase,
+  applySubscriptionStatusInSupabase,
+  bumpPaymentFailureCounterInSupabase,
+  claimRazorpayEventInSupabase,
+  findSubscriptionByRazorpayIdInSupabase,
+  getDunningStateInSupabase,
+  getMemberContactInSupabase,
+  getPaymentByOrderIdInSupabase,
+  getRefundablePaymentInSupabase,
+  insertSubscriptionInvoiceIfAbsentInSupabase,
+  markDunningNoticeSentInSupabase,
+  markPaymentFailedInSupabase,
+  releaseRazorpayEventInSupabase,
+  syncMemberPlanLabelInSupabase,
+  type WebhookSubscriptionRow,
+} from "@/lib/razorpay-webhook-supabase";
 
 // Razorpay statuses that mean a renewal charge is stuck (failed retries exhausted, or the
 // subscription got paused) — the member needs to act, so this is the one subscription-status
@@ -25,14 +48,33 @@ const DUNNING_STATUSES = new Set(["halted", "paused"]);
 const DUNNING_NOTICE_COOLDOWN_MS = 20 * 60 * 60 * 1000;
 
 async function sendDunningNotice(memberId: string, planName: string) {
-  const memberRef = db.collection("members").doc(memberId);
-  const memberSnap = await memberRef.get();
-  const member = memberSnap.data() as { name?: string; email?: string; dunningNoticeSentAt?: FirebaseFirestore.Timestamp } | undefined;
-  if (!member?.email) return;
+  let email: string;
+  let name: string | undefined;
 
-  const lastSentMs = member.dunningNoticeSentAt?.toMillis() ?? 0;
-  if (Date.now() - lastSentMs < DUNNING_NOTICE_COOLDOWN_MS) return;
-  await memberRef.update({ dunningNoticeSentAt: FieldValue.serverTimestamp() });
+  if (isSupabaseCutoverActive()) {
+    // The cooldown flag lives on member_subscriptions rather than on the member:
+    // there is exactly one subscription row per member (its id IS the member id),
+    // so the window behaves the same while sitting next to the subscription it
+    // describes. A null return also means there is nothing to dun.
+    const state = await getDunningStateInSupabase(memberId);
+    if (!state?.email) return;
+    const lastSentMs = state.dunningNoticeSentAt?.getTime() ?? 0;
+    if (Date.now() - lastSentMs < DUNNING_NOTICE_COOLDOWN_MS) return;
+    await markDunningNoticeSentInSupabase(memberId);
+    email = state.email;
+    name = state.name;
+  } else {
+    const memberRef = db.collection("members").doc(memberId);
+    const memberSnap = await memberRef.get();
+    const member = memberSnap.data() as { name?: string; email?: string; dunningNoticeSentAt?: FirebaseFirestore.Timestamp } | undefined;
+    if (!member?.email) return;
+
+    const lastSentMs = member.dunningNoticeSentAt?.toMillis() ?? 0;
+    if (Date.now() - lastSentMs < DUNNING_NOTICE_COOLDOWN_MS) return;
+    await memberRef.update({ dunningNoticeSentAt: FieldValue.serverTimestamp() });
+    email = member.email;
+    name = member.name;
+  }
 
   const billingUrl = new URL("/dashboard/billing", getSiteUrl()).toString();
   await createNotification({
@@ -44,11 +86,11 @@ async function sendDunningNotice(memberId: string, planName: string) {
     link: "/dashboard/billing",
   });
   await sendEmail({
-    to: member.email,
+    to: email,
     subject: "Action needed: your membership renewal failed",
     html: genericNotificationEmailHtml({
       title: "Your membership renewal needs attention",
-      name: member.name ?? "there",
+      name: name ?? "there",
       body: `We weren't able to renew your ${planName} membership — this usually means the card on file was declined. Update your payment details to keep your discounts and benefits active.`,
       ctaLabel: "Update payment details",
       ctaUrl: billingUrl,
@@ -67,22 +109,31 @@ const PAYMENT_FAILURE_RISK_WINDOW_MS = 24 * 60 * 60 * 1000;
  * that stamp notes.memberId on the Razorpay order (wallet recharge, gemstone orders, gift
  * purchases) — booking/subscription payments use a different checkout path and aren't covered. */
 async function flagPaymentFailureRisk(memberId: string) {
-  const ref = db.collection("paymentFailureCounters").doc(memberId);
-  const shouldNotify = await db.runTransaction(async (tx) => {
-    const snap = await tx.get(ref);
-    const data = snap.exists ? (snap.data() as { count?: number; windowStart?: FirebaseFirestore.Timestamp }) : undefined;
-    const windowStartMs = data?.windowStart?.toMillis() ?? 0;
-    const stillInWindow = Date.now() - windowStartMs < PAYMENT_FAILURE_RISK_WINDOW_MS;
-    const count = (stillInWindow ? data?.count ?? 0 : 0) + 1;
-    tx.set(ref, { count, windowStart: stillInWindow && data ? data.windowStart : FieldValue.serverTimestamp() }, { merge: true });
-    return count >= PAYMENT_FAILURE_RISK_THRESHOLD;
-  });
+  let shouldNotify: boolean;
+
+  if (isSupabaseCutoverActive()) {
+    // One statement: the CASE reads the row's own window_start, so concurrent
+    // failures cannot lose an increment the way a read-then-write would.
+    shouldNotify = (await bumpPaymentFailureCounterInSupabase(memberId)) >= PAYMENT_FAILURE_RISK_THRESHOLD;
+  } else {
+    const ref = db.collection("paymentFailureCounters").doc(memberId);
+    shouldNotify = await db.runTransaction(async (tx) => {
+      const snap = await tx.get(ref);
+      const data = snap.exists ? (snap.data() as { count?: number; windowStart?: FirebaseFirestore.Timestamp }) : undefined;
+      const windowStartMs = data?.windowStart?.toMillis() ?? 0;
+      const stillInWindow = Date.now() - windowStartMs < PAYMENT_FAILURE_RISK_WINDOW_MS;
+      const count = (stillInWindow ? data?.count ?? 0 : 0) + 1;
+      tx.set(ref, { count, windowStart: stillInWindow && data ? data.windowStart : FieldValue.serverTimestamp() }, { merge: true });
+      return count >= PAYMENT_FAILURE_RISK_THRESHOLD;
+    });
+  }
   if (!shouldNotify) return;
 
   const adminIds = await getAdminIdsWithPermission("billing");
   if (!adminIds.length) return;
-  const memberSnap = await db.collection("members").doc(memberId).get();
-  const member = memberSnap.data() as { name?: string; email?: string } | undefined;
+  const member = isSupabaseCutoverActive()
+    ? await getMemberContactInSupabase(memberId)
+    : ((await db.collection("members").doc(memberId).get()).data() as { name?: string; email?: string } | undefined) ?? null;
   await notifyAdmins(adminIds, {
     type: "payment_failure_risk",
     title: `Repeated payment failures: ${member?.name ?? "a member"}`,
@@ -157,12 +208,29 @@ export async function POST(request: Request) {
   // hash of the verified body — deterministic, so a genuine retry of the same delivery still
   // dedupes correctly — rather than a timestamp, which would defeat dedup entirely by construction.
   const eventId = request.headers.get("x-razorpay-event-id") || createHash("sha256").update(rawBody).digest("hex");
-  const eventRef = db.collection("razorpayEvents").doc(eventId);
-  try {
-    await eventRef.create({ type: body.event, processedAt: FieldValue.serverTimestamp() });
-  } catch (error) {
-    if (isAlreadyExists(error)) return Response.json({ ok: true, deduped: true });
-    throw error;
+  const cutover = isSupabaseCutoverActive();
+
+  // Both providers use the event id as the primary key, so the claim is a single
+  // insert and the rollback is a single delete — no separate existence read that
+  // two concurrent deliveries could both pass.
+  const releaseClaim = async () => {
+    if (cutover) {
+      await releaseRazorpayEventInSupabase(eventId).catch(() => {});
+      return;
+    }
+    await db.collection("razorpayEvents").doc(eventId).delete().catch(() => {});
+  };
+
+  if (cutover) {
+    const claimed = await claimRazorpayEventInSupabase(eventId, body.event);
+    if (!claimed) return Response.json({ ok: true, deduped: true });
+  } else {
+    try {
+      await db.collection("razorpayEvents").doc(eventId).create({ type: body.event, processedAt: FieldValue.serverTimestamp() });
+    } catch (error) {
+      if (isAlreadyExists(error)) return Response.json({ ok: true, deduped: true });
+      throw error;
+    }
   }
 
   try {
@@ -177,7 +245,7 @@ export async function POST(request: Request) {
     // The dedup doc was created before the handler ran to lock out concurrent duplicate
     // deliveries — but on genuine failure it has to come back out, or Razorpay's retry of this
     // same event will be deduped away as "already processed" when it never actually completed.
-    await eventRef.delete().catch(() => {});
+    await releaseClaim();
     return Response.json({ error: "Webhook processing failed." }, { status: 500 });
   }
 
@@ -186,8 +254,29 @@ export async function POST(request: Request) {
 
 async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
   if (!payment?.order_id) return;
-  const paymentsSnap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
-  if (paymentsSnap.empty) {
+  const cutover = isSupabaseCutoverActive();
+
+  let paymentId: string | null;
+  let paymentStatus: string;
+  let invoiceId: string | null;
+  let bookingId: string | null;
+
+  if (cutover) {
+    const row = await getPaymentByOrderIdInSupabase(payment.order_id);
+    paymentId = row?.id ?? null;
+    paymentStatus = row?.status ?? "";
+    invoiceId = row?.invoiceId ?? null;
+    bookingId = row?.bookingId ?? null;
+  } else {
+    const paymentsSnap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
+    paymentId = paymentsSnap.empty ? null : paymentsSnap.docs[0].id;
+    const parsed = paymentsSnap.empty ? null : paymentFromSnap(paymentsSnap.docs[0]);
+    paymentStatus = parsed?.status ?? "";
+    invoiceId = parsed?.invoiceId ?? null;
+    bookingId = parsed?.bookingId ?? null;
+  }
+
+  if (!paymentId) {
     // Wallet recharges are the only flow whose Razorpay order has no matching `payments` doc AND
     // is meant to be actioned here — every other order type (gemstone checkout, subscriptions)
     // also stamps notes.memberId for tracking, so `purpose` is the required discriminator, not
@@ -201,53 +290,85 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
     }
     return;
   }
-  const row = paymentFromSnap(paymentsSnap.docs[0]);
-  if (row.status === "succeeded") return;
+  if (paymentStatus === "succeeded") return;
 
-  const invoiceRef = db.collection("invoices").doc(row.invoiceId);
-  const invoiceSnap = await invoiceRef.get();
-  if (!invoiceSnap.exists) return;
-  const invoice = invoiceFromSnap(invoiceSnap);
-  if (invoice.status === "paid") return;
+  if (!invoiceId) return;
 
-  const bookingRef = db.collection("bookings").doc(row.bookingId);
-  const paymentRef = paymentsSnap.docs[0].ref;
-  await db.runTransaction(async (tx) => {
-    const now = FieldValue.serverTimestamp();
-    tx.update(paymentRef, { status: "succeeded", paymentIntentId: payment.id, paidAt: now, updatedAt: now });
-    tx.update(invoiceRef, { status: "paid", paidAt: now, updatedAt: now });
-    tx.update(bookingRef, { paymentStatus: "paid", updatedAt: now });
-  });
+  // Both providers expose the same display fields, so the notification block below
+  // is shared. Deliberately a local: a module-level holder would let two concurrent
+  // webhook deliveries overwrite each other's invoice.
+  let invoiceView: { id: string; number: string; description: string; currency: string; amount: number; customerName: string; customerEmail: string };
+  if (cutover) {
+    const invoice = await getInvoiceByIdInSupabase(invoiceId);
+    if (!invoice) return;
+    if (invoice.status === "paid") return;
+    invoiceView = invoice;
+  } else {
+    const invoiceSnap = await db.collection("invoices").doc(invoiceId).get();
+    if (!invoiceSnap.exists) return;
+    const firestoreInvoice = invoiceFromSnap(invoiceSnap);
+    if (firestoreInvoice.status === "paid") return;
+    invoiceView = firestoreInvoice;
+  }
+
+  if (cutover) {
+    // payments.invoice_id and payments.booking_id are nullable in Postgres; an
+    // empty string matches no booking row, which is what the Firestore path did
+    // by writing to a document id that did not exist.
+    await confirmInvoicePaymentInSupabase({
+      paymentId,
+      invoiceId,
+      bookingId: bookingId ?? "",
+      paymentIntentId: payment.id,
+    });
+  } else {
+    const invoiceRef = db.collection("invoices").doc(invoiceId);
+    const bookingRef = db.collection("bookings").doc(bookingId ?? "");
+    const paymentRef = db.collection("payments").doc(paymentId);
+    await db.runTransaction(async (tx) => {
+      const now = FieldValue.serverTimestamp();
+      tx.update(paymentRef, { status: "succeeded", paymentIntentId: payment.id, paidAt: now, updatedAt: now });
+      tx.update(invoiceRef, { status: "paid", paidAt: now, updatedAt: now });
+      tx.update(bookingRef, { paymentStatus: "paid", updatedAt: now });
+    });
+  }
 
   // Guarded like the email below it: the payment transaction has already committed
   // by this point, so an inbox write that throws would 500 the webhook and have
   // Razorpay retry an event that succeeded. A missing notification is worth logging
   // and moving on; re-processing a captured payment is not.
   await sendBookingNotification({
-    memberEmail: invoice.customerEmail,
-    bookingId: row.bookingId,
-    subject: `${invoice.description} · ${invoice.number}`,
-    body: `Payment received for invoice ${invoice.number}. Amount: ${invoice.currency} ${invoice.amount}. Thank you—your receipt is now available in Billing.`,
+    memberEmail: invoiceView.customerEmail,
+    bookingId: bookingId ?? "",
+    subject: `${invoiceView.description} · ${invoiceView.number}`,
+    body: `Payment received for invoice ${invoiceView.number}. Amount: ${invoiceView.currency} ${invoiceView.amount}. Thank you—your receipt is now available in Billing.`,
   }).catch((error) => console.error("Booking notification failed", error));
   await sendEmail({
-    to: invoice.customerEmail,
-    subject: `Payment received · ${invoice.number}`,
+    to: invoiceView.customerEmail,
+    subject: `Payment received · ${invoiceView.number}`,
     html: genericNotificationEmailHtml({
       title: "Payment received",
-      name: invoice.customerName,
-      body: `We've received your payment of ${invoice.currency} ${invoice.amount} for invoice ${invoice.number}. Your receipt is ready to download.`,
+      name: invoiceView.customerName,
+      body: `We've received your payment of ${invoiceView.currency} ${invoiceView.amount} for invoice ${invoiceView.number}. Your receipt is ready to download.`,
       ctaLabel: "View receipt",
-      ctaUrl: new URL(`/dashboard/billing/${invoice.id}`, getSiteUrl()).toString(),
+      ctaUrl: new URL(`/dashboard/billing/${invoiceView.id}`, getSiteUrl()).toString(),
     }),
   }).catch(() => {});
 }
 
 async function handlePaymentFailed(payment?: RazorpayWebhookPayment) {
   if (!payment?.order_id) return;
-  const snap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
-  if (!snap.empty) {
-    const row = paymentFromSnap(snap.docs[0]);
-    if (row.status === "pending") await snap.docs[0].ref.update({ status: "failed", updatedAt: FieldValue.serverTimestamp() });
+  if (isSupabaseCutoverActive()) {
+    const row = await getPaymentByOrderIdInSupabase(payment.order_id);
+    // The status guard is inside the update's own predicate, so a late failure
+    // event cannot overwrite a payment that has since succeeded.
+    if (row) await markPaymentFailedInSupabase(row.id);
+  } else {
+    const snap = await db.collection("payments").where("providerSessionId", "==", payment.order_id).limit(1).get();
+    if (!snap.empty) {
+      const row = paymentFromSnap(snap.docs[0]);
+      if (row.status === "pending") await snap.docs[0].ref.update({ status: "failed", updatedAt: FieldValue.serverTimestamp() });
+    }
   }
   if (payment.notes?.memberId) await flagPaymentFailureRisk(payment.notes.memberId).catch((error) => console.error("Payment-failure risk flag failed", error));
 }
@@ -257,6 +378,12 @@ async function handleRefundProcessed(refund?: RazorpayWebhookRefund) {
   // refundInvoice() only leaves a payment in "refund_processing" for the duration of the
   // synchronous Razorpay API call; once that call returns, a non-instant refund settles into
   // "refund_pending" until this webhook confirms it, so that's the state we need to match here.
+  if (isSupabaseCutoverActive()) {
+    const row = await getRefundablePaymentInSupabase(refund.payment_id);
+    if (!row?.invoiceId || !row.bookingId) return;
+    await completeInvoiceRefundInSupabase(row.invoiceId, row.id, row.bookingId, refund.id, true);
+    return;
+  }
   const snap = await db.collection("payments")
     .where("paymentIntentId", "==", refund.payment_id)
     .where("status", "==", "refund_pending")
@@ -276,17 +403,32 @@ async function handleRefundProcessed(refund?: RazorpayWebhookRefund) {
   });
 }
 
-async function findSubscriptionWithPlan(razorpaySubscriptionId: string): Promise<{ memberId: string; ref: FirebaseFirestore.DocumentReference; data: Record<string, unknown>; plan: MembershipPlan } | null> {
+type FoundSubscription =
+  | { memberId: string; plan: MembershipPlan; row: WebhookSubscriptionRow; data: null }
+  | { memberId: string; plan: MembershipPlan; row: null; data: Record<string, unknown>; ref: FirebaseFirestore.DocumentReference };
+
+async function findSubscriptionWithPlan(razorpaySubscriptionId: string): Promise<FoundSubscription | null> {
+  if (isSupabaseCutoverActive()) {
+    const row = await findSubscriptionByRazorpayIdInSupabase(razorpaySubscriptionId);
+    if (!row) return null;
+    const plan = await getPlanById(row.planId);
+    if (!plan) return null;
+    return { memberId: row.memberId, plan, row, data: null };
+  }
   const snap = await db.collection("memberSubscriptions").where("razorpaySubscriptionId", "==", razorpaySubscriptionId).limit(1).get();
   if (snap.empty) return null;
   const doc = snap.docs[0];
   const data = doc.data() as Record<string, unknown>;
   const plan = await getPlanById(data.planId as string);
   if (!plan) return null;
-  return { memberId: doc.id, ref: doc.ref, data, plan };
+  return { memberId: doc.id, plan, row: null, data, ref: doc.ref };
 }
 
 async function syncMemberPlanLabel(memberId: string, label: string) {
+  if (isSupabaseCutoverActive()) {
+    await syncMemberPlanLabelInSupabase(memberId, label);
+    return;
+  }
   await db.collection("members").doc(memberId).update({ plan: label, updatedAt: FieldValue.serverTimestamp() });
 }
 
@@ -294,29 +436,50 @@ async function handleSubscriptionCharged(subscription?: RazorpayWebhookSubscript
   if (!subscription) return;
   const found = await findSubscriptionWithPlan(subscription.id);
   if (!found) return;
+  const cutover = isSupabaseCutoverActive();
 
   const now = new Date();
   const periodStart = subscription.current_start ? new Date(subscription.current_start * 1000) : now;
   const periodEnd = subscription.current_end ? new Date(subscription.current_end * 1000) : null;
 
-  await found.ref.update({
-    status: "active",
-    currentPeriodStart: periodStart,
-    currentPeriodEnd: periodEnd,
-    // A successful renewal charge starts a fresh billing period, so the reminder for the
-    // period that just ended needs to be able to fire again ahead of the next one.
-    renewalReminderSentAt: FieldValue.delete(),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  if (cutover) {
+    await applySubscriptionChargeInSupabase({ memberId: found.memberId, periodStart, periodEnd });
+  } else if (found.row === null) {
+    await found.ref.update({
+      status: "active",
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      // A successful renewal charge starts a fresh billing period, so the reminder for the
+      // period that just ended needs to be able to fire again ahead of the next one.
+      renewalReminderSentAt: FieldValue.delete(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   await syncMemberPlanLabel(found.memberId, found.plan.key);
 
   if (payment) {
-    const billingInterval = found.data.billingInterval as "monthly" | "yearly";
+    const billingInterval = (found.row ? found.row.billingInterval : found.data?.billingInterval) as "monthly" | "yearly";
     const amount = payment.amount != null ? Math.round(payment.amount / 100) : (billingInterval === "yearly" ? found.plan.priceYearly ?? found.plan.priceMonthly : found.plan.priceMonthly);
     // Listed prices are GST-inclusive, matching how booking and gemstone invoices already split it.
     const settings = await getStudioSettings();
     const { subtotal, taxAmount } = splitGstInclusive(amount, settings.gstRate);
+    if (cutover) {
+      // Primary key is the Razorpay payment id, so a replayed charge cannot raise a
+      // second invoice for the same payment.
+      await insertSubscriptionInvoiceIfAbsentInSupabase({
+        paymentId: payment.id,
+        memberId: found.memberId,
+        amount,
+        subtotal,
+        taxAmount,
+        taxRate: settings.gstRate,
+        currency: payment.currency ?? found.plan.currency,
+        periodStart,
+        periodEnd,
+      });
+      return;
+    }
     // Doc id == razorpayPaymentId: "does this doc exist" replaces onConflictDoNothing on
     // subscriptionInvoices.razorpayPaymentId.
     const invoiceRef = db.collection("subscriptionInvoices").doc(payment.id);
@@ -347,19 +510,32 @@ async function handleSubscriptionStatus(subscription?: RazorpayWebhookSubscripti
   if (!found) return;
 
   const now = new Date();
-  const existingStart = found.data.currentPeriodStart as FirebaseFirestore.Timestamp | undefined;
-  const existingEnd = found.data.currentPeriodEnd as FirebaseFirestore.Timestamp | undefined;
-  const existingCancelledAt = found.data.cancelledAt as FirebaseFirestore.Timestamp | undefined;
+  const isTerminal = terminalSubscriptionStatuses.has(subscription.status);
 
-  await found.ref.update({
-    status: subscription.status,
-    currentPeriodStart: subscription.current_start ? new Date(subscription.current_start * 1000) : (existingStart ?? null),
-    currentPeriodEnd: subscription.current_end ? new Date(subscription.current_end * 1000) : (existingEnd ?? null),
-    cancelledAt: terminalSubscriptionStatuses.has(subscription.status) ? now : (existingCancelledAt ?? null),
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  if (isSupabaseCutoverActive() && found.row) {
+    await applySubscriptionStatusInSupabase({
+      memberId: found.memberId,
+      status: subscription.status,
+      // An event that omits a period boundary must not erase the one we hold.
+      periodStart: subscription.current_start ? new Date(subscription.current_start * 1000) : found.row.currentPeriodStart,
+      periodEnd: subscription.current_end ? new Date(subscription.current_end * 1000) : found.row.currentPeriodEnd,
+      cancelledAt: isTerminal ? now : found.row.cancelledAt,
+    });
+  } else if (found.row === null && found.data) {
+    const existingStart = found.data.currentPeriodStart as FirebaseFirestore.Timestamp | undefined;
+    const existingEnd = found.data.currentPeriodEnd as FirebaseFirestore.Timestamp | undefined;
+    const existingCancelledAt = found.data.cancelledAt as FirebaseFirestore.Timestamp | undefined;
 
-  if (terminalSubscriptionStatuses.has(subscription.status)) {
+    await found.ref.update({
+      status: subscription.status,
+      currentPeriodStart: subscription.current_start ? new Date(subscription.current_start * 1000) : (existingStart ?? null),
+      currentPeriodEnd: subscription.current_end ? new Date(subscription.current_end * 1000) : (existingEnd ?? null),
+      cancelledAt: isTerminal ? now : (existingCancelledAt ?? null),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+
+  if (isTerminal) {
     await syncMemberPlanLabel(found.memberId, "free");
   } else if (subscription.status === "active") {
     await syncMemberPlanLabel(found.memberId, found.plan.key);
