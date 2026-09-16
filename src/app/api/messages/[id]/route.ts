@@ -2,6 +2,17 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  createThreadWithMessageInSupabase,
+  deleteThreadInSupabase,
+  getThreadForAdminInSupabase,
+  getThreadForMemberInSupabase,
+  markThreadReadByAdminInSupabase,
+  markThreadReadByMemberInSupabase,
+  replyToThreadInSupabase,
+  setThreadStatusInSupabase,
+} from "@/lib/messaging-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -10,6 +21,16 @@ export async function POST(request: Request,{params}:{params:Promise<{id:string}
   const throttle=await checkRateLimit("admin-message-reply",`admin:${admin.id}`,60,600);
   if(!throttle.allowed)return rateLimitResponse(throttle.retryAfter);
   const {id}=await params;
+  if (isSupabaseCutoverActive()) {
+    const thread=await getThreadForAdminInSupabase(id);
+    if(!thread)return Response.json({error:"Thread not found."},{status:404});
+    const body=await request.json() as {message?:string};const text=body.message?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
+    // An admin reply reopens a closed thread, matching the Firestore update below.
+    const message=await replyToThreadInSupabase({threadId:id,senderType:"admin",senderName:admin.name,body:text,reopen:true});
+    if(!message)return Response.json({error:"Thread not found."},{status:404});
+    await recordAudit(admin,"message.reply_sent","message_thread",id);
+    return Response.json(message,{status:201});
+  }
   const threadRef=db.collection("messageThreads").doc(id);
   const threadSnap=await threadRef.get();if(!threadSnap.exists)return Response.json({error:"Thread not found."},{status:404});
   const body=await request.json() as {message?:string};const text=body.message?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
@@ -26,6 +47,20 @@ export async function POST(request: Request,{params}:{params:Promise<{id:string}
 export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}) {
   const admin=await getCurrentAdmin();if(!admin)return Response.json({error:"Administrator access required."},{status:401});if(!hasAdminPermission(admin,"messages"))return Response.json({error:"Message permission required."},{status:403});
   const {id}=await params;
+  if (isSupabaseCutoverActive()) {
+    const existing=await getThreadForAdminInSupabase(id);
+    if(!existing)return Response.json({error:"Thread not found."},{status:404});
+    const body=await request.json() as {status?:string;markRead?:boolean};
+    let status=existing.status;
+    if(body.markRead)await markThreadReadByAdminInSupabase(id);
+    if(body.status){
+      if(!["open","closed"].includes(body.status))return Response.json({error:"Invalid thread status."},{status:400});
+      status=body.status;
+      await setThreadStatusInSupabase(id,status);
+      await recordAudit(admin,"message.thread_status_changed","message_thread",id,{status});
+    }
+    return Response.json({ok:true,id,status});
+  }
   const threadRef=db.collection("messageThreads").doc(id);
   const threadSnap=await threadRef.get();if(!threadSnap.exists)return Response.json({error:"Thread not found."},{status:404});
   const thread=threadSnap.data() as {status:string};
@@ -49,6 +84,14 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
 export async function DELETE(_:Request,{params}:{params:Promise<{id:string}>}) {
   const admin=await getCurrentAdmin();if(!admin)return Response.json({error:"Administrator access required."},{status:401});if(!hasAdminPermission(admin,"messages"))return Response.json({error:"Message permission required."},{status:403});
   const {id}=await params;
+  if (isSupabaseCutoverActive()) {
+    // inbox_messages.thread_id cascades, so the messages go with the thread; the
+    // Firestore path had to batch-delete them first.
+    const subject=await deleteThreadInSupabase(id);
+    if(subject===null)return Response.json({error:"Thread not found."},{status:404});
+    await recordAudit(admin,"message.thread_deleted","message_thread",id,{subject});
+    return Response.json({ok:true,id});
+  }
   const threadRef=db.collection("messageThreads").doc(id);
   const threadSnap=await threadRef.get();if(!threadSnap.exists)return Response.json({error:"Thread not found."},{status:404});
   const subject=(threadSnap.data() as {subject:string}).subject;

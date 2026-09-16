@@ -164,3 +164,194 @@ export async function insertSystemMessageInSupabase(threadId: string, body: stri
     [randomUUID(), threadId, body],
   );
 }
+
+// --------------------------------------------------------- writes (inbox routes)
+
+/** Maps a raw `client.query` row — which is snake_case, unlike queryModel's output. */
+function messageFromSql(row: {
+  id: string;
+  thread_id: string;
+  sender_type: string;
+  sender_name: string;
+  body: string;
+  read_by_member: boolean;
+  read_by_admin: boolean;
+  created_at: Date;
+}): MessageDbRow {
+  return {
+    id: row.id,
+    threadId: row.thread_id,
+    senderType: row.sender_type,
+    senderName: row.sender_name,
+    body: row.body,
+    readByMember: row.read_by_member,
+    readByAdmin: row.read_by_admin,
+    createdAt: row.created_at,
+  };
+}
+
+const MESSAGE_RETURNING =
+  "id, thread_id, sender_type, sender_name, body, read_by_member, read_by_admin, created_at";
+
+export type CreatedThread = {
+  thread: { id: string; subject: string; category: string; status: string; lastMessageAt: Date; createdAt: Date; updatedAt: Date };
+  message: MessageDbRow;
+};
+
+/**
+ * Opens a thread with its first message in one transaction.
+ *
+ * Both rows take `now()`, which in Postgres is the transaction start time, so the
+ * thread's lastMessageAt and the message's createdAt are the same instant — the
+ * Firestore path used one serverTimestamp() for both and the UI sorts on it.
+ */
+export async function createThreadWithMessageInSupabase(input: {
+  memberId: string;
+  subject: string;
+  category: string;
+  senderType: "admin" | "member";
+  senderName: string;
+  body: string;
+}): Promise<CreatedThread> {
+  const threadId = randomUUID();
+  const messageId = randomUUID();
+  return withTransaction(async (client) => {
+    const thread = await client.query<{
+      id: string; subject: string; category: string; status: string;
+      last_message_at: Date; created_at: Date; updated_at: Date;
+    }>(
+      `insert into public.message_threads
+         (id, member_id, booking_id, subject, category, status, last_message_at, created_at, updated_at)
+       values ($1, $2, null, $3, $4, 'open', now(), now(), now())
+       returning id, subject, category, status, last_message_at, created_at, updated_at`,
+      [threadId, input.memberId, input.subject, input.category],
+    );
+    const message = await client.query<Parameters<typeof messageFromSql>[0]>(
+      `insert into public.inbox_messages
+         (id, thread_id, sender_type, sender_name, body, read_by_admin, read_by_member, created_at)
+       values ($1, $2, $3, $4, $5, $6, $7, now())
+       returning ${MESSAGE_RETURNING}`,
+      [
+        messageId, threadId, input.senderType, input.senderName, input.body,
+        input.senderType === "admin", input.senderType === "member",
+      ],
+    );
+    const t = thread.rows[0];
+    const m = message.rows[0];
+    if (!t || !m) throw new Error("createThreadWithMessageInSupabase returned no row");
+    return {
+      thread: {
+        id: t.id, subject: t.subject, category: t.category, status: t.status,
+        lastMessageAt: t.last_message_at, createdAt: t.created_at, updatedAt: t.updated_at,
+      },
+      message: messageFromSql(m),
+    };
+  });
+}
+
+/**
+ * Appends a reply and bumps the thread.
+ *
+ * Returns null when the thread is gone, so the route can answer 404 instead of
+ * reporting a reply that was written to nothing.
+ */
+export async function replyToThreadInSupabase(input: {
+  threadId: string;
+  senderType: "admin" | "member";
+  senderName: string;
+  body: string;
+  /** An admin reply reopens a closed thread; a member reply must not. */
+  reopen: boolean;
+}): Promise<MessageDbRow | null> {
+  return withTransaction(async (client) => {
+    const bumped = await client.query(
+      `update public.message_threads
+          set last_message_at = now(), updated_at = now()${input.reopen ? ", status = 'open'" : ""}
+        where id = $1`,
+      [input.threadId],
+    );
+    if ((bumped.rowCount ?? 0) === 0) return null;
+
+    const message = await client.query<Parameters<typeof messageFromSql>[0]>(
+      `insert into public.inbox_messages
+         (id, thread_id, sender_type, sender_name, body, read_by_admin, read_by_member, created_at)
+       values ($1, $2, $3, $4, $5, $6, $7, now())
+       returning ${MESSAGE_RETURNING}`,
+      [
+        randomUUID(), input.threadId, input.senderType, input.senderName, input.body,
+        input.senderType === "admin", input.senderType === "member",
+      ],
+    );
+    const row = message.rows[0];
+    return row ? messageFromSql(row) : null;
+  });
+}
+
+/** A thread for the admin surface, or null. */
+export async function getThreadForAdminInSupabase(
+  threadId: string,
+): Promise<{ id: string; status: string; subject: string } | null> {
+  return queryModel<{ id: string; status: string; subject: string }>(
+    `select id, status, subject from public.message_threads where id = $1`,
+    [threadId],
+  );
+}
+
+/**
+ * A thread the member owns, or null.
+ *
+ * Ownership is in the predicate rather than checked afterwards, so a member
+ * probing another member's thread id gets the same "not found" as a bad id —
+ * the route cannot leak which threads exist.
+ */
+export async function getThreadForMemberInSupabase(
+  threadId: string,
+  memberId: string,
+): Promise<{ id: string; status: string } | null> {
+  return queryModel<{ id: string; status: string }>(
+    `select id, status from public.message_threads where id = $1 and member_id = $2`,
+    [threadId, memberId],
+  );
+}
+
+/** Clears the admin's unread flags on a thread. Returns how many were unread. */
+export async function markThreadReadByAdminInSupabase(threadId: string): Promise<number> {
+  const result = await query(
+    `update public.inbox_messages set read_by_admin = true
+      where thread_id = $1 and sender_type = 'member' and read_by_admin = false`,
+    [threadId],
+  );
+  return result.rowCount ?? 0;
+}
+
+/** Clears the member's unread flags on a thread. Returns how many were unread. */
+export async function markThreadReadByMemberInSupabase(threadId: string): Promise<number> {
+  const result = await query(
+    `update public.inbox_messages set read_by_member = true
+      where thread_id = $1 and read_by_member = false`,
+    [threadId],
+  );
+  return result.rowCount ?? 0;
+}
+
+export async function setThreadStatusInSupabase(threadId: string, status: string): Promise<boolean> {
+  const result = await query(
+    `update public.message_threads set status = $2, updated_at = now() where id = $1`,
+    [threadId, status],
+  );
+  return (result.rowCount ?? 0) === 1;
+}
+
+/**
+ * Deletes a thread and returns its subject for the audit trail, or null if it was gone.
+ *
+ * inbox_messages.thread_id is ON DELETE CASCADE, so the messages go with it — the
+ * Firestore path had to batch-delete them by hand.
+ */
+export async function deleteThreadInSupabase(threadId: string): Promise<string | null> {
+  const { rows } = await query<{ subject: string }>(
+    `delete from public.message_threads where id = $1 returning subject`,
+    [threadId],
+  );
+  return rows[0]?.subject ?? null;
+}
