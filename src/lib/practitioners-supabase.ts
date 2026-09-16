@@ -131,6 +131,24 @@ export async function getPractitionerAvailabilityInSupabase(id: string): Promise
   );
 }
 
+/** What the chat and PDF surfaces need about a practitioner: who they are and
+ * whether they are an AI persona rather than a human astrologer. */
+export type PractitionerAttributionRow = { name: string; photoUrl: string | null; isAiPowered: boolean };
+
+/**
+ * One practitioner's display and attribution details, or null.
+ *
+ * isAiPowered decides how a generated PDF is attributed — naming an AI persona as
+ * a human astrologer would misrepresent who produced the reading — so it travels
+ * with the name rather than being fetched separately.
+ */
+export async function getPractitionerAttributionInSupabase(id: string): Promise<PractitionerAttributionRow | null> {
+  return queryModel<PractitionerAttributionRow>(
+    `select name, photo_url, is_ai_powered from public.practitioners where id = $1`,
+    [id],
+  );
+}
+
 export async function getAvailabilityRulesInSupabase(practitionerIds: string[]): Promise<AvailabilityRuleRow[]> {
   if (!practitionerIds.length) return [];
   return queryModels<AvailabilityRuleRow>(

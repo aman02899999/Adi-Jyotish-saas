@@ -2,6 +2,7 @@ import { afterAll, beforeAll, describe, expect, it } from "vitest";
 
 import { closePgPool, query } from "@/lib/postgres";
 import {
+  getPractitionerAttributionInSupabase,
   getPractitionerDirectoryInSupabase,
   getPublishedReviewsInSupabase,
   getResolvedPredictionCountsInSupabase,
@@ -264,5 +265,44 @@ describeCutover("scheduling.ts and predictions.ts route to Postgres under cutove
     expect(entry?.resolvedCount).toBe(MIN_RESOLVED_FOR_PUBLIC_STAT + 1);
     // 5 accurate of 6 resolved = 83.33… → 83.
     expect(entry?.accuracyPercent).toBe(83);
+  });
+});
+
+// --------------------------------------------------------------------------
+
+const ATTR_AI = "attr-itest-ai";
+const ATTR_HUMAN = "attr-itest-human";
+const ATTR_ALL = [ATTR_AI, ATTR_HUMAN];
+
+describeDb("practitioner attribution lookup (live database)", () => {
+  beforeAll(async () => {
+    await query(`delete from public.practitioners where id = any($1::text[])`, [ATTR_ALL]);
+    await query(
+      `insert into public.practitioners (id, name, slug, email, photo_url, is_ai_powered)
+       values ($1, 'AI persona', $1, $2, 'https://cdn.example.test/ai.png', true)`,
+      [ATTR_AI, `${ATTR_AI}@example.test`],
+    );
+    await query(
+      `insert into public.practitioners (id, name, slug, email, photo_url, is_ai_powered)
+       values ($1, 'Human astrologer', $1, $2, null, false)`,
+      [ATTR_HUMAN, `${ATTR_HUMAN}@example.test`],
+    );
+  });
+
+  afterAll(async () => {
+    await query(`delete from public.practitioners where id = any($1::text[])`, [ATTR_ALL]);
+  });
+
+  it("returns name, photo and the AI flag together", async () => {
+    // isAiPowered decides how a generated PDF is attributed, so it has to come back
+    // as a real boolean — a missing column would read undefined and every reading
+    // would be credited to a human astrologer.
+    expect(await getPractitionerAttributionInSupabase(ATTR_AI)).toEqual({
+      name: "AI persona", photoUrl: "https://cdn.example.test/ai.png", isAiPowered: true,
+    });
+    expect(await getPractitionerAttributionInSupabase(ATTR_HUMAN)).toEqual({
+      name: "Human astrologer", photoUrl: null, isAiPowered: false,
+    });
+    expect(await getPractitionerAttributionInSupabase("attr-itest-ghost")).toBeNull();
   });
 });
