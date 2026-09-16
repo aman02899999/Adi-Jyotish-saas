@@ -1,7 +1,6 @@
-import { db } from "@/lib/firestore";
 import { createPractitionerSession, getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
-import { deleteTwoFactorChallenge, peekTwoFactorChallenge, verifyTotpOrBackupCode } from "@/lib/two-factor";
+import { deleteTwoFactorChallenge, getTwoFactorState, peekTwoFactorChallenge, resolveTwoFactorAccount, verifyTotpOrBackupCode } from "@/lib/two-factor";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +13,10 @@ export async function POST(request: Request) {
   const pending = peekTwoFactorChallenge("practitioner", challengeToken);
   if (!pending) return Response.json({ error: "This code has expired. Sign in again." }, { status: 401 });
 
-  const byUid = await db.collection("practitioners").where("firebaseUid", "==", pending.uid).limit(1).get();
-  const doc = byUid.docs[0];
-  const secret = doc?.data().totpSecret as string | undefined;
-  if (!doc || !secret || doc.data().totpEnabled !== true) {
+  const account = await resolveTwoFactorAccount("practitioner", pending.uid);
+  const state = account ? await getTwoFactorState(account) : null;
+  const secret = state?.totpSecret;
+  if (!account || !state || !secret || !state.totpEnabled) {
     deleteTwoFactorChallenge(challengeToken);
     return Response.json({ error: "Two-factor verification could not be completed." }, { status: 401 });
   }
@@ -25,7 +24,7 @@ export async function POST(request: Request) {
   const throttle = await checkAuthThrottle("practitioner-2fa", pending.uid, request);
   if (!throttle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(throttle.retryAfter) } });
 
-  if (!(await verifyTotpOrBackupCode(doc.ref, secret, code))) {
+  if (!(await verifyTotpOrBackupCode(account, secret, code))) {
     await recordAuthFailure(throttle.keyHash);
     return Response.json({ error: "That code is incorrect." }, { status: 401 });
   }

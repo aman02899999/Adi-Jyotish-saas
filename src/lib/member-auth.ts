@@ -1,11 +1,20 @@
 import "server-only";
 
 import { cookies } from "next/headers";
-import { getAuth } from "firebase-admin/auth";
 import { hasLocale } from "next-intl";
 import { locales, SIGNED_IN_DEFAULT_LOCALE } from "@/i18n/routing";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { verifyAuthToken } from "@/lib/auth-verify";
+import { issueSessionCookieValue, revokeAllUserSessions, verifySessionCookieValue } from "@/lib/session-cookie";
+import {
+  createMemberProfileInSupabase,
+  getActiveMemberInSupabase,
+  getMemberLocaleInSupabase,
+  setMemberLocaleInSupabase,
+  touchMemberLastLoginInSupabase,
+} from "@/lib/member-auth-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 const COOKIE_NAME = "jyotish_member_session";
 const SESSION_DAYS = 14;
@@ -52,36 +61,62 @@ type MemberDoc = {
  * `referralCode`, if given, is only meaningful the moment the profile is first created — it's
  * how a signup started from someone else's invite link gets linked back to them. */
 export async function createMemberSession(idToken: string, initialName?: string, referralCode?: string) {
-  const decoded = await getAuth().verifyIdToken(idToken, true);
+  const decoded = await verifyAuthToken(idToken);
   const uid = decoded.uid;
 
-  const ref = db.collection("members").doc(uid);
-  const snap = await ref.get();
-  if (!snap.exists) {
-    await ref.set({
+  // Both branches resolve the member's stored language, which the cookie block
+  // below needs, so it is hoisted rather than duplicated.
+  let storedLocale: string | null = null;
+
+  if (isSupabaseCutoverActive()) {
+    // The primary key decides whether this sign-in creates the profile, which the
+    // Firestore get-then-set below cannot: two concurrent first sign-ins would both
+    // see "missing" and the second would overwrite the first.
+    const created = await createMemberProfileInSupabase({
+      id: uid,
       name: initialName || decoded.name || decoded.email?.split("@")[0] || "Member",
       email: decoded.email ?? "",
-      phone: null,
-      birthDate: null,
-      birthTime: null,
-      birthPlace: null,
-      plan: "member",
-      onboardingComplete: false,
-      active: true,
       locale: SIGNED_IN_DEFAULT_LOCALE,
-      createdAt: FieldValue.serverTimestamp(),
-      updatedAt: FieldValue.serverTimestamp(),
-      lastLoginAt: FieldValue.serverTimestamp(),
-    } satisfies MemberDoc & Record<string, unknown>);
-    if (referralCode) {
-      const { recordReferral } = await import("@/lib/referrals");
-      await recordReferral({ refereeId: uid, code: referralCode });
+    });
+    if (created) {
+      if (referralCode) {
+        const { recordReferral } = await import("@/lib/referrals");
+        await recordReferral({ refereeId: uid, code: referralCode });
+      }
+    } else {
+      await touchMemberLastLoginInSupabase(uid);
+      storedLocale = await getMemberLocaleInSupabase(uid);
     }
   } else {
-    await ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
+    const ref = db.collection("members").doc(uid);
+    const snap = await ref.get();
+    if (!snap.exists) {
+      await ref.set({
+        name: initialName || decoded.name || decoded.email?.split("@")[0] || "Member",
+        email: decoded.email ?? "",
+        phone: null,
+        birthDate: null,
+        birthTime: null,
+        birthPlace: null,
+        plan: "member",
+        onboardingComplete: false,
+        active: true,
+        locale: SIGNED_IN_DEFAULT_LOCALE,
+        createdAt: FieldValue.serverTimestamp(),
+        updatedAt: FieldValue.serverTimestamp(),
+        lastLoginAt: FieldValue.serverTimestamp(),
+      } satisfies MemberDoc & Record<string, unknown>);
+      if (referralCode) {
+        const { recordReferral } = await import("@/lib/referrals");
+        await recordReferral({ refereeId: uid, code: referralCode });
+      }
+    } else {
+      await ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
+    }
+    storedLocale = (snap.exists ? (snap.data() as MemberDoc).locale : null) ?? null;
   }
 
-  const sessionCookie = await getAuth().createSessionCookie(idToken, { expiresIn: SESSION_MS });
+  const sessionCookie = await issueSessionCookieValue({ uid, emailVerified: decoded.emailVerified }, idToken, SESSION_MS);
   const store = await cookies();
   store.set(COOKIE_NAME, sessionCookie, {
     httpOnly: true,
@@ -97,7 +132,7 @@ export async function createMemberSession(idToken: string, initialName?: string,
   // cookie, so setting it here steers the whole site, and the language switcher overwrites it the
   // moment a member picks something else. Their choice is stored on the member document too, so it
   // follows them to a new browser rather than living only in this cookie.
-  const stored = (snap.exists ? (snap.data() as MemberDoc).locale : null) ?? SIGNED_IN_DEFAULT_LOCALE;
+  const stored = storedLocale ?? SIGNED_IN_DEFAULT_LOCALE;
   const preferred = hasLocale(locales, stored) ? stored : SIGNED_IN_DEFAULT_LOCALE;
   store.set(LOCALE_COOKIE, preferred, {
     sameSite: "lax",
@@ -113,7 +148,11 @@ export async function createMemberSession(idToken: string, initialName?: string,
  * the detection cookie the rest of the site reads. */
 export async function setMemberLocale(memberId: string, locale: string) {
   if (!hasLocale(locales, locale)) return false;
-  await db.collection("members").doc(memberId).update({ locale, updatedAt: FieldValue.serverTimestamp() });
+  if (isSupabaseCutoverActive()) {
+    await setMemberLocaleInSupabase(memberId, locale);
+  } else {
+    await db.collection("members").doc(memberId).update({ locale, updatedAt: FieldValue.serverTimestamp() });
+  }
   const store = await cookies();
   store.set(LOCALE_COOKIE, locale, {
     sameSite: "lax",
@@ -131,11 +170,34 @@ export async function getCurrentMember(): Promise<MemberIdentity | null> {
   let uid: string;
   let emailVerified: boolean;
   try {
-    const decoded = await getAuth().verifySessionCookie(cookie, true);
+    const decoded = await verifySessionCookieValue(cookie, true);
     uid = decoded.uid;
-    emailVerified = decoded.email_verified === true;
+    emailVerified = decoded.emailVerified;
   } catch {
     return null;
+  }
+
+  if (isSupabaseCutoverActive()) {
+    // `active` is inside this query, so a deactivated account and a missing one
+    // both come back as null. emailVerified still comes from the session payload,
+    // not from the row, exactly as the Firestore path below does it.
+    const data = await getActiveMemberInSupabase(uid);
+    if (!data) return null;
+
+    return {
+      id: uid,
+      name: data.name,
+      email: data.email,
+      phone: data.phone,
+      birthDate: data.birthDate,
+      birthTime: data.birthTime,
+      birthPlace: data.birthPlace,
+      plan: data.plan,
+      onboardingComplete: data.onboardingComplete,
+      emailVerified,
+      totpEnabled: data.totpEnabled,
+      paymentBypass: data.paymentBypass,
+    };
   }
 
   const snap = await db.collection("members").doc(uid).get();
@@ -166,8 +228,8 @@ export async function revokeMemberSession() {
   const cookie = store.get(COOKIE_NAME)?.value;
   if (cookie) {
     try {
-      const decoded = await getAuth().verifySessionCookie(cookie);
-      await getAuth().revokeRefreshTokens(decoded.uid);
+      const decoded = await verifySessionCookieValue(cookie, false);
+      await revokeAllUserSessions(decoded.uid);
     } catch {
       // Cookie already invalid/expired — nothing to revoke.
     }

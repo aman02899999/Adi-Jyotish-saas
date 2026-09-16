@@ -1,9 +1,8 @@
-import { getAuth } from "firebase-admin/auth";
-import { db } from "@/lib/firestore";
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { checkTwoFactorGate } from "@/lib/two-factor";
+import { verifyAuthToken } from "@/lib/auth-verify";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +19,7 @@ export async function POST(request: Request) {
 
   let uid: string;
   try {
-    uid = (await getAuth().verifyIdToken(body.idToken, true)).uid;
+    uid = (await verifyAuthToken(body.idToken)).uid;
   } catch {
     return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
   }
@@ -28,7 +27,7 @@ export async function POST(request: Request) {
   const authThrottle = await checkAuthThrottle("member-login", uid, request);
   if (!authThrottle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(authThrottle.retryAfter) } });
 
-  const challengeToken = await checkTwoFactorGate("member", uid, body.idToken, db.collection("members").doc(uid));
+  const challengeToken = await checkTwoFactorGate("member", uid, body.idToken);
   if (challengeToken) {
     await clearAuthFailures(authThrottle.keyHash);
     return Response.json({ requiresTotp: true, challengeToken });

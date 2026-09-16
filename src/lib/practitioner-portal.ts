@@ -2,6 +2,36 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import {
+  createPayoutRequestInSupabase,
+  getAllPayoutsInSupabase,
+  getPayoutEligibilityInSupabase,
+  getPayoutLedgerInSupabase,
+  getPractitionerPayoutsInSupabase,
+  PayoutNotFoundError,
+  transitionPayoutStatusInSupabase,
+} from "@/lib/practitioner-payouts-supabase";
+import {
+  cacheBookingKundliInSupabase,
+  cacheBookingVarshphalInSupabase,
+  cacheChatKundliInSupabase,
+  cacheChatVarshphalInSupabase,
+  getPayoutFieldSourcesInSupabase,
+  getPortalBookingInSupabase,
+  getPortalBookingsInSupabase,
+  getPortalChatSessionInSupabase,
+  getPortalMemberBirthProfileInSupabase,
+  getPortalPractitionerLitesInSupabase,
+  getPortalScheduleInSupabase,
+  getPortalStatsInSupabase,
+  replacePortalScheduleInSupabase,
+  setPortalOnlineInSupabase,
+  updatePortalPayoutDetailsInSupabase,
+  updatePortalProfileInSupabase,
+  type PortalProfilePatch,
+} from "@/lib/practitioner-portal-supabase";
+import { getPublishedReviewsForPractitionerInSupabase } from "@/lib/practitioners-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
 import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
 import { buildVarshphalChart, renderVarshphalReport, VarshphalError } from "@/lib/varshphal";
@@ -95,6 +125,7 @@ async function chatEarningsForPractitioner(practitionerId: string) {
 }
 
 export async function getPractitionerStats(practitionerId: string) {
+  if (isSupabaseCutoverActive()) return getPortalStatsInSupabase(practitionerId);
   const [bookingsSnap, reviewsSnap, chatEarned, { paidOut, pendingOut }] = await Promise.all([
     db.collection("bookings").where("practitionerId", "==", practitionerId).get(),
     db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published").get(),
@@ -138,6 +169,7 @@ export async function getPractitionerStats(practitionerId: string) {
 }
 
 export async function getPractitionerBookings(practitionerId: string): Promise<BookingRecord[]> {
+  if (isSupabaseCutoverActive()) return getPortalBookingsInSupabase(practitionerId);
   const snap = await db.collection("bookings").where("practitionerId", "==", practitionerId).orderBy("scheduledAt", "desc").get();
   return snap.docs.map((doc) => bookingFromDoc(doc));
 }
@@ -154,6 +186,19 @@ export type PractitionerReview = {
 };
 
 export async function getPractitionerReviews(practitionerId: string): Promise<PractitionerReview[]> {
+  if (isSupabaseCutoverActive()) {
+    const rows = await getPublishedReviewsForPractitionerInSupabase(practitionerId);
+    return rows.map((row) => ({
+      id: row.id,
+      reviewerName: row.reviewerName,
+      rating: row.rating,
+      clarity: row.clarity,
+      empathy: row.empathy,
+      usefulness: row.usefulness,
+      body: row.body,
+      createdAt: row.createdAt,
+    }));
+  }
   const snap = await db.collection("practitionerReviews")
     .where("practitionerId", "==", practitionerId)
     .where("status", "==", "published")
@@ -166,6 +211,7 @@ export async function getPractitionerReviews(practitionerId: string): Promise<Pr
 }
 
 export async function getPractitionerSchedule(practitionerId: string) {
+  if (isSupabaseCutoverActive()) return getPortalScheduleInSupabase(practitionerId);
   const practitionerRef = db.collection("practitioners").doc(practitionerId);
   const [rulesSnap, timeOffSnap] = await Promise.all([
     practitionerRef.collection("availabilityRules").orderBy("weekday", "asc").get(),
@@ -222,6 +268,11 @@ export async function updatePractitionerSchedule(practitionerId: string, input: 
     return { startsAt, endsAt, reason: item.reason?.trim().slice(0, 180) || null };
   });
 
+  if (isSupabaseCutoverActive()) {
+    await replacePortalScheduleInSupabase(practitionerId, rules, timeOff);
+    return;
+  }
+
   const practitionerRef = db.collection("practitioners").doc(practitionerId);
   const rulesCol = practitionerRef.collection("availabilityRules");
   const timeOffCol = practitionerRef.collection("timeOff");
@@ -243,7 +294,10 @@ export async function updatePractitionerSchedule(practitionerId: string, input: 
 export async function updatePractitionerProfile(practitionerId: string, input: {
   bio?: string; specialties?: string; languages?: string; consultationModes?: string; photoUrl?: string | null; videoUrl?: string | null;
 }) {
-  const patch: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
+  // One typed patch object both providers consume, so the trimming, the length
+  // caps and the "blank means fall back to the default" rules live in exactly one
+  // place. updatedAt is deliberately not in it: each provider stamps it its own way.
+  const patch: PortalProfilePatch = {};
   if (input.bio !== undefined) patch.bio = input.bio.trim().slice(0, 4000);
   if (input.specialties !== undefined) patch.specialties = input.specialties.trim().slice(0, 400);
   if (input.languages !== undefined) patch.languages = input.languages.trim().slice(0, 240) || "English, Hindi";
@@ -251,33 +305,50 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
   if (input.photoUrl !== undefined) patch.photoUrl = sanitizeMediaUrl(input.photoUrl);
   if (input.videoUrl !== undefined) patch.videoUrl = sanitizeMediaUrl(input.videoUrl);
 
-  const ref = db.collection("practitioners").doc(practitionerId);
-  await ref.update(patch);
-  const updated = await ref.get();
+  let practitionerName: string;
+  let response: Record<string, unknown>;
+
+  if (isSupabaseCutoverActive()) {
+    const updated = await updatePortalProfileInSupabase(practitionerId, patch);
+    // Firestore's ref.update() rejects on a missing document; a zero-row update
+    // here would otherwise return a silent 200 with a null body.
+    if (!updated) throw new Error("Practitioner profile not found.");
+    practitionerName = updated.name;
+    response = { ...updated };
+  } else {
+    const ref = db.collection("practitioners").doc(practitionerId);
+    await ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
+    const updated = await ref.get();
+    practitionerName = ((updated.data() as { name?: string } | undefined)?.name) ?? "A practitioner";
+    response = { id: updated.id, ...updated.data() };
+  }
 
   if (typeof patch.bio === "string") {
     const contactFlag = scanForContactInfo(patch.bio);
     if (contactFlag) {
-      const bioForFlag = updated.data() as { name?: string } | undefined;
       getAdminIdsWithPermission("practitioners").then(async (adminIds) => {
         if (!adminIds.length) return;
         await notifyAdmins(adminIds, {
           type: "bio_contact_leak",
           title: `Bio may contain ${contactFlag}`,
-          body: `${bioForFlag?.name ?? "A practitioner"}'s bio looks like it contains ${contactFlag} — worth a look before it stays visible on their public profile.`,
+          body: `${practitionerName}'s bio looks like it contains ${contactFlag} — worth a look before it stays visible on their public profile.`,
           link: "/admin/practitioners",
         });
       }).catch((error) => console.error("Bio contact-leak flag failed", error));
     }
   }
 
-  return { id: updated.id, ...updated.data() };
+  return response;
 }
 
 /** Lets a practitioner toggle their own live instant-chat availability — previously only an
  * admin could flip this, which made the "self-service portal" unusable for the one status that
  * genuinely needs to change minute-to-minute (going online/offline for chat). */
 export async function setPractitionerOnline(practitionerId: string, online: boolean) {
+  if (isSupabaseCutoverActive()) {
+    await setPortalOnlineInSupabase(practitionerId, online);
+    return { id: practitionerId, online };
+  }
   const ref = db.collection("practitioners").doc(practitionerId);
   await ref.update({ online, updatedAt: FieldValue.serverTimestamp() });
   return { id: practitionerId, online };
@@ -286,6 +357,7 @@ export async function setPractitionerOnline(practitionerId: string, online: bool
 // --- practitionerPayouts -------------------------------------------------------------------
 
 export async function getPractitionerPayouts(practitionerId: string): Promise<PractitionerPayout[]> {
+  if (isSupabaseCutoverActive()) return getPractitionerPayoutsInSupabase(practitionerId);
   const snap = await payoutsCollection().where("practitionerId", "==", practitionerId).orderBy("requestedAt", "desc").get();
   return snap.docs.map((doc) => payoutFromSnap(doc));
 }
@@ -293,6 +365,46 @@ export async function getPractitionerPayouts(practitionerId: string): Promise<Pr
 export async function requestPayout(practitionerId: string, amount: number, notes?: string): Promise<PractitionerPayout> {
   if (!Number.isInteger(amount) || amount < 100) throw new PayoutError("Enter an amount of at least ₹100.");
 
+  let payout: PractitionerPayout;
+  let autoApproved = false;
+
+  if (isSupabaseCutoverActive()) {
+    const eligibility = await getPayoutEligibilityInSupabase(practitionerId);
+    if (eligibility?.isDemoAccount) throw new PayoutError("Demo accounts can't request payouts.");
+    // Same cooldown rule as the Firestore path below; only the timestamp's home
+    // differs.
+    const destinationRecentlyChanged = eligibility?.payoutDetailsUpdatedAt
+      ? Date.now() - eligibility.payoutDetailsUpdatedAt.getTime() < PAYOUT_DESTINATION_COOLDOWN_MS
+      : false;
+    // totalEarned only grows via paid bookings and ended chat sessions, neither of
+    // which this action writes, so it is safe to read before taking the lock.
+    const { totalEarned } = await getPayoutLedgerInSupabase(practitionerId);
+
+    payout = await createPayoutRequestInSupabase({
+      practitionerId,
+      amount,
+      notes: notes?.trim().slice(0, 500) || null,
+      // Runs inside the transaction, against a ledger re-read under the
+      // practitioner row lock, so two concurrent requests cannot both pass this
+      // check against the same stale total.
+      decide: ({ paidOut, pendingOut, hasPriorPaid, hasRejection }) => {
+        const availableBalance = Math.max(0, totalEarned - paidOut - pendingOut);
+        if (amount > availableBalance) throw new PayoutError(`You can request up to ₹${availableBalance} right now.`);
+        const shouldAutoApprove = amount <= AUTO_APPROVE_MAX_AMOUNT && hasPriorPaid && !hasRejection && !destinationRecentlyChanged;
+        return {
+          status: shouldAutoApprove ? "approved" : "requested",
+          adminNotes: shouldAutoApprove
+            ? `Auto-approved: ₹${amount} is under the ₹${AUTO_APPROVE_MAX_AMOUNT} threshold and this practitioner has a clean payout history. Still needs a real transfer + reference to be marked paid.`
+            : destinationRecentlyChanged
+              ? "Held for manual review: payout destination (bank/UPI) changed recently."
+              : null,
+          processedBy: shouldAutoApprove ? "system:auto-approval" : null,
+          autoApproved: shouldAutoApprove,
+        };
+      },
+    });
+    autoApproved = payout.status === "approved";
+  } else {
   const practitionerSnap = await db.collection("practitioners").doc(practitionerId).get();
   const practitionerData = practitionerSnap.data() as { isDemoAccount?: boolean; payoutDetailsUpdatedAt?: FirebaseFirestore.Timestamp } | undefined;
   if (practitionerData?.isDemoAccount) {
@@ -322,7 +434,7 @@ export async function requestPayout(practitionerId: string, amount: number, note
 
   const ref = payoutsCollection().doc();
   const now = FieldValue.serverTimestamp();
-  const autoApproved = await db.runTransaction(async (tx) => {
+  autoApproved = await db.runTransaction(async (tx) => {
     const payoutsSnap = await tx.get(payoutsCollection().where("practitionerId", "==", practitionerId));
     let paidOut = 0;
     let pendingOut = 0;
@@ -359,6 +471,9 @@ export async function requestPayout(practitionerId: string, amount: number, note
     return autoApprove;
   });
 
+  payout = payoutFromSnap(await ref.get());
+  }
+
   if (autoApproved) {
     const adminIds = await getAdminIdsWithPermission("billing");
     if (adminIds.length) {
@@ -371,7 +486,7 @@ export async function requestPayout(practitionerId: string, amount: number, note
     }
   }
 
-  return payoutFromSnap(await ref.get());
+  return payout;
 }
 
 /** Automated stand-in for a manual "does this look like the same person twice" check: the same
@@ -380,20 +495,29 @@ export async function requestPayout(practitionerId: string, amount: number, note
  * produce. Decrypts every practitioner's payout details to compare — fine for an admin-only,
  * on-demand list load at this practitioner count, but not something to run on a schedule. */
 export async function computeVerificationFlags(): Promise<Map<string, string>> {
-  const snap = await db.collection("practitioners").get();
+  const sources: Array<{ id: string; bankAccountNumberEnc: string | null; upiIdEnc: string | null }> = isSupabaseCutoverActive()
+    ? await getPayoutFieldSourcesInSupabase()
+    : (await db.collection("practitioners").get()).docs
+        .map((doc) => {
+          const data = doc.data() as { bankAccountNumberEnc?: string; upiIdEnc?: string; isDemoAccount?: boolean };
+          // Demo accounts carry identical fixture payout details; including them
+          // would flag real practitioners by association with a seed account.
+          if (data.isDemoAccount) return null;
+          return { id: doc.id, bankAccountNumberEnc: data.bankAccountNumberEnc ?? null, upiIdEnc: data.upiIdEnc ?? null };
+        })
+        .filter((row): row is { id: string; bankAccountNumberEnc: string | null; upiIdEnc: string | null } => row !== null);
+
   const byBank = new Map<string, string[]>();
   const byUpi = new Map<string, string[]>();
 
-  for (const doc of snap.docs) {
-    const data = doc.data() as { bankAccountNumberEnc?: string; upiIdEnc?: string; isDemoAccount?: boolean };
-    if (data.isDemoAccount) continue;
-    if (data.bankAccountNumberEnc) {
-      const decrypted = decryptPayoutField(data.bankAccountNumberEnc);
-      if (decrypted) byBank.set(decrypted, [...(byBank.get(decrypted) ?? []), doc.id]);
+  for (const source of sources) {
+    if (source.bankAccountNumberEnc) {
+      const decrypted = decryptPayoutField(source.bankAccountNumberEnc);
+      if (decrypted) byBank.set(decrypted, [...(byBank.get(decrypted) ?? []), source.id]);
     }
-    if (data.upiIdEnc) {
-      const decrypted = decryptPayoutField(data.upiIdEnc);
-      if (decrypted) byUpi.set(decrypted, [...(byUpi.get(decrypted) ?? []), doc.id]);
+    if (source.upiIdEnc) {
+      const decrypted = decryptPayoutField(source.upiIdEnc);
+      if (decrypted) byUpi.set(decrypted, [...(byUpi.get(decrypted) ?? []), source.id]);
     }
   }
 
@@ -430,14 +554,36 @@ async function practitionerLiteById(practitionerId: string): Promise<Practitione
 }
 
 export async function getAllPayoutsAdmin(status?: string) {
-  const query = status && status !== "all"
-    ? payoutsCollection().where("status", "==", status).orderBy("requestedAt", "desc")
-    : payoutsCollection().orderBy("requestedAt", "desc");
-  const snap = await query.get();
-  const payouts = snap.docs.map((doc) => payoutFromSnap(doc));
+  const payouts = isSupabaseCutoverActive()
+    ? await getAllPayoutsInSupabase(status && status !== "all" ? status : undefined)
+    : (await (status && status !== "all"
+        ? payoutsCollection().where("status", "==", status).orderBy("requestedAt", "desc")
+        : payoutsCollection().orderBy("requestedAt", "desc")
+      ).get()).docs.map((doc) => payoutFromSnap(doc));
   const practitionerIds = Array.from(new Set(payouts.map((payout) => payout.practitionerId)));
-  const practitionerLites = await Promise.all(practitionerIds.map((id) => practitionerLiteById(id)));
-  const practitionerById = new Map(practitionerIds.map((id, index) => [id, practitionerLites[index]]));
+  // This read used to be Firestore-only even after the payouts list itself was
+  // ported, so the admin page would have failed at cutover. One query instead of
+  // one document read per distinct practitioner.
+  const practitionerById = isSupabaseCutoverActive()
+    ? new Map(
+        Array.from(await getPortalPractitionerLitesInSupabase(practitionerIds)).map(([id, lite]) => [
+          id,
+          {
+            name: lite.name,
+            email: lite.email,
+            bankAccountName: lite.bankAccountName,
+            bankAccountNumber: lite.bankAccountNumberEnc ? decryptPayoutField(lite.bankAccountNumberEnc) : null,
+            bankIfsc: lite.bankIfsc,
+            upiId: lite.upiIdEnc ? decryptPayoutField(lite.upiIdEnc) : null,
+          } satisfies PractitionerLite,
+        ]),
+      )
+    : new Map(
+        (await Promise.all(practitionerIds.map((id) => practitionerLiteById(id)))).map((lite, index) => [
+          practitionerIds[index],
+          lite,
+        ]),
+      );
 
   return payouts.map((payout) => {
     const practitioner = practitionerById.get(payout.practitionerId);
@@ -465,6 +611,26 @@ const ALLOWED_PAYOUT_TRANSITIONS: Record<string, ReadonlySet<string>> = {
 
 export async function updatePayoutStatus(id: string, status: "approved" | "paid" | "rejected", adminId: string, adminNotes?: string, transactionRef?: string): Promise<PractitionerPayout> {
   if (status === "paid" && !transactionRef?.trim()) throw new PayoutError("Enter a bank transaction reference before marking this payout paid.");
+  if (isSupabaseCutoverActive()) {
+    try {
+      return await transitionPayoutStatusInSupabase({
+        id,
+        status,
+        adminNotes: adminNotes?.trim().slice(0, 500) || null,
+        transactionRef: transactionRef?.trim().slice(0, 120) || null,
+        processedBy: adminId,
+        assertTransition: (currentStatus) => {
+          if (!ALLOWED_PAYOUT_TRANSITIONS[currentStatus]?.has(status)) {
+            throw new PayoutError(`A ${currentStatus} payout can't be changed to ${status}.`);
+          }
+        },
+      });
+    } catch (error) {
+      if (error instanceof PayoutNotFoundError) throw new PayoutError("Payout request not found.");
+      throw error;
+    }
+  }
+
   const ref = payoutsCollection().doc(id);
   // Transactional read-check-write: a plain get()-then-update() lets two concurrent requests (a
   // double-click, or two admins acting on the same payout) both read the same currentStatus and
@@ -509,6 +675,18 @@ export async function updatePractitionerPayoutDetails(practitionerId: string, in
 
   // Blank bank/UPI fields mean "keep what's already saved" (the form never pre-fills
   // secrets), so only touch a group of fields when its input was actually provided.
+  // null means "leave this column alone": the form never pre-fills secrets, so a
+  // blank bank or UPI field means keep what is already stored.
+  if (isSupabaseCutoverActive()) {
+    await updatePortalPayoutDetailsInSupabase(practitionerId, {
+      bankAccountName: bankAccountNumber ? bankAccountName : null,
+      bankAccountNumberEnc: bankAccountNumber ? encryptPayoutField(bankAccountNumber) : null,
+      bankIfsc: bankAccountNumber ? bankIfsc : null,
+      upiIdEnc: upiId ? encryptPayoutField(upiId) : null,
+    });
+    return;
+  }
+
   await db.collection("practitioners").doc(practitionerId).update({
     ...(bankAccountNumber
       ? {
@@ -523,9 +701,73 @@ export async function updatePractitionerPayoutDetails(practitionerId: string, in
   });
 }
 
+// --- Kundli / Varshphal report helpers --------------------------------------
+//
+// The chart engines, their error mapping and the "has this client filled in a
+// birth profile" guard are the same for both providers and for all eight entry
+// points below, so they live here once. Only the row fetch and the cache write
+// differ, and only those are gated.
+
+type BirthDetails = { name: string; birthDate: string; birthTime: string; birthPlace: string };
+type KundliChartResult = ReturnType<typeof buildKundliChart>;
+type VarshphalChartResult = ReturnType<typeof buildVarshphalChart>;
+
+function birthDetailsFromBooking(booking: { clientName: string; birthDate: string; birthTime: string; birthPlace: string }): BirthDetails {
+  return { name: booking.clientName, birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace };
+}
+
+function buildKundliChartOrThrow(details: BirthDetails): KundliChartResult {
+  try {
+    return buildKundliChart(details);
+  } catch (error) {
+    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
+function renderKundliSummaryOrThrow(details: BirthDetails): string {
+  return renderKundliReport(buildKundliChartOrThrow(details));
+}
+
+function buildVarshphalChartOrThrow(details: BirthDetails, year: number): VarshphalChartResult {
+  try {
+    return buildVarshphalChart({ birthDate: details.birthDate, birthTime: details.birthTime, birthPlace: details.birthPlace, year });
+  } catch (error) {
+    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
+    throw error;
+  }
+}
+
+function renderVarshphalSummaryOrThrow(details: BirthDetails, year: number): string {
+  return renderVarshphalReport(buildVarshphalChartOrThrow(details, year), details.name);
+}
+
+/** A chat session does not capture birth details at checkout the way a booking
+ * does, so the report engines read them off the client's own member profile. */
+function requireBirthProfile(
+  member: { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null },
+  report: string,
+): BirthDetails {
+  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
+    throw new KundliSummaryError(`This client hasn't completed their birth profile yet, so ${report} can't be generated.`);
+  }
+  return { name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace };
+}
+
 /** Generates (or returns the cached) Kundli summary for a booking's client from the real chart
  * engine, using the birth details already captured at booking time. No AI involved. */
-export async function getBookingKundliSummary(bookingId: string, practitionerId: string) {
+export async function getBookingKundliSummary(bookingId: string, practitionerId: string): Promise<BookingRecord> {
+  if (isSupabaseCutoverActive()) {
+    const booking = await getPortalBookingInSupabase(bookingId);
+    // One message for "no such booking" and "not yours": the Firestore path
+    // deliberately does not reveal which booking ids exist.
+    if (!booking || booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+    if (booking.kundliSummary) return booking;
+    const summary = renderKundliSummaryOrThrow(birthDetailsFromBooking(booking));
+    const updated = await cacheBookingKundliInSupabase(bookingId, summary);
+    return updated ?? { ...booking, kundliSummary: summary, kundliGeneratedAt: new Date() };
+  }
+
   const ref = db.collection("bookings").doc(bookingId);
   const snap = await ref.get();
   if (!snap.exists) throw new KundliSummaryError("Booking not found.");
@@ -533,15 +775,7 @@ export async function getBookingKundliSummary(bookingId: string, practitionerId:
   if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
   if (booking.kundliSummary) return booking;
 
-  let summary: string;
-  try {
-    const chart = buildKundliChart({ name: booking.clientName, birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace });
-    summary = renderKundliReport(chart);
-  } catch (error) {
-    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
-
+  const summary = renderKundliSummaryOrThrow(birthDetailsFromBooking(booking));
   await ref.update({ kundliSummary: summary, kundliGeneratedAt: FieldValue.serverTimestamp() });
   return { ...booking, kundliSummary: summary, kundliGeneratedAt: new Date() };
 }
@@ -549,26 +783,36 @@ export async function getBookingKundliSummary(bookingId: string, practitionerId:
 /** Same lookup/auth as getBookingKundliSummary, but returns the structured KundliChart instead of
  * the rendered text — for the PDF download route, which needs the raw chart data (planetary
  * positions, houses) to build tables, not just prose. */
-export async function getBookingKundliChart(bookingId: string, practitionerId: string) {
-  const ref = db.collection("bookings").doc(bookingId);
-  const snap = await ref.get();
+export async function getBookingKundliChart(bookingId: string, practitionerId: string): Promise<KundliChartResult> {
+  if (isSupabaseCutoverActive()) {
+    const booking = await getPortalBookingInSupabase(bookingId);
+    if (!booking || booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+    return buildKundliChartOrThrow(birthDetailsFromBooking(booking));
+  }
+
+  const snap = await db.collection("bookings").doc(bookingId).get();
   if (!snap.exists) throw new KundliSummaryError("Booking not found.");
   const booking = bookingFromDoc(snap);
   if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
-
-  try {
-    return buildKundliChart({ name: booking.clientName, birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace });
-  } catch (error) {
-    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
+  return buildKundliChartOrThrow(birthDetailsFromBooking(booking));
 }
 
 /** Same idea as getBookingKundliSummary, but for an instant-chat session — a scheduled booking
  * captures birth details as part of checkout, but a chat session doesn't, so this reads them off
  * the client's own member profile instead (populated during onboarding). Scoped to sessions the
  * calling practitioner actually owns, and cached on the chatSessions doc the same way. */
-export async function getChatMemberKundliSummary(sessionId: string, practitionerId: string) {
+export async function getChatMemberKundliSummary(sessionId: string, practitionerId: string): Promise<{ kundliSummary: string }> {
+  if (isSupabaseCutoverActive()) {
+    const session = await getPortalChatSessionInSupabase(sessionId);
+    if (!session || session.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+    if (session.kundliSummary) return { kundliSummary: session.kundliSummary };
+    const member = await getPortalMemberBirthProfileInSupabase(session.memberId);
+    if (!member) throw new KundliSummaryError("This client's profile could not be found.");
+    const summary = renderKundliSummaryOrThrow(requireBirthProfile(member, "a Kundli"));
+    await cacheChatKundliInSupabase(sessionId, summary);
+    return { kundliSummary: summary };
+  }
+
   const sessionRef = db.collection("chatSessions").doc(sessionId);
   const sessionSnap = await sessionRef.get();
   if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
@@ -579,19 +823,8 @@ export async function getChatMemberKundliSummary(sessionId: string, practitioner
   const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
   if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
   const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
-  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
-    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Kundli can't be generated.");
-  }
 
-  let summary: string;
-  try {
-    const chart = buildKundliChart({ name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace });
-    summary = renderKundliReport(chart);
-  } catch (error) {
-    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
-
+  const summary = renderKundliSummaryOrThrow(requireBirthProfile(member, "a Kundli"));
   await sessionRef.update({ kundliSummary: summary, kundliGeneratedAt: FieldValue.serverTimestamp() });
   return { kundliSummary: summary };
 }
@@ -599,7 +832,15 @@ export async function getChatMemberKundliSummary(sessionId: string, practitioner
 /** Same lookup/auth as getChatMemberKundliSummary, but returns the structured KundliChart instead
  * of the rendered text — for the PDF download route, which needs the raw chart data (planetary
  * positions, houses) to build tables, not just prose. */
-export async function getChatMemberKundliChart(sessionId: string, practitionerId: string) {
+export async function getChatMemberKundliChart(sessionId: string, practitionerId: string): Promise<KundliChartResult> {
+  if (isSupabaseCutoverActive()) {
+    const session = await getPortalChatSessionInSupabase(sessionId);
+    if (!session || session.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+    const member = await getPortalMemberBirthProfileInSupabase(session.memberId);
+    if (!member) throw new KundliSummaryError("This client's profile could not be found.");
+    return buildKundliChartOrThrow(requireBirthProfile(member, "a Kundli"));
+  }
+
   const sessionSnap = await db.collection("chatSessions").doc(sessionId).get();
   if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
   const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string };
@@ -608,16 +849,7 @@ export async function getChatMemberKundliChart(sessionId: string, practitionerId
   const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
   if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
   const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
-  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
-    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Kundli can't be generated.");
-  }
-
-  try {
-    return buildKundliChart({ name: member.name, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace });
-  } catch (error) {
-    if (error instanceof KundliEngineError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
+  return buildKundliChartOrThrow(requireBirthProfile(member, "a Kundli"));
 }
 
 // --- Varshphal (annual solar-return) — mirrors the four Kundli helpers above, with one
@@ -628,82 +860,91 @@ export async function getChatMemberKundliChart(sessionId: string, practitionerId
 
 /** Generates (or returns the still-current-year cached) Varshphal summary for a booking's
  * client from the real solar-return engine, using the birth details captured at booking time. */
-export async function getBookingVarshphalSummary(bookingId: string, practitionerId: string) {
+export async function getBookingVarshphalSummary(bookingId: string, practitionerId: string): Promise<BookingRecord> {
+  const year = new Date().getFullYear();
+
+  if (isSupabaseCutoverActive()) {
+    const booking = await getPortalBookingInSupabase(bookingId);
+    if (!booking || booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+    if (booking.varshphalSummary && booking.varshphalYear === year) return booking;
+    const summary = renderVarshphalSummaryOrThrow(birthDetailsFromBooking(booking), year);
+    const updated = await cacheBookingVarshphalInSupabase(bookingId, summary, year);
+    return updated ?? { ...booking, varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: new Date() };
+  }
+
   const ref = db.collection("bookings").doc(bookingId);
   const snap = await ref.get();
   if (!snap.exists) throw new KundliSummaryError("Booking not found.");
   const booking = bookingFromDoc(snap);
   if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
-
-  const year = new Date().getFullYear();
   if (booking.varshphalSummary && booking.varshphalYear === year) return booking;
 
-  let summary: string;
-  try {
-    const chart = buildVarshphalChart({ birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace, year });
-    summary = renderVarshphalReport(chart, booking.clientName);
-  } catch (error) {
-    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
-
+  const summary = renderVarshphalSummaryOrThrow(birthDetailsFromBooking(booking), year);
   await ref.update({ varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: FieldValue.serverTimestamp() });
   return { ...booking, varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: new Date() };
 }
 
 /** Same lookup/auth as getBookingVarshphalSummary, but returns the structured VarshphalChart
  * instead of the rendered text — for the PDF download route. */
-export async function getBookingVarshphalChart(bookingId: string, practitionerId: string) {
-  const ref = db.collection("bookings").doc(bookingId);
-  const snap = await ref.get();
+export async function getBookingVarshphalChart(bookingId: string, practitionerId: string): Promise<{ chart: VarshphalChartResult; clientName: string }> {
+  if (isSupabaseCutoverActive()) {
+    const booking = await getPortalBookingInSupabase(bookingId);
+    if (!booking || booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
+    return { chart: buildVarshphalChartOrThrow(birthDetailsFromBooking(booking), new Date().getFullYear()), clientName: booking.clientName };
+  }
+
+  const snap = await db.collection("bookings").doc(bookingId).get();
   if (!snap.exists) throw new KundliSummaryError("Booking not found.");
   const booking = bookingFromDoc(snap);
   if (booking.practitionerId !== practitionerId) throw new KundliSummaryError("Booking not found.");
-
-  try {
-    return { chart: buildVarshphalChart({ birthDate: booking.birthDate, birthTime: booking.birthTime, birthPlace: booking.birthPlace, year: new Date().getFullYear() }), clientName: booking.clientName };
-  } catch (error) {
-    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
+  return { chart: buildVarshphalChartOrThrow(birthDetailsFromBooking(booking), new Date().getFullYear()), clientName: booking.clientName };
 }
 
 /** Same idea as getBookingVarshphalSummary, but for an instant-chat session — birth details come
  * from the client's own member profile (no booking-time capture for chat), same as
  * getChatMemberKundliSummary. Scoped to sessions the calling practitioner actually owns. */
-export async function getChatMemberVarshphalSummary(sessionId: string, practitionerId: string) {
+export async function getChatMemberVarshphalSummary(sessionId: string, practitionerId: string): Promise<{ varshphalSummary: string }> {
+  const year = new Date().getFullYear();
+
+  if (isSupabaseCutoverActive()) {
+    const session = await getPortalChatSessionInSupabase(sessionId);
+    if (!session || session.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+    if (session.varshphalSummary && session.varshphalYear === year) return { varshphalSummary: session.varshphalSummary };
+    const member = await getPortalMemberBirthProfileInSupabase(session.memberId);
+    if (!member) throw new KundliSummaryError("This client's profile could not be found.");
+    const summary = renderVarshphalSummaryOrThrow(requireBirthProfile(member, "a Varshphal report"), year);
+    await cacheChatVarshphalInSupabase(sessionId, summary, year);
+    return { varshphalSummary: summary };
+  }
+
   const sessionRef = db.collection("chatSessions").doc(sessionId);
   const sessionSnap = await sessionRef.get();
   if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
   const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string; varshphalSummary?: string; varshphalYear?: number };
   if (sessionData.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
-
-  const year = new Date().getFullYear();
   if (sessionData.varshphalSummary && sessionData.varshphalYear === year) return { varshphalSummary: sessionData.varshphalSummary };
 
   const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
   if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
   const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
-  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
-    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Varshphal report can't be generated.");
-  }
 
-  let summary: string;
-  try {
-    const chart = buildVarshphalChart({ birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace, year });
-    summary = renderVarshphalReport(chart, member.name);
-  } catch (error) {
-    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
-
+  const summary = renderVarshphalSummaryOrThrow(requireBirthProfile(member, "a Varshphal report"), year);
   await sessionRef.update({ varshphalSummary: summary, varshphalYear: year, varshphalGeneratedAt: FieldValue.serverTimestamp() });
   return { varshphalSummary: summary };
 }
 
 /** Same lookup/auth as getChatMemberVarshphalSummary, but returns the structured VarshphalChart
  * instead of the rendered text — for the PDF download route. */
-export async function getChatMemberVarshphalChart(sessionId: string, practitionerId: string) {
+export async function getChatMemberVarshphalChart(sessionId: string, practitionerId: string): Promise<{ chart: VarshphalChartResult; clientName: string }> {
+  if (isSupabaseCutoverActive()) {
+    const session = await getPortalChatSessionInSupabase(sessionId);
+    if (!session || session.practitionerId !== practitionerId) throw new KundliSummaryError("Chat session not found.");
+    const member = await getPortalMemberBirthProfileInSupabase(session.memberId);
+    if (!member) throw new KundliSummaryError("This client's profile could not be found.");
+    const details = requireBirthProfile(member, "a Varshphal report");
+    return { chart: buildVarshphalChartOrThrow(details, new Date().getFullYear()), clientName: details.name };
+  }
+
   const sessionSnap = await db.collection("chatSessions").doc(sessionId).get();
   if (!sessionSnap.exists) throw new KundliSummaryError("Chat session not found.");
   const sessionData = sessionSnap.data() as { practitionerId: string; memberId: string };
@@ -712,14 +953,6 @@ export async function getChatMemberVarshphalChart(sessionId: string, practitione
   const memberSnap = await db.collection("members").doc(sessionData.memberId).get();
   if (!memberSnap.exists) throw new KundliSummaryError("This client's profile could not be found.");
   const member = memberSnap.data() as { name: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
-  if (!member.birthDate || !member.birthTime || !member.birthPlace) {
-    throw new KundliSummaryError("This client hasn't completed their birth profile yet, so a Varshphal report can't be generated.");
-  }
-
-  try {
-    return { chart: buildVarshphalChart({ birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace, year: new Date().getFullYear() }), clientName: member.name };
-  } catch (error) {
-    if (error instanceof VarshphalError) throw new KundliSummaryError(error.message);
-    throw error;
-  }
+  const details = requireBirthProfile(member, "a Varshphal report");
+  return { chart: buildVarshphalChartOrThrow(details, new Date().getFullYear()), clientName: details.name };
 }

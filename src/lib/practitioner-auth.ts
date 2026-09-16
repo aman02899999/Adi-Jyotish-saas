@@ -3,9 +3,16 @@ import "server-only";
 import { cookies } from "next/headers";
 import { getLocale } from "next-intl/server";
 import { redirect } from "@/i18n/navigation";
-import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { verifyAuthToken } from "@/lib/auth-verify";
+import { issueSessionCookieValue, revokeAllUserSessions, verifySessionCookieValue } from "@/lib/session-cookie";
+import {
+  findPractitionerIdByUidInSupabase,
+  getActivePractitionerByUidInSupabase,
+  touchPractitionerLastLoginInSupabase,
+} from "@/lib/practitioner-auth-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 const COOKIE_NAME = "jyotish_practitioner_session";
 const SESSION_DAYS = 14;
@@ -45,11 +52,16 @@ export async function findPractitionerByUid(uid: string) {
  * practitioner accounts are never auto-created here — they must already exist (created by an
  * admin invite) with this UID linked, or the sign-in is rejected by the caller before this runs. */
 export async function createPractitionerSession(idToken: string) {
-  const decoded = await getAuth().verifyIdToken(idToken, true);
-  const doc = await findPractitionerByUid(decoded.uid);
-  if (doc) await doc.ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
+  const decoded = await verifyAuthToken(idToken);
+  if (isSupabaseCutoverActive()) {
+    const id = await findPractitionerIdByUidInSupabase(decoded.uid);
+    if (id) await touchPractitionerLastLoginInSupabase(id);
+  } else {
+    const doc = await findPractitionerByUid(decoded.uid);
+    if (doc) await doc.ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
+  }
 
-  const sessionCookie = await getAuth().createSessionCookie(idToken, { expiresIn: SESSION_MS });
+  const sessionCookie = await issueSessionCookieValue({ uid: decoded.uid }, idToken, SESSION_MS);
   const store = await cookies();
   store.set(COOKIE_NAME, sessionCookie, {
     httpOnly: true,
@@ -68,9 +80,25 @@ export async function getCurrentPractitioner(): Promise<PractitionerIdentity | n
 
   let uid: string;
   try {
-    uid = (await getAuth().verifySessionCookie(cookie, true)).uid;
+    uid = (await verifySessionCookieValue(cookie, true)).uid;
   } catch {
     return null;
+  }
+
+  if (isSupabaseCutoverActive()) {
+    // `active` is inside the query, so a deactivated practitioner and one with no
+    // linked account both come back as null.
+    const data = await getActivePractitionerByUidInSupabase(uid);
+    if (!data) return null;
+    return {
+      id: data.id,
+      name: data.name,
+      slug: data.slug,
+      email: data.email,
+      title: data.title,
+      photoUrl: data.photoUrl,
+      online: data.online ?? false,
+    };
   }
 
   const doc = await findPractitionerByUid(uid);
@@ -100,8 +128,8 @@ export async function revokePractitionerSession() {
   const cookie = store.get(COOKIE_NAME)?.value;
   if (cookie) {
     try {
-      const decoded = await getAuth().verifySessionCookie(cookie);
-      await getAuth().revokeRefreshTokens(decoded.uid);
+      const decoded = await verifySessionCookieValue(cookie, false);
+      await revokeAllUserSessions(decoded.uid);
     } catch {
       // Cookie already invalid/expired — nothing to revoke.
     }

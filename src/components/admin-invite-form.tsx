@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck, UserRound } from "lucide-react";
-import { signInWithEmailAndPassword } from "@/lib/firebase-client";
+import { signInWithEmailAndPassword } from "@/lib/auth-client";
 
 export function AdminInviteForm({ token, email, role }: { token: string; email: string; role: string }) {
   const [name, setName] = useState("");

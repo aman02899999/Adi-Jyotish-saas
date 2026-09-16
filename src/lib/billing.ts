@@ -4,6 +4,16 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { splitGstInclusive } from "@/lib/gst";
+import {
+  backfillInvoicesInSupabase,
+  getBookingsForInvoicesInSupabase,
+  getInvoiceByIdInSupabase,
+  getInvoicesForAdminInSupabase,
+  getInvoicesForCustomerInSupabase,
+  getPaymentsForInvoicesInSupabase,
+  insertInvoiceIfAbsentInSupabase,
+} from "@/lib/billing-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 /** The subset of a booking record billing needs. Structurally compatible with the Firestore
  * `BookingRecord` shape produced by the bookings domain (see `src/app/api/bookings/route.ts`) —
@@ -143,6 +153,32 @@ function isAlreadyExists(error: unknown) {
  * existing doc) replaces the old `onConflictDoNothing({ target: invoices.bookingId })` pattern:
  * "does this doc exist" is the idempotency check. */
 export async function ensureInvoiceForBooking(booking: BookingForInvoice, memberId?: string | null): Promise<Invoice> {
+  if (isSupabaseCutoverActive()) {
+    const found = await getInvoiceByIdInSupabase(booking.id);
+    if (found) return found;
+    const settings = await getStudioSettings();
+    const { subtotal, taxAmount } = splitGstInclusive(booking.servicePrice, settings.gstRate);
+    const created = await insertInvoiceIfAbsentInSupabase({
+      id: booking.id,
+      number: invoiceNumber(booking.id, booking.createdAt),
+      bookingId: booking.id,
+      memberId: memberId ?? null,
+      customerName: booking.clientName,
+      customerEmail: booking.clientEmail,
+      description: booking.serviceTitle,
+      subtotal,
+      taxRate: settings.gstRate,
+      taxAmount,
+      amount: booking.servicePrice,
+      currency: settings.currency,
+      status: invoiceStatusForBooking(booking.paymentStatus),
+      dueAt: booking.scheduledAt,
+      paidAt: booking.paymentStatus === "paid" ? booking.updatedAt : null,
+    });
+    if (!created) throw new Error(`Could not create or read invoice for booking ${booking.id}`);
+    return created;
+  }
+
   const ref = invoicesCollection().doc(booking.id);
   const existing = await ref.get();
   if (!existing.exists) {
@@ -179,6 +215,15 @@ export async function ensureInvoiceForBooking(booking: BookingForInvoice, member
  * design, this is now just "does `invoices/{bookingId}` exist" per booking rather than a bulk
  * anti-join — Firestore has no server-side join, so we page bookings and probe. */
 export async function backfillInvoices(): Promise<void> {
+  if (isSupabaseCutoverActive()) {
+    // One anti-join statement instead of paging bookings and probing
+    // invoices/{bookingId} for each. The invoice number and the GST split are
+    // reproduced in SQL, and the integration test asserts both match this file.
+    const settings = await getStudioSettings();
+    await backfillInvoicesInSupabase(settings.gstRate, settings.currency);
+    return;
+  }
+
   const bookingsSnap = await db.collection("bookings").orderBy("createdAt", "asc").get();
   if (bookingsSnap.empty) return;
   const settings = await getStudioSettings();
@@ -237,6 +282,26 @@ export async function backfillInvoices(): Promise<void> {
 async function attachBilling(invoices: Invoice[]): Promise<BillingInvoice[]> {
   if (!invoices.length) return [];
 
+  if (isSupabaseCutoverActive()) {
+    // Two queries for the whole list. The Firestore path needs one document read
+    // per invoice plus one query per invoice for its payments.
+    const [bookings, paymentsByInvoice] = await Promise.all([
+      getBookingsForInvoicesInSupabase([...new Set(invoices.map((invoice) => invoice.bookingId))]),
+      getPaymentsForInvoicesInSupabase(invoices.map((invoice) => invoice.id)),
+    ]);
+    return invoices.map((invoice) => {
+      const booking = bookings.get(invoice.bookingId);
+      return {
+        ...invoice,
+        bookingReference: booking?.reference ?? "Archived",
+        scheduledAt: booking?.scheduledAt ?? invoice.dueAt,
+        bookingStatus: booking?.status ?? "archived",
+        practitionerName: booking?.practitionerName ?? null,
+        payments: paymentsByInvoice.get(invoice.id) ?? [],
+      };
+    });
+  }
+
   const [bookingDocs, paymentSnaps] = await Promise.all([
     Promise.all(invoices.map((invoice) => db.collection("bookings").doc(invoice.bookingId).get())),
     Promise.all(invoices.map((invoice) => paymentsCollection().where("invoiceId", "==", invoice.id).orderBy("createdAt", "desc").get())),
@@ -259,12 +324,22 @@ async function attachBilling(invoices: Invoice[]): Promise<BillingInvoice[]> {
 
 export async function getAdminBilling(): Promise<BillingInvoice[]> {
   await backfillInvoices();
+  if (isSupabaseCutoverActive()) return attachBilling(await getInvoicesForAdminInSupabase());
   const snap = await invoicesCollection().orderBy("createdAt", "desc").get();
   return attachBilling(snap.docs.map((doc) => invoiceFromSnap(doc)));
 }
 
 export async function getMemberBilling(memberId: string, email: string): Promise<BillingInvoice[]> {
   await backfillInvoices();
+  if (isSupabaseCutoverActive()) {
+    // customer_email is citext, so this match is case-insensitive where the
+    // Firestore equality was not. The filter below is unchanged and still
+    // requires the member id to match exactly, so a differently-cased row only
+    // survives when it genuinely belongs to this member.
+    const rows = (await getInvoicesForCustomerInSupabase(email))
+      .filter((row) => row.memberId === memberId || row.customerEmail === email);
+    return attachBilling(rows);
+  }
   const snap = await invoicesCollection().where("customerEmail", "==", email).orderBy("createdAt", "desc").get();
   const rows = snap.docs.map((doc) => invoiceFromSnap(doc)).filter((row) => row.memberId === memberId || row.customerEmail === email);
   return attachBilling(rows);

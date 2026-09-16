@@ -10,6 +10,24 @@ import { notifyAdmins } from "@/lib/notifications";
 import { buildKundliChart, renderKundliReport } from "@/lib/kundli-engine";
 import { buildVarshphalChart, renderVarshphalReport } from "@/lib/varshphal";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
+import {
+  attachRazorpayOrderInSupabase,
+  claimFreeReadingInSupabase,
+  getReadingByIdInSupabase,
+  getReadingsForMemberInSupabase,
+  hasQuestionReadingInSupabase,
+  insertReadingInSupabase,
+  insertReadingWithIdInSupabase,
+  markReadingPaidFromWalletInSupabase,
+  markReadingPaidInSupabase,
+  markReadingPaidViaBypassInSupabase,
+  recordFailedAttemptInSupabase,
+  reserveReadingIdInSupabase,
+  saveReadingAnswerInSupabase,
+  type AiReadingInsert,
+} from "@/lib/ai-readings-supabase";
+import { downloadFromSupabaseStorage, uploadToSupabaseStorage } from "@/lib/supabase-storage";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 // Every AI-persona reading (Gemini-backed: Ask Live, Palm, Tarot, Face, Vastu, Lal Kitab) is priced
 // on a fixed ₹99–₹999 ladder, ranked by input/output complexity — text-only and single-question
@@ -129,7 +147,7 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
   birthPlace: string;
   question: string;
 }) {
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "question",
     clientName,
@@ -140,6 +158,11 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
     price: AI_READING_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -152,6 +175,7 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
 
 /** A member's very first question-type reading is free. Checked (and consumed) at creation time, so a second attempt is never free even if the first is still pending. */
 export async function isEligibleForFreeReading(memberId: string) {
+  if (isSupabaseCutoverActive()) return !(await hasQuestionReadingInSupabase(memberId));
   const snap = await collection.where("memberId", "==", memberId).where("readingType", "==", "question").limit(1).get();
   return snap.empty;
 }
@@ -175,14 +199,20 @@ export async function createFreeReading({ memberId, clientName, birthDate, birth
   // isEligibleForFreeReading (the caller's check) reads outside any transaction, so two concurrent
   // requests (double submit, duplicate tab) could both see "not yet used" and both land here.
   // create() atomically fails if this doc already exists, so only the first actually gets through.
-  try {
-    await freeReadingClaims.doc(memberId).create({ createdAt: FieldValue.serverTimestamp() });
-  } catch (error) {
-    if (isAlreadyExists(error)) throw new FreeReadingAlreadyUsedError("Your free reading has already been used.");
-    throw error;
+  if (isSupabaseCutoverActive()) {
+    if (!(await claimFreeReadingInSupabase(memberId))) {
+      throw new FreeReadingAlreadyUsedError("Your free reading has already been used.");
+    }
+  } else {
+    try {
+      await freeReadingClaims.doc(memberId).create({ createdAt: FieldValue.serverTimestamp() });
+    } catch (error) {
+      if (isAlreadyExists(error)) throw new FreeReadingAlreadyUsedError("Your free reading has already been used.");
+      throw error;
+    }
   }
 
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     // Tagging this correctly (rather than always "question") matters beyond display: a later
     // retry (see the [id]/retry route) re-reads this doc and dispatches on readingType — a
@@ -200,6 +230,11 @@ export async function createFreeReading({ memberId, clientName, birthDate, birth
     price: 0,
     currency: AI_READING_CURRENCY,
     status: "paid",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -217,7 +252,7 @@ export async function createPendingKundliReport({ memberId, clientName, birthDat
   birthTime: string;
   birthPlace: string;
 }) {
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "kundli",
     clientName,
@@ -228,6 +263,11 @@ export async function createPendingKundliReport({ memberId, clientName, birthDat
     price: AI_KUNDLI_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -246,7 +286,7 @@ export async function createPendingVarshphalReading({ memberId, clientName, birt
   birthPlace: string;
   year: number;
 }) {
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "varshphal",
     clientName,
@@ -258,6 +298,11 @@ export async function createPendingVarshphalReading({ memberId, clientName, birt
     price: AI_VARSHPHAL_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -281,11 +326,19 @@ export async function uploadPalmImage({ memberId, readingId, side, buffer, mimeT
 }) {
   const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
   const path = `palm-readings/${memberId}/${readingId}/${side}.${extension}`;
+  if (isSupabaseCutoverActive()) {
+    await uploadToSupabaseStorage(path, buffer, mimeType);
+    return path;
+  }
   await bucket().file(path).save(buffer, { metadata: { contentType: mimeType } });
   return path;
 }
 
 async function downloadPalmImage(path: string): Promise<{ base64: string; mimeType: string }> {
+  if (isSupabaseCutoverActive()) {
+    const stored = await downloadFromSupabaseStorage(path);
+    return { base64: stored.buffer.toString("base64"), mimeType: stored.contentType };
+  }
   const file = bucket().file(path);
   const [buffer] = await file.download();
   const [metadata] = await file.getMetadata();
@@ -304,12 +357,20 @@ export async function uploadFaceImage({ memberId, readingId, index, buffer, mime
 }) {
   const extension = mimeType === "image/png" ? "png" : mimeType === "image/webp" ? "webp" : "jpg";
   const path = `face-readings/${memberId}/${readingId}/face-${index}.${extension}`;
+  if (isSupabaseCutoverActive()) {
+    await uploadToSupabaseStorage(path, buffer, mimeType);
+    return path;
+  }
   await bucket().file(path).save(buffer, { metadata: { contentType: mimeType } });
   return path;
 }
 
 async function downloadFaceImages(paths: string[]): Promise<{ base64: string; mimeType: string }[]> {
   return Promise.all(paths.map(async (path) => {
+    if (isSupabaseCutoverActive()) {
+      const stored = await downloadFromSupabaseStorage(path);
+      return { base64: stored.buffer.toString("base64"), mimeType: stored.contentType };
+    }
     const file = bucket().file(path);
     const [buffer] = await file.download();
     const [metadata] = await file.getMetadata();
@@ -321,7 +382,7 @@ async function downloadFaceImages(paths: string[]): Promise<{ base64: string; mi
  * need a reading id to build the Storage path (e.g. palm-readings/{memberId}/{readingId}/...) for
  * the image(s) they're about to upload, before there's a reading doc to attach those paths to. */
 export function reserveReadingId() {
-  return collection.doc().id;
+  return isSupabaseCutoverActive() ? reserveReadingIdInSupabase() : collection.doc().id;
 }
 
 export async function createPendingPalmReading({ readingId, memberId, clientName, leftPalmImagePath, rightPalmImagePath }: {
@@ -331,8 +392,7 @@ export async function createPendingPalmReading({ readingId, memberId, clientName
   leftPalmImagePath: string;
   rightPalmImagePath: string;
 }) {
-  const ref = collection.doc(readingId);
-  await ref.set({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "palm",
     clientName,
@@ -345,6 +405,12 @@ export async function createPendingPalmReading({ readingId, memberId, clientName
     price: AI_PALM_READING_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingWithIdInSupabase(readingId, values);
+
+  const ref = collection.doc(readingId);
+  await ref.set({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -361,7 +427,7 @@ export async function createPendingTarotReading({ memberId, clientName, question
   question: string;
   cards: TarotCardDraw[];
 }) {
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "tarot",
     clientName,
@@ -373,6 +439,11 @@ export async function createPendingTarotReading({ memberId, clientName, question
     price: AI_TAROT_READING_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -390,8 +461,7 @@ export async function createPendingFaceReading({ readingId, memberId, clientName
   faceImagePaths: string[];
   question: string;
 }) {
-  const ref = collection.doc(readingId);
-  await ref.set({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "face",
     clientName,
@@ -403,6 +473,12 @@ export async function createPendingFaceReading({ readingId, memberId, clientName
     price: AI_FACE_READING_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingWithIdInSupabase(readingId, values);
+
+  const ref = collection.doc(readingId);
+  await ref.set({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -418,7 +494,7 @@ export async function createPendingVastuReading({ memberId, clientName, question
   clientName: string;
   question: string;
 }) {
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "vastu",
     clientName,
@@ -429,6 +505,11 @@ export async function createPendingVastuReading({ memberId, clientName, question
     price: AI_VASTU_READING_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -447,7 +528,7 @@ export async function createPendingLalKitabReading({ memberId, clientName, birth
   birthPlace: string;
   question: string;
 }) {
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "lalkitab",
     clientName,
@@ -458,6 +539,11 @@ export async function createPendingLalKitabReading({ memberId, clientName, birth
     price: AI_LAL_KITAB_READING_PRICE,
     currency: AI_READING_CURRENCY,
     status: "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -477,7 +563,7 @@ export async function createPendingPersonaReading({ memberId, clientName, questi
   personaName: string;
   price: number;
 }) {
-  const ref = await collection.add({
+  const values: AiReadingInsert = {
     memberId,
     readingType: "persona",
     clientName,
@@ -495,6 +581,11 @@ export async function createPendingPersonaReading({ memberId, clientName, questi
     // "pending_payment" readings with "This reading has not been paid for yet", which would
     // wrongly block a member from retrying a free reading that failed to generate the first time.
     status: price === 0 ? "paid" : "pending_payment",
+  };
+  if (isSupabaseCutoverActive()) return insertReadingInSupabase(values);
+
+  const ref = await collection.add({
+    ...values,
     razorpayOrderId: null,
     razorpayPaymentId: null,
     answer: null,
@@ -506,10 +597,19 @@ export async function createPendingPersonaReading({ memberId, clientName, questi
 }
 
 export async function attachRazorpayOrder(readingId: string, orderId: string) {
+  if (isSupabaseCutoverActive()) {
+    await attachRazorpayOrderInSupabase(readingId, orderId);
+    return;
+  }
   await collection.doc(readingId).update({ razorpayOrderId: orderId });
 }
 
 export async function getReadingById(readingId: string, memberId: string): Promise<AiReading | null> {
+  if (isSupabaseCutoverActive()) {
+    const row = await getReadingByIdInSupabase(readingId);
+    if (!row) return null;
+    return row.memberId === memberId ? row : null;
+  }
   const snap = await collection.doc(readingId).get();
   if (!snap.exists) return null;
   const reading = toReading(snap);
@@ -517,12 +617,22 @@ export async function getReadingById(readingId: string, memberId: string): Promi
 }
 
 export async function getReadingsForMember(memberId: string) {
+  if (isSupabaseCutoverActive()) return getReadingsForMemberInSupabase(memberId);
   const snap = await collection.where("memberId", "==", memberId).orderBy("createdAt", "desc").get();
   return snap.docs.map(toReading);
 }
 
 /** Marks a reading paid. Idempotent per razorpayPaymentId so a repeated verify call is safe. */
-export async function markReadingPaid({ readingId, razorpayPaymentId }: { readingId: string; razorpayPaymentId: string }) {
+export async function markReadingPaid({ readingId, razorpayPaymentId }: { readingId: string; razorpayPaymentId: string }): Promise<AiReading | null> {
+  if (isSupabaseCutoverActive()) {
+    const outcome = await markReadingPaidInSupabase(readingId, razorpayPaymentId);
+    // A repeated verify call finds the reading already settled and must get the
+    // reading back, not an error — that is the idempotency the route relies on.
+    // "not_yours" cannot occur here (this path does not check ownership), but
+    // treating it as null rather than narrowing it away keeps the default safe.
+    if (outcome.kind === "not_found" || outcome.kind === "not_yours") return null;
+    return outcome.reading;
+  }
   const ref = collection.doc(readingId);
   const snap = await ref.get();
   if (!snap.exists) return null;
@@ -547,7 +657,12 @@ export async function markReadingPaid({ readingId, razorpayPaymentId }: { readin
  * up normally in the dashboard and the admin panel; only the charge is skipped, and the row records
  * that so it is never mistaken for revenue.
  */
-export async function markReadingPaidWithoutCharge({ readingId, memberId }: { readingId: string; memberId: string }) {
+export async function markReadingPaidWithoutCharge({ readingId, memberId }: { readingId: string; memberId: string }): Promise<AiReading | null> {
+  if (isSupabaseCutoverActive()) {
+    const outcome = await markReadingPaidViaBypassInSupabase(readingId, memberId);
+    if (outcome.kind === "not_found" || outcome.kind === "not_yours") return null;
+    return outcome.reading;
+  }
   const ref = collection.doc(readingId);
   const snap = await ref.get();
   if (!snap.exists) return null;
@@ -559,7 +674,28 @@ export async function markReadingPaidWithoutCharge({ readingId, memberId }: { re
   return toReading(await ref.get());
 }
 
-export async function payReadingFromWallet({ readingId, memberId }: { readingId: string; memberId: string }) {
+export async function payReadingFromWallet({ readingId, memberId }: { readingId: string; memberId: string }): Promise<AiReading | null> {
+  if (isSupabaseCutoverActive()) {
+    const existing = await getReadingByIdInSupabase(readingId);
+    if (!existing) return null;
+    if (existing.memberId !== memberId) return null;
+    if (existing.status !== "pending_payment") return existing;
+
+    // Money moves before the status does, in the same order as the Firestore path:
+    // a failed debit must never leave a reading marked paid. debitWallet is keyed
+    // on the reading id, so a concurrent duplicate settles once and cannot
+    // double-charge; the conditional update below then no-ops for the loser.
+    await debitWallet({
+      memberId,
+      amount: existing.price,
+      type: "reading",
+      referenceType: "ai_reading",
+      referenceId: readingId,
+    });
+
+    const outcome = await markReadingPaidFromWalletInSupabase(readingId, memberId);
+    return outcome.kind === "paid" ? outcome.reading : existing;
+  }
   const ref = collection.doc(readingId);
   const snap = await ref.get();
   if (!snap.exists) return null;
@@ -601,16 +737,26 @@ async function recordFailedAttempt(reading: AiReading, error: unknown) {
   const message = (error instanceof Error ? error.message : String(error)).slice(0, 500);
   const ref = collection.doc(reading.id);
 
-  const { attempts, shouldNotify } = await db.runTransaction(async (transaction) => {
-    const snap = await transaction.get(ref);
-    const data = snap.data() as AiReadingDoc | undefined;
-    if (data?.status === "failed") return { attempts: data.aiAttempts ?? MAX_AI_ATTEMPTS, shouldNotify: false };
+  let attempts: number;
+  let shouldNotify: boolean;
 
-    const next = (data?.aiAttempts ?? 0) + 1;
-    const crossesCap = next >= MAX_AI_ATTEMPTS;
-    transaction.update(ref, crossesCap ? { status: "failed", aiAttempts: next, lastAiError: message } : { aiAttempts: next, lastAiError: message });
-    return { attempts: next, shouldNotify: crossesCap };
-  });
+  if (isSupabaseCutoverActive()) {
+    // One statement: `ai_attempts = ai_attempts + 1` cannot read a stale value the
+    // way the Firestore read-then-increment could, and RETURNING reports whether
+    // THIS call is the one that crossed the cap, so the admin is notified once.
+    ({ attempts, shouldNotify } = await recordFailedAttemptInSupabase(reading.id, message, MAX_AI_ATTEMPTS));
+  } else {
+    ({ attempts, shouldNotify } = await db.runTransaction(async (transaction) => {
+      const snap = await transaction.get(ref);
+      const data = snap.data() as AiReadingDoc | undefined;
+      if (data?.status === "failed") return { attempts: data.aiAttempts ?? MAX_AI_ATTEMPTS, shouldNotify: false };
+
+      const next = (data?.aiAttempts ?? 0) + 1;
+      const crossesCap = next >= MAX_AI_ATTEMPTS;
+      transaction.update(ref, crossesCap ? { status: "failed", aiAttempts: next, lastAiError: message } : { aiAttempts: next, lastAiError: message });
+      return { attempts: next, shouldNotify: crossesCap };
+    }));
+  }
 
   if (!shouldNotify) return;
   const adminIds = await getAdminIdsWithPermission("insights");
@@ -678,6 +824,15 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
   } catch (error) {
     await recordFailedAttempt(reading, error);
     throw error;
+  }
+
+  if (isSupabaseCutoverActive()) {
+    const saved = await saveReadingAnswerInSupabase(reading.id, answer);
+    // No rows updated means the reading is gone. Firestore's update() throws
+    // there, so throw too rather than handing the caller an "answered" reading
+    // that does not exist — that fabrication would also hide a write bug.
+    if (!saved) throw new Error("Reading no longer exists.");
+    return saved;
   }
 
   const ref = collection.doc(reading.id);

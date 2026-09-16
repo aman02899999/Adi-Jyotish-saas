@@ -4,6 +4,8 @@ import { ChatSessionEndedError, ChatSessionNotFoundError, getSessionOr404, sendM
 import { getCurrentMember } from "@/lib/member-auth";
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getPractitionerAttributionInSupabase } from "@/lib/practitioners-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -34,8 +36,13 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
       return Response.json(message, { status: 201 });
     }
     if (isAdmin) {
-      const practitionerSnap = await db.collection("practitioners").doc(session.practitionerId).get();
-      const practitionerName = practitionerSnap.exists ? (practitionerSnap.data() as { name?: string }).name : undefined;
+      let practitionerName: string | undefined;
+      if (isSupabaseCutoverActive()) {
+        practitionerName = (await getPractitionerAttributionInSupabase(session.practitionerId))?.name;
+      } else {
+        const practitionerSnap = await db.collection("practitioners").doc(session.practitionerId).get();
+        practitionerName = practitionerSnap.exists ? (practitionerSnap.data() as { name?: string }).name : undefined;
+      }
       const message = await sendMessage({ sessionId: id, senderType: "practitioner", senderName: practitionerName ?? "Studio", body: text });
       return Response.json(message, { status: 201 });
     }

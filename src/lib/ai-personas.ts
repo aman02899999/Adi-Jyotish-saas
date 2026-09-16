@@ -3,6 +3,18 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import {
+  deletePersonaInSupabase,
+  getActivePersonasInSupabase,
+  getAllPersonasInSupabase,
+  getPersonaByIdInSupabase,
+  getPersonaBySlugInSupabase,
+  insertPersonaInSupabase,
+  personaIdExistsInSupabase,
+  updatePersonaInSupabase,
+  type AiPersonaInsert,
+} from "@/lib/ai-personas-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export class AiPersonaError extends Error {}
 
@@ -63,6 +75,8 @@ function toPersona(doc: FirebaseFirestore.DocumentSnapshot): AiPersona {
 }
 
 export async function getAllPersonasAdmin(): Promise<AiPersona[]> {
+  if (isSupabaseCutoverActive()) return getAllPersonasInSupabase();
+
   const snap = await collection.orderBy("createdAt", "desc").get();
   return snap.docs.map(toPersona);
 }
@@ -73,6 +87,12 @@ export async function getAllPersonasAdmin(): Promise<AiPersona[]> {
 export const getActivePersonas = unstable_cache(
   async () => {
     try {
+      if (isSupabaseCutoverActive()) {
+        const rows = await getActivePersonasInSupabase();
+        // Sorted here rather than in SQL: localeCompare and the database collation
+        // disagree on accented names.
+        return rows.sort((a, b) => a.name.localeCompare(b.name));
+      }
       const snap = await collection.where("active", "==", true).get();
       return snap.docs.map(toPersona).sort((a, b) => a.name.localeCompare(b.name));
     } catch (error) {
@@ -85,12 +105,16 @@ export const getActivePersonas = unstable_cache(
 );
 
 export async function getPersonaBySlug(slug: string): Promise<AiPersona | null> {
+  if (isSupabaseCutoverActive()) return getPersonaBySlugInSupabase(slug);
+
   const doc = await collection.doc(slug).get();
   if (!doc.exists) return null;
   return toPersona(doc);
 }
 
 export async function getPersonaById(id: string): Promise<AiPersona | null> {
+  if (isSupabaseCutoverActive()) return getPersonaByIdInSupabase(id);
+
   const doc = await collection.doc(id).get();
   if (!doc.exists) return null;
   return toPersona(doc);
@@ -122,12 +146,8 @@ export async function createPersona(input: PersonaInput): Promise<AiPersona> {
   validate(input);
   const base = toSlug(input.name) || "persona";
   let slug = base;
-  for (let attempt = 0; (await collection.doc(slug).get()).exists; attempt += 1) {
-    slug = `${base}-${attempt + 2}`;
-    if (attempt > 20) throw new AiPersonaError("Could not generate a unique URL — try a different name.");
-  }
 
-  const doc: Omit<AiPersonaDoc, "createdAt" | "updatedAt"> = {
+  const values = {
     slug,
     name: input.name.trim().slice(0, 120),
     title: input.title.trim().slice(0, 160),
@@ -139,12 +159,52 @@ export async function createPersona(input: PersonaInput): Promise<AiPersona> {
     currency: input.currency || "INR",
     active: input.active,
   };
+  if (isSupabaseCutoverActive()) {
+    for (let attempt = 0; await personaIdExistsInSupabase(slug); attempt += 1) {
+      slug = `${base}-${attempt + 2}`;
+      if (attempt > 20) throw new AiPersonaError("Could not generate a unique URL — try a different name.");
+    }
+    const created = await insertPersonaInSupabase({ ...values, slug });
+    if (!created) throw new AiPersonaError("Could not create the persona.");
+    return created;
+  }
+
+  for (let attempt = 0; (await collection.doc(slug).get()).exists; attempt += 1) {
+    slug = `${base}-${attempt + 2}`;
+    if (attempt > 20) throw new AiPersonaError("Could not generate a unique URL — try a different name.");
+  }
+
+  // `values` was built before the uniqueness loop reassigned `slug`, so it carries
+  // the base slug; the loop's result is what has to be written, or a de-duplicated
+  // persona would end up with a slug that does not match its own id.
+  const doc: Omit<AiPersonaDoc, "createdAt" | "updatedAt"> = { ...values, slug };
   const ref = collection.doc(slug);
   await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
   return toPersona(await ref.get());
 }
 
 export async function updatePersona(id: string, patch: Partial<PersonaInput>): Promise<AiPersona> {
+  if (isSupabaseCutoverActive()) {
+    const current = await getPersonaByIdInSupabase(id);
+    if (!current) throw new AiPersonaError("Persona not found.");
+    validate(patch);
+
+    const next: Partial<AiPersonaInsert> = {};
+    if (patch.name !== undefined) next.name = patch.name.trim().slice(0, 120);
+    if (patch.title !== undefined) next.title = patch.title.trim().slice(0, 160);
+    if (patch.avatarUrl !== undefined) next.avatarUrl = patch.avatarUrl?.trim() || null;
+    if (patch.description !== undefined) next.description = patch.description.trim().slice(0, 500);
+    if (patch.systemPrompt !== undefined) next.systemPrompt = patch.systemPrompt.trim().slice(0, 6000);
+    if (patch.sampleQuestions !== undefined) next.sampleQuestions = patch.sampleQuestions.map((q) => q.trim()).filter(Boolean).slice(0, 6);
+    if (patch.price !== undefined) next.price = Math.max(0, Math.round(Number(patch.price) || 0));
+    if (patch.currency !== undefined) next.currency = patch.currency;
+    if (patch.active !== undefined) next.active = patch.active;
+
+    const updated = await updatePersonaInSupabase(id, next);
+    if (!updated) throw new AiPersonaError("Persona not found.");
+    return updated;
+  }
+
   const ref = collection.doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new AiPersonaError("Persona not found.");
@@ -168,6 +228,13 @@ export async function updatePersona(id: string, patch: Partial<PersonaInput>): P
 /** Hard-deletes only if the persona has never been read against (no readings on record) — once
  * real paid readings point at this persona id, deactivate instead so that history stays intact. */
 export async function deletePersona(id: string) {
+  if (isSupabaseCutoverActive()) {
+    const outcome = await deletePersonaInSupabase(id);
+    if (outcome.kind === "deleted") return;
+    if (outcome.kind === "not_found") throw new AiPersonaError("Persona not found.");
+    throw new AiPersonaError("This persona has readings on record — deactivate instead of deleting.");
+  }
+
   const ref = collection.doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new AiPersonaError("Persona not found.");

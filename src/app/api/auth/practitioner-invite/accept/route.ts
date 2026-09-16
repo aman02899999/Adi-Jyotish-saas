@@ -1,8 +1,12 @@
 import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
-import { findPractitionerInviteByToken } from "@/lib/practitioner-invites";
+import { findPractitionerInviteByToken, markPractitionerInviteAccepted } from "@/lib/practitioner-invites";
+import { getInvitedPractitionerInSupabase, linkPractitionerUidInSupabase } from "@/lib/practitioner-auth-supabase";
+import { createGoTrueUser, findGoTrueUserByEmail, updateGoTrueUserPassword } from "@/lib/gotrue-admin";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { revokeAllUserSessions } from "@/lib/session-cookie";
 
 export const dynamic = "force-dynamic";
 
@@ -20,29 +24,61 @@ export async function POST(request: Request) {
   const invite = await findPractitionerInviteByToken(token);
   if (!invite) return Response.json({ error: "This invitation is invalid or has expired." }, { status: 410 });
 
-  const practitionerRef = db.collection("practitioners").doc(invite.practitionerSlug);
-  const practitionerSnap = await practitionerRef.get();
-  if (!practitionerSnap.exists) return Response.json({ error: "This invitation is invalid or has expired." }, { status: 410 });
-  const practitioner = practitionerSnap.data() as { name: string; email: string; firebaseUid: string | null };
-
-  let uid: string;
-  try {
-    const existingUser = await getAuth().getUserByEmail(practitioner.email);
-    uid = existingUser.uid;
-    await getAuth().updateUser(uid, { password });
-    // The account we just took over may have been self-registered by someone else before the real
-    // practitioner accepted this invite (Firebase's email/password sign-up never verifies email
-    // ownership) — any refresh/ID token that impostor already holds must be invalidated now, or
-    // they'd keep minting valid sessions for this now-practitioner-linked account indefinitely,
-    // password reset notwithstanding.
-    await getAuth().revokeRefreshTokens(uid);
-  } catch {
-    const created = await getAuth().createUser({ email: practitioner.email, password, displayName: practitioner.name });
-    uid = created.uid;
+  let practitionerName: string;
+  let practitionerEmail: string;
+  if (isSupabaseCutoverActive()) {
+    const practitioner = await getInvitedPractitionerInSupabase(invite.practitionerSlug);
+    if (!practitioner) return Response.json({ error: "This invitation is invalid or has expired." }, { status: 410 });
+    practitionerName = practitioner.name;
+    practitionerEmail = practitioner.email;
+  } else {
+    const practitionerSnap = await db.collection("practitioners").doc(invite.practitionerSlug).get();
+    if (!practitionerSnap.exists) return Response.json({ error: "This invitation is invalid or has expired." }, { status: 410 });
+    const practitioner = practitionerSnap.data() as { name: string; email: string };
+    practitionerName = practitioner.name;
+    practitionerEmail = practitioner.email;
   }
 
-  await practitionerRef.update({ firebaseUid: uid, lastLoginAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-  await invite.ref.update({ acceptedAt: FieldValue.serverTimestamp() });
+  let uid: string;
+  if (isSupabaseCutoverActive()) {
+    const existing = await findGoTrueUserByEmail(practitionerEmail);
+    if (existing) {
+      uid = existing.uid;
+      await updateGoTrueUserPassword(uid, password);
+      // The account we just took over may have been self-registered by someone else before the
+      // real practitioner accepted this invite — any token that impostor already holds must be
+      // invalidated now, or they'd keep minting valid sessions for this now-linked account.
+      await revokeAllUserSessions(uid);
+    } else {
+      uid = (await createGoTrueUser({ email: practitionerEmail, password, name: practitionerName })).uid;
+    }
+  } else {
+    try {
+      const existingUser = await getAuth().getUserByEmail(practitionerEmail);
+      uid = existingUser.uid;
+      await getAuth().updateUser(uid, { password });
+      // The account we just took over may have been self-registered by someone else before the real
+      // practitioner accepted this invite (Firebase's email/password sign-up never verifies email
+      // ownership) — any refresh/ID token that impostor already holds must be invalidated now, or
+      // they'd keep minting valid sessions for this now-practitioner-linked account indefinitely,
+      // password reset notwithstanding.
+      await revokeAllUserSessions(uid);
+    } catch {
+      const created = await getAuth().createUser({ email: practitionerEmail, password, displayName: practitionerName });
+      uid = created.uid;
+    }
+  }
 
-  return Response.json({ ok: true, practitioner: { name: practitioner.name, email: practitioner.email } }, { status: 201 });
+  if (isSupabaseCutoverActive()) {
+    await linkPractitionerUidInSupabase(invite.practitionerSlug, uid);
+  } else {
+    await db.collection("practitioners").doc(invite.practitionerSlug).update({
+      firebaseUid: uid,
+      lastLoginAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
+  await markPractitionerInviteAccepted(invite.id);
+
+  return Response.json({ ok: true, practitioner: { name: practitionerName, email: practitionerEmail } }, { status: 201 });
 }

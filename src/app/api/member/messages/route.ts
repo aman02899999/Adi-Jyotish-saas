@@ -3,6 +3,18 @@ import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getMemberInbox } from "@/lib/messaging";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { recordAudit } from "@/lib/admin-auth";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  createThreadWithMessageInSupabase,
+  deleteThreadInSupabase,
+  getThreadForAdminInSupabase,
+  getThreadForMemberInSupabase,
+  markThreadReadByAdminInSupabase,
+  markThreadReadByMemberInSupabase,
+  replyToThreadInSupabase,
+  setThreadStatusInSupabase,
+} from "@/lib/messaging-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -14,6 +26,22 @@ export async function POST(request:Request){
   if(!throttle.allowed)return rateLimitResponse(throttle.retryAfter);
   const body=await request.json() as {subject?:string;message?:string;category?:string};const subject=body.subject?.trim().slice(0,160)??"";const text=body.message?.trim().slice(0,3000)??"";const category=["support","booking","billing","general"].includes(body.category??"")?body.category!:"support";
   if(!subject||!text)return Response.json({error:"Subject and message are required."},{status:400});
+  if (isSupabaseCutoverActive()) {
+    const result = await createThreadWithMessageInSupabase({
+      memberId: member.id, subject, category, senderType: "member", senderName: member.name, body: text,
+    });
+    await recordAudit(
+      { id: null, name: `Member · ${member.name}`.slice(0, 120) },
+      "message.thread_created_by_member", "message_thread", result.thread.id, { category },
+    );
+    return Response.json({
+      id: result.thread.id, memberId: member.id, bookingId: null,
+      subject: result.thread.subject, category: result.thread.category, status: result.thread.status,
+      lastMessageAt: result.thread.lastMessageAt, createdAt: result.thread.createdAt, updatedAt: result.thread.updatedAt,
+      memberName: member.name, memberEmail: member.email,
+      messages: [result.message],
+    }, { status: 201 });
+  }
   const now=FieldValue.serverTimestamp();
   const threadRef=db.collection("messageThreads").doc();
   await threadRef.set({memberId:member.id,bookingId:null,subject,category,status:"open",lastMessageAt:now,createdAt:now,updatedAt:now});

@@ -2,7 +2,7 @@
 
 import { FormEvent, useState } from "react";
 import { ArrowRight, Mail } from "lucide-react";
-import { sendPasswordReset } from "@/lib/firebase-client";
+import { sendPasswordReset } from "@/lib/auth-client";
 
 /** `portal` only steers the link a person lands on after resetting (member/practitioner/admin
  * sign-in) — Firebase Auth is one shared user pool underneath all three, so the reset email
