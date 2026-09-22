@@ -2,6 +2,16 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import {
+  createNotificationInSupabase,
+  createNotificationsInSupabase,
+  getNotificationsInSupabase,
+  getUnreadCountInSupabase,
+  markAllNotificationsReadInSupabase,
+  markNotificationReadInSupabase,
+  type NotificationInsert,
+} from "@/lib/notifications-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 type RecipientType = "member" | "admin" | "practitioner";
 
@@ -30,6 +40,19 @@ function sanitizeLink(link: string | undefined): string | null {
   }
 }
 
+/** Truncation and link sanitising happen here, above the provider branch, so a
+ * caller cannot get different limits depending on which backend is live. */
+function normalizeNotification(input: { recipientType: RecipientType; recipientId: string; type: string; title: string; body?: string; link?: string }): NotificationInsert {
+  return {
+    recipientType: input.recipientType,
+    recipientId: input.recipientId,
+    type: input.type.slice(0, 60),
+    title: input.title.slice(0, 160),
+    body: input.body?.slice(0, 2000) ?? null,
+    link: sanitizeLink(input.link?.slice(0, 300)),
+  };
+}
+
 function toNotification(doc: FirebaseFirestore.QueryDocumentSnapshot) {
   const data = doc.data() as NotificationDoc;
   return {
@@ -46,13 +69,14 @@ function toNotification(doc: FirebaseFirestore.QueryDocumentSnapshot) {
 }
 
 export async function createNotification(input: { recipientType: RecipientType; recipientId: string; type: string; title: string; body?: string; link?: string }) {
+  const normalized = normalizeNotification(input);
+  if (isSupabaseCutoverActive()) {
+    await createNotificationInSupabase(normalized);
+    return;
+  }
+
   await db.collection("notifications").add({
-    recipientType: input.recipientType,
-    recipientId: input.recipientId,
-    type: input.type.slice(0, 60),
-    title: input.title.slice(0, 160),
-    body: input.body?.slice(0, 2000) ?? null,
-    link: sanitizeLink(input.link?.slice(0, 300)),
+    ...normalized,
     readAt: null,
     createdAt: FieldValue.serverTimestamp(),
   });
@@ -61,16 +85,19 @@ export async function createNotification(input: { recipientType: RecipientType; 
 /** Fan-out helper for notifying every active admin who holds a given permission (e.g. all owners/managers about a new order). */
 export async function notifyAdmins(adminIds: string[], input: { type: string; title: string; body?: string; link?: string }) {
   if (!adminIds.length) return;
+  const normalized = normalizeNotification({ ...input, recipientType: "admin", recipientId: "" });
+
+  if (isSupabaseCutoverActive()) {
+    await createNotificationsInSupabase(adminIds, normalized);
+    return;
+  }
+
   const batch = db.batch();
   const collection = db.collection("notifications");
   for (const recipientId of adminIds) {
     batch.set(collection.doc(), {
-      recipientType: "admin" as const,
+      ...normalized,
       recipientId,
-      type: input.type.slice(0, 60),
-      title: input.title.slice(0, 160),
-      body: input.body?.slice(0, 2000) ?? null,
-      link: sanitizeLink(input.link?.slice(0, 300)),
       readAt: null,
       createdAt: FieldValue.serverTimestamp(),
     });
@@ -79,6 +106,7 @@ export async function notifyAdmins(adminIds: string[], input: { type: string; ti
 }
 
 export async function getNotifications(recipientType: RecipientType, recipientId: string, limit = 30) {
+  if (isSupabaseCutoverActive()) return getNotificationsInSupabase(recipientType, recipientId, limit);
   const snap = await db.collection("notifications")
     .where("recipientType", "==", recipientType)
     .where("recipientId", "==", recipientId)
@@ -89,6 +117,7 @@ export async function getNotifications(recipientType: RecipientType, recipientId
 }
 
 export async function getUnreadCount(recipientType: RecipientType, recipientId: string) {
+  if (isSupabaseCutoverActive()) return getUnreadCountInSupabase(recipientType, recipientId);
   const snap = await db.collection("notifications")
     .where("recipientType", "==", recipientType)
     .where("recipientId", "==", recipientId)
@@ -99,6 +128,10 @@ export async function getUnreadCount(recipientType: RecipientType, recipientId: 
 }
 
 export async function markNotificationRead(id: string, recipientType: RecipientType, recipientId: string) {
+  if (isSupabaseCutoverActive()) {
+    await markNotificationReadInSupabase(id, recipientType, recipientId);
+    return;
+  }
   const ref = db.collection("notifications").doc(id);
   const snap = await ref.get();
   if (!snap.exists) return;
@@ -108,6 +141,10 @@ export async function markNotificationRead(id: string, recipientType: RecipientT
 }
 
 export async function markAllNotificationsRead(recipientType: RecipientType, recipientId: string) {
+  if (isSupabaseCutoverActive()) {
+    await markAllNotificationsReadInSupabase(recipientType, recipientId);
+    return;
+  }
   const snap = await db.collection("notifications")
     .where("recipientType", "==", recipientType)
     .where("recipientId", "==", recipientId)

@@ -2,6 +2,9 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db, isIndexBuildingError } from "@/lib/firestore";
+import { getBookingsInWindowInSupabase } from "@/lib/bookings-supabase";
+import { getPractitionerDirectoryInSupabase } from "@/lib/practitioners-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getStudioSettings } from "@/lib/studio-settings";
 
 /** Same allowlist as notifications.ts's sanitizeLink: a site-relative path, or an https:// URL —
@@ -783,6 +786,12 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
 export type PractitionerWithSchedule = Practitioner & { rules: AvailabilityRule[]; timeOff: PractitionerTimeOff[] };
 
 export async function getPractitionerDirectory(activeOnly = false, includeDemo = false): Promise<PractitionerWithSchedule[]> {
+  if (isSupabaseCutoverActive()) {
+    // Seeding writes the demo practitioners into Firestore. Under cutover the
+    // directory was copied wholesale, so seeding would only create rows in a
+    // database nothing reads any more.
+    return getPractitionerDirectoryInSupabase(activeOnly, includeDemo);
+  }
   await seedPractitioners();
   const collection = db.collection("practitioners");
   const query = activeOnly ? collection.where("active", "==", true) : collection;
@@ -1003,14 +1012,20 @@ export async function getAvailableSlots({ date, duration, practitionerId, exclud
   const dayStart = civilToUtc(date, "00:00", settings.timezone);
   const dayEnd = civilToUtc(date, "23:59", settings.timezone);
 
-  const bookingsSnap = await db.collection("bookings")
-    .where("scheduledAt", ">=", new Date(dayStart.getTime() - 12 * 3600000))
-    .where("scheduledAt", "<", new Date(dayEnd.getTime() + 12 * 3600000))
-    .get();
-  const existingBookings: BookingForConflictCheck[] = bookingsSnap.docs.map((doc) => {
-    const data = doc.data();
-    return { id: doc.id, practitionerId: data.practitionerId ?? null, status: data.status, scheduledAt: (data.scheduledAt as FirebaseFirestore.Timestamp).toDate(), serviceDuration: data.serviceDuration };
-  });
+  // Read a window 12 hours wider than the requested day on both sides: a booking
+  // that starts the previous evening can still be running into the morning, and a
+  // slot at 00:00 would otherwise look free.
+  const windowFrom = new Date(dayStart.getTime() - 12 * 3600000);
+  const windowTo = new Date(dayEnd.getTime() + 12 * 3600000);
+  const existingBookings: BookingForConflictCheck[] = isSupabaseCutoverActive()
+    ? await getBookingsInWindowInSupabase(windowFrom, windowTo)
+    : (await db.collection("bookings")
+        .where("scheduledAt", ">=", windowFrom)
+        .where("scheduledAt", "<", windowTo)
+        .get()).docs.map((doc) => {
+        const data = doc.data();
+        return { id: doc.id, practitionerId: data.practitionerId ?? null, status: data.status, scheduledAt: (data.scheduledAt as FirebaseFirestore.Timestamp).toDate(), serviceDuration: data.serviceDuration };
+      });
 
   const slots: AvailableSlot[] = [];
   for (const person of people) {

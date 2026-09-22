@@ -3,6 +3,8 @@ import { getCurrentAdmin, hasAdminPermission } from "@/lib/admin-auth";
 import { ChatSessionNotFoundError, getSessionOr404, listSessionMessages } from "@/lib/chat";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getPractitionerAttributionInSupabase } from "@/lib/practitioners-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -19,8 +21,13 @@ export async function GET(_: Request, { params }: { params: Promise<{ id: string
     const isOwnerPractitioner = Boolean(practitioner && session.practitionerId === practitioner.id);
     if (!isAdmin && !isOwnerMember && !isOwnerPractitioner) return Response.json({ error: "You do not have access to this chat." }, { status: 403 });
 
-    const practitionerSnap = await db.collection("practitioners").doc(session.practitionerId).get();
-    const practitionerData = practitionerSnap.exists ? (practitionerSnap.data() as { name: string; photoUrl: string | null }) : null;
+    let practitionerData: { name: string; photoUrl: string | null } | null;
+    if (isSupabaseCutoverActive()) {
+      practitionerData = await getPractitionerAttributionInSupabase(session.practitionerId);
+    } else {
+      const practitionerSnap = await db.collection("practitioners").doc(session.practitionerId).get();
+      practitionerData = practitionerSnap.exists ? (practitionerSnap.data() as { name: string; photoUrl: string | null }) : null;
+    }
     const messages = await listSessionMessages(id);
     return Response.json({ session, practitioner: practitionerData ? { name: practitionerData.name, photoUrl: practitionerData.photoUrl } : null, messages });
   } catch (error) {

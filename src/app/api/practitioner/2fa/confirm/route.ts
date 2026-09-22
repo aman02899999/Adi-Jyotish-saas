@@ -1,7 +1,5 @@
-import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
-import { generateBackupCodes, verifyTotpCode } from "@/lib/two-factor";
+import { confirmTwoFactorEnrollment, generateBackupCodes, getTwoFactorState, verifyTotpCode } from "@/lib/two-factor";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +8,9 @@ export async function POST(request: Request) {
   const practitioner = await getCurrentPractitioner();
   if (!practitioner) return Response.json({ error: "Practitioner sign-in required." }, { status: 401 });
 
-  const ref = db.collection("practitioners").doc(practitioner.id);
-  const snap = await ref.get();
-  const secret = snap.data()?.totpPendingSecret as string | undefined;
+  const account = { role: "practitioner" as const, id: practitioner.id };
+  const state = await getTwoFactorState(account);
+  const secret = state?.totpPendingSecret;
   if (!secret) return Response.json({ error: "Start enrollment before confirming a code." }, { status: 409 });
 
   const throttle = await checkAuthThrottle("practitioner-2fa-confirm", practitioner.id, request);
@@ -26,6 +24,6 @@ export async function POST(request: Request) {
   await clearAuthFailures(throttle.keyHash);
 
   const { codes, hashed } = generateBackupCodes();
-  await ref.update({ totpSecret: secret, totpPendingSecret: FieldValue.delete(), totpEnabled: true, totpBackupCodes: hashed });
+  await confirmTwoFactorEnrollment(account, secret, hashed);
   return Response.json({ ok: true, backupCodes: codes });
 }

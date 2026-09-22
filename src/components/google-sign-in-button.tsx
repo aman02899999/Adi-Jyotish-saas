@@ -1,7 +1,7 @@
 "use client";
 
 import { useEffect, useRef, useState } from "react";
-import { completeGoogleRedirectSignIn, isGoogleSignInAvailable, signInWithGoogle } from "@/lib/firebase-client";
+import { completeGoogleRedirectSignIn, isGoogleSignInAvailable, signInWithGoogle } from "@/lib/auth-client";
 
 export function GoogleSignInButton({ endpoint, extraBody, onSuccess, onError, onRequiresTotp }: {
   endpoint: string;

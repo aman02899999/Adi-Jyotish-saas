@@ -1,4 +1,4 @@
-import { buildMemberDataExport } from "@/lib/account-deletion";
+import { AccountDeletionUnavailableError, buildMemberDataExport } from "@/lib/account-deletion";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 
@@ -15,7 +15,15 @@ export async function GET() {
   const throttle = await checkRateLimit("member-data-export", member.id, 3, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const exportBundle = await buildMemberDataExport(member);
+  let exportBundle: Record<string, unknown>;
+  try {
+    exportBundle = await buildMemberDataExport(member);
+  } catch (error) {
+    if (error instanceof AccountDeletionUnavailableError) {
+      return Response.json({ error: error.message }, { status: 503 });
+    }
+    throw error;
+  }
   const body = JSON.stringify(exportBundle, null, 2);
   const stamp = new Date().toISOString().slice(0, 10);
   return new Response(body, {

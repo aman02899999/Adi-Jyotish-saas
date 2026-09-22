@@ -3,6 +3,28 @@ import "server-only";
 import { randomBytes } from "node:crypto";
 import { AggregateField, FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import {
+  CheckoutConflictError,
+  OrderMutationError,
+  applyOrderStatusInSupabase,
+  attachRazorpayOrderInSupabase,
+  claimRefundInSupabase,
+  getCartVariantsInSupabase,
+  getGemstoneAdminStatsInSupabase,
+  getLowStockVariantsInSupabase,
+  getMemberContactInSupabase,
+  getMemberPaidOrderIdForProductInSupabase,
+  getOrderByNumberInSupabase,
+  getOrderByIdInSupabase,
+  getOrderItemsInSupabase,
+  getOrdersForAdminInSupabase,
+  getOrdersForMemberInSupabase,
+  getStalePendingOrdersInSupabase,
+  insertPendingOrderInSupabase,
+  markOrderPaidInSupabase,
+  type CartVariantRow,
+} from "@/lib/gemstone-orders-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { validateCoupon } from "@/lib/gemstone-coupons";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { createNotification, notifyAdmins } from "@/lib/notifications";
@@ -133,33 +155,89 @@ type PricedItem = { productId: string; variantId: string; productName: string; v
 
 /** Re-prices a cart against Firestore — never trusts client-supplied prices. Reads each variant
  * directly by its (productId, variantId) path, since variants live in a per-product subcollection. */
-export async function priceCart(lines: CartLineInput[]): Promise<{ items: PricedItem[]; subtotal: number }> {
-  if (!lines.length) throw new CartValidationError("Your cart is empty.");
+/** Cart entries that exist at all — a line whose variant OR product is missing is
+ * simply absent from the map, which is how both providers report "no longer
+ * available". Inactive entries are present so the rules can name the product. */
+type CartSource = {
+  variantActive: boolean;
+  productActive: boolean;
+  productName: string;
+  variantLabel: string;
+  unitPrice: number;
+  stockQuantity: number;
+};
 
+/** A cart can hold the same variant twice, and Map keys have to be stable across
+ * the read and the rules, so the key includes the position in the request. */
+function cartLineKey(line: CartLineInput, index = 0) {
+  return `${index}:${line.productId}:${line.variantId}`;
+}
+
+async function readCartFromSupabase(lines: CartLineInput[]): Promise<Map<string, CartSource>> {
+  const rows = await getCartVariantsInSupabase(lines.map((line) => line.variantId));
+  const sources = new Map<string, CartSource>();
+  lines.forEach((line, index) => {
+    const row: CartVariantRow | undefined = rows.get(line.variantId);
+    if (!row || row.productId !== line.productId || row.productName == null || row.productActive == null) return;
+    sources.set(cartLineKey(line, index), {
+      variantActive: row.variantActive,
+      productActive: row.productActive,
+      productName: row.productName,
+      variantLabel: row.label,
+      unitPrice: row.price,
+      stockQuantity: row.stockQuantity,
+    });
+  });
+  return sources;
+}
+
+async function readCartFromFirestore(lines: CartLineInput[]): Promise<Map<string, CartSource>> {
   const dedupedProductIds = [...new Set(lines.map((line) => line.productId))];
   const [variantSnaps, productSnaps] = await Promise.all([
     Promise.all(lines.map((line) => variantRef(line.productId, line.variantId).get())),
     db.getAll(...dedupedProductIds.map((id) => productsCol.doc(id))),
   ]);
   const productById = new Map(productSnaps.map((snap) => [snap.id, snap]));
-
-  const items = lines.map((line, index) => {
+  const sources = new Map<string, CartSource>();
+  lines.forEach((line, index) => {
     const variantSnap = variantSnaps[index];
     const productSnap = productById.get(line.productId);
-    if (!variantSnap.exists || !productSnap?.exists) throw new CartValidationError("One of the items in your cart is no longer available.");
+    if (!variantSnap.exists || !productSnap?.exists) return;
     const variant = variantSnap.data() as { label: string; price: number; stockQuantity: number; active: boolean };
     const product = productSnap.data() as { name: string; active: boolean };
-    if (!variant.active || !product.active) throw new CartValidationError(`${product.name} is currently unavailable.`);
-    const quantity = Math.max(1, Math.min(20, Math.round(line.quantity)));
-    if (variant.stockQuantity < quantity) throw new CartValidationError(`Only ${variant.stockQuantity} left of ${product.name} (${variant.label}).`);
-    return {
-      productId: line.productId,
-      variantId: line.variantId,
+    sources.set(cartLineKey(line, index), {
+      variantActive: variant.active,
+      productActive: product.active,
       productName: product.name,
       variantLabel: variant.label,
       unitPrice: variant.price,
+      stockQuantity: variant.stockQuantity,
+    });
+  });
+  return sources;
+}
+
+export async function priceCart(lines: CartLineInput[]): Promise<{ items: PricedItem[]; subtotal: number }> {
+  if (!lines.length) throw new CartValidationError("Your cart is empty.");
+
+  const sources = isSupabaseCutoverActive()
+    ? await readCartFromSupabase(lines)
+    : await readCartFromFirestore(lines);
+
+  const items = lines.map((line) => {
+    const source = sources.get(cartLineKey(line));
+    if (!source) throw new CartValidationError("One of the items in your cart is no longer available.");
+    if (!source.variantActive || !source.productActive) throw new CartValidationError(`${source.productName} is currently unavailable.`);
+    const quantity = Math.max(1, Math.min(20, Math.round(line.quantity)));
+    if (source.stockQuantity < quantity) throw new CartValidationError(`Only ${source.stockQuantity} left of ${source.productName} (${source.variantLabel}).`);
+    return {
+      productId: line.productId,
+      variantId: line.variantId,
+      productName: source.productName,
+      variantLabel: source.variantLabel,
+      unitPrice: source.unitPrice,
       quantity,
-      lineTotal: variant.price * quantity,
+      lineTotal: source.unitPrice * quantity,
     };
   });
 
@@ -183,12 +261,15 @@ const PENDING_ORDER_TTL_MS = 15 * 60 * 1000;
  * pre-expiry reminder to be worth the added complexity, so this nudges the customer back
  * afterwards instead, which is when re-engagement email typically performs best anyway. */
 export async function expireStalePendingOrders() {
-  const cutoff = Timestamp.fromMillis(Date.now() - PENDING_ORDER_TTL_MS);
-  const snap = await ordersCol.where("status", "==", "pending").where("createdAt", "<", cutoff).limit(25).get();
-  for (const doc of snap.docs) {
-    const orderId = doc.id;
+  const cutoff = new Date(Date.now() - PENDING_ORDER_TTL_MS);
+  const stale = isSupabaseCutoverActive()
+    ? await getStalePendingOrdersInSupabase(cutoff, 25)
+    : (await ordersCol.where("status", "==", "pending").where("createdAt", "<", Timestamp.fromDate(cutoff)).limit(25).get())
+        .docs.map(fromOrderDoc);
+  for (const order of stale) {
+    const orderId = order.id;
     await updateOrderStatus(orderId, "cancelled")
-      .then(() => sendCartRecoveryEmail(fromOrderDoc(doc)))
+      .then(() => sendCartRecoveryEmail(order))
       .catch((error) => {
         console.error(`Failed to expire stale pending order ${orderId}`, error);
       });
@@ -201,8 +282,9 @@ async function sendCartRecoveryEmail(order: GemstoneOrder) {
   let name = order.guestName;
   let email = order.guestEmail;
   if (order.memberId) {
-    const memberSnap = await db.collection("members").doc(order.memberId).get();
-    const memberData = memberSnap.data() as { name?: string; email?: string } | undefined;
+    const memberData = isSupabaseCutoverActive()
+      ? await getMemberContactInSupabase(order.memberId)
+      : ((await db.collection("members").doc(order.memberId).get()).data() as { name?: string; email?: string } | undefined);
     name = memberData?.name ?? name;
     email = memberData?.email ?? email;
   }
@@ -256,6 +338,37 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
   // Listed prices are treated as GST-inclusive, so this only splits out the tax for invoicing — the checkout total is unchanged.
   const { taxAmount } = splitGstInclusive(Math.max(0, subtotal - discount), settings.gstRate);
   const orderNumber = generateOrderNumber();
+
+  if (isSupabaseCutoverActive()) {
+    try {
+      return await insertPendingOrderInSupabase({
+        orderNumber,
+        memberId,
+        guestName: memberId ? null : guestName?.trim() ?? null,
+        guestEmail: memberId ? null : guestEmail?.trim() ?? null,
+        guestPhone: memberId ? null : guestPhone?.trim() ?? null,
+        shippingName: shipping.name.trim(),
+        shippingPhone: shipping.phone.trim(),
+        shippingLine1: shipping.line1.trim(),
+        shippingLine2: shipping.line2?.trim() || null,
+        shippingCity: shipping.city.trim(),
+        shippingState: shipping.state.trim(),
+        shippingPincode: shipping.pincode.trim(),
+        shippingCountry: shipping.country?.trim() || "India",
+        subtotal,
+        discount,
+        shippingFee,
+        tax: taxAmount,
+        total,
+        couponCode: appliedCouponCode,
+        items,
+        couponPerCustomerLimit,
+        couponCustomerIdentifier: appliedCouponCode ? couponCustomerIdentifier(memberId, guestEmail) : null,
+      });
+    } catch (error) {
+      throw checkoutErrorFromSql(error);
+    }
+  }
 
   // Firestore transactions retry automatically on write conflicts (optimistic concurrency), which gives
   // the same atomic stock-check-and-decrement guarantee the old `pg_advisory_xact_lock` provided.
@@ -357,12 +470,60 @@ export async function createPendingOrder({ memberId, guestName, guestEmail, gues
   return fromOrderDoc(created);
 }
 
+/** Maps the twins' sentinel errors onto the exceptions this module's callers
+ * already handle, so the customer-facing wording stays in one place. */
+function checkoutErrorFromSql(error: unknown): Error {
+  if (error instanceof CheckoutConflictError) {
+    switch (error.code) {
+      case "sold_out":
+        return new CartValidationError(`${error.productName ?? "An item"} just sold out. Please update your cart.`);
+      case "coupon_invalid":
+        return new CartValidationError("This coupon code is not valid.");
+      case "coupon_limit":
+        return new CartValidationError("This coupon has reached its usage limit.");
+      case "coupon_customer_limit":
+        return new CartValidationError("You've already used this coupon the maximum number of times.");
+    }
+  }
+  if (error instanceof OrderMutationError) return orderErrorFromSql(error);
+  return error instanceof Error ? error : new Error(String(error));
+}
+
+function orderErrorFromSql(error: OrderMutationError): Error {
+  switch (error.code) {
+    case "not_found":
+      return new OrderNotFoundError("Order not found.");
+    case "not_cancellable":
+      return new CartValidationError("This order can no longer be cancelled.");
+    case "not_paid":
+      return new CartValidationError("Only paid orders can be refunded.");
+  }
+}
+
 export async function attachRazorpayOrder(orderId: string, razorpayOrderId: string) {
+  if (isSupabaseCutoverActive()) {
+    await attachRazorpayOrderInSupabase(orderId, razorpayOrderId);
+    return;
+  }
   await ordersCol.doc(orderId).update({ razorpayOrderId });
 }
 
 /** Idempotent per razorpayPaymentId. */
 export async function markOrderPaid({ orderId, razorpayPaymentId }: { orderId: string; razorpayPaymentId: string }) {
+  if (isSupabaseCutoverActive()) {
+    let paid: Awaited<ReturnType<typeof markOrderPaidInSupabase>>;
+    try {
+      paid = await markOrderPaidInSupabase(orderId, razorpayPaymentId);
+    } catch (error) {
+      throw error instanceof OrderMutationError ? orderErrorFromSql(error) : error;
+    }
+    if (paid.justPaid) {
+      if (paid.revivedCancelled) await notifyOrderPaidAfterCancellation(paid.order).catch(() => {});
+      else await notifyOrderPaid(paid.order).catch(() => {});
+    }
+    return paid.order;
+  }
+
   const ref = ordersCol.doc(orderId);
   const result = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -434,20 +595,26 @@ async function notifyOrderPaidAfterCancellation(order: GemstoneOrder) {
 }
 
 export async function getOrderItems(orderId: string): Promise<GemstoneOrderItem[]> {
+  if (isSupabaseCutoverActive()) return getOrderItemsInSupabase(orderId);
   const snap = await itemsCol(orderId).get();
   return snap.docs.map(fromItemDoc);
 }
 
 export async function getOrderById(orderId: string) {
+  if (isSupabaseCutoverActive()) return getOrderByIdInSupabase(orderId);
   const snap = await ordersCol.doc(orderId).get();
   return snap.exists ? fromOrderDoc(snap) : null;
 }
 
 /** Scoped lookup for the confirmation page: must belong to the member, or match the guest email used at checkout. */
 export async function getOrderByNumberScoped(orderNumber: string, { memberId, guestEmail }: { memberId?: string | null; guestEmail?: string | null }) {
-  const snap = await ordersCol.where("orderNumber", "==", orderNumber).limit(1).get();
-  if (snap.empty) return null;
-  const order = fromOrderDoc(snap.docs[0]);
+  const order = isSupabaseCutoverActive()
+    ? await getOrderByNumberInSupabase(orderNumber)
+    : await (async () => {
+        const snap = await ordersCol.where("orderNumber", "==", orderNumber).limit(1).get();
+        return snap.empty ? null : fromOrderDoc(snap.docs[0]);
+      })();
+  if (!order) return null;
   const ownedByMember = memberId != null && order.memberId === memberId;
   const ownedByGuest = !order.memberId && guestEmail && order.guestEmail?.toLowerCase() === guestEmail.toLowerCase();
   if (!ownedByMember && !ownedByGuest) return null;
@@ -455,6 +622,7 @@ export async function getOrderByNumberScoped(orderNumber: string, { memberId, gu
 }
 
 export async function getOrdersForMember(memberId: string) {
+  if (isSupabaseCutoverActive()) return getOrdersForMemberInSupabase(memberId);
   // Requires a composite index: gemstoneOrders (memberId ASC, createdAt DESC) — see firestore.indexes.json.
   const snap = await ordersCol.where("memberId", "==", memberId).orderBy("createdAt", "desc").get();
   return snap.docs.map(fromOrderDoc);
@@ -462,6 +630,7 @@ export async function getOrdersForMember(memberId: string) {
 
 export async function getAllOrdersAdmin(status?: string) {
   await expireStalePendingOrders().catch((error) => console.error("Stale pending order sweep failed", error));
+  if (isSupabaseCutoverActive()) return getOrdersForAdminInSupabase(status);
   if (status && status !== "all") {
     // Requires a composite index: gemstoneOrders (status ASC, createdAt DESC) — see firestore.indexes.json.
     const snap = await ordersCol.where("status", "==", status).orderBy("createdAt", "desc").get();
@@ -472,6 +641,26 @@ export async function getAllOrdersAdmin(status?: string) {
 }
 
 const CANCELLABLE_STATUSES = new Set(["pending", "processing"]);
+
+async function claimRefundForOrder(orderId: string) {
+  try {
+    return await claimRefundInSupabase(orderId);
+  } catch (error) {
+    throw error instanceof OrderMutationError ? orderErrorFromSql(error) : error;
+  }
+}
+
+async function claimRefundInFirestore(ref: FirebaseFirestore.DocumentReference) {
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    if (!snap.exists) throw new OrderNotFoundError("Order not found.");
+    const existing = fromOrderDoc(snap);
+    if (existing.paymentStatus !== "paid") throw new CartValidationError("Only paid orders can be refunded.");
+    const alreadyClaimed = existing.status === "refunded" || Boolean((snap.data() as { refundClaimedAt?: unknown } | undefined)?.refundClaimedAt);
+    if (!alreadyClaimed) tx.update(ref, { refundClaimedAt: FieldValue.serverTimestamp() });
+    return { alreadyClaimed, existing };
+  });
+}
 
 export async function updateOrderStatus(orderId: string, status: string) {
   const ref = ordersCol.doc(orderId);
@@ -487,15 +676,9 @@ export async function updateOrderStatus(orderId: string, status: string) {
   // used in the invoice refund flow (src/app/api/invoices/[id]/route.ts) — so only the request
   // that wins the claim ever calls Razorpay.
   if (status === "refunded") {
-    const claim = await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      if (!snap.exists) throw new OrderNotFoundError("Order not found.");
-      const existing = fromOrderDoc(snap);
-      if (existing.paymentStatus !== "paid") throw new CartValidationError("Only paid orders can be refunded.");
-      const alreadyClaimed = existing.status === "refunded" || Boolean((snap.data() as { refundClaimedAt?: unknown } | undefined)?.refundClaimedAt);
-      if (!alreadyClaimed) tx.update(ref, { refundClaimedAt: FieldValue.serverTimestamp() });
-      return { alreadyClaimed, existing };
-    });
+    const claim = isSupabaseCutoverActive()
+      ? await claimRefundForOrder(orderId)
+      : await claimRefundInFirestore(ref);
 
     if (!claim.alreadyClaimed) {
       if (!claim.existing.razorpayPaymentId) throw new CartValidationError("No payment record was found to refund for this order.");
@@ -508,7 +691,9 @@ export async function updateOrderStatus(orderId: string, status: string) {
     }
   }
 
-  const updated = await db.runTransaction(async (tx) => {
+  const updated = isSupabaseCutoverActive()
+    ? await applyOrderStatusForOrder(orderId, status)
+    : await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
     if (!snap.exists) throw new OrderNotFoundError("Order not found.");
     const existing = fromOrderDoc(snap);
@@ -556,7 +741,7 @@ export async function updateOrderStatus(orderId: string, status: string) {
     });
 
     return { ...existing, status, paymentStatus: status === "refunded" ? "refunded" : existing.paymentStatus };
-  });
+    });
 
   if (updated.memberId) {
     await createNotification({
@@ -568,11 +753,25 @@ export async function updateOrderStatus(orderId: string, status: string) {
     }).catch(() => {});
   }
 
+  // The Postgres path already returned the post-update row from `returning`, so
+  // there is nothing left to re-read.
+  if (isSupabaseCutoverActive()) return updated;
+
   const finalSnap = await ref.get();
   return fromOrderDoc(finalSnap);
 }
 
+async function applyOrderStatusForOrder(orderId: string, status: string) {
+  try {
+    return await applyOrderStatusInSupabase(orderId, status, CANCELLABLE_STATUSES);
+  } catch (error) {
+    throw error instanceof OrderMutationError ? orderErrorFromSql(error) : error;
+  }
+}
+
 export async function getGemstoneAdminStats() {
+  if (isSupabaseCutoverActive()) return getGemstoneAdminStatsInSupabase();
+
   const paidOrders = ordersCol.where("paymentStatus", "==", "paid");
   const revenueSnap = await paidOrders.aggregate({ revenue: AggregateField.sum("total"), paidCount: AggregateField.count() }).get();
   const revenueData = revenueSnap.data();
@@ -602,6 +801,8 @@ export async function getGemstoneAdminStats() {
 }
 
 export async function getLowStockVariants(threshold = 5) {
+  if (isSupabaseCutoverActive()) return getLowStockVariantsInSupabase(threshold);
+
   // Requires a collection-group composite index: variants (active ASC, stockQuantity ASC) — see firestore.indexes.json.
   let snap;
   try {
@@ -628,6 +829,8 @@ export async function getLowStockVariants(threshold = 5) {
 }
 
 export async function memberHasPurchasedProduct(memberId: string, productId: string) {
+  if (isSupabaseCutoverActive()) return getMemberPaidOrderIdForProductInSupabase(memberId, productId);
+
   // Requires a composite index: gemstoneOrders (memberId ASC, paymentStatus ASC) — see firestore.indexes.json.
   const ordersSnap = await ordersCol.where("memberId", "==", memberId).where("paymentStatus", "==", "paid").get();
   if (ordersSnap.empty) return null;

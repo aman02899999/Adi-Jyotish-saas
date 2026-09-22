@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
+import { getResolvedPredictionCountsInSupabase } from "@/lib/practitioners-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 /** Radical transparency as a differentiator: no other platform logs what a practitioner actually
  * predicted and later verifies whether it came true. A member logs a prediction against a completed
@@ -125,6 +127,18 @@ export async function resolvePrediction({ memberId, predictionId, status }: { me
  * (a single-field "in" filter, still covered by Firestore's automatic index, no composite needed)
  * so this doesn't grow with every still-pending prediction — only ones actually verified count. */
 export async function getPractitionerAccuracyMap(): Promise<Map<string, { accuracyPercent: number; resolvedCount: number }>> {
+  if (isSupabaseCutoverActive()) {
+    // Same threshold and rounding as the Firestore path below — only the counts
+    // come from somewhere else. Aggregating in SQL avoids pulling every resolved
+    // prediction into the app to count it.
+    const counts = await getResolvedPredictionCountsInSupabase();
+    const aggregated = new Map<string, { accuracyPercent: number; resolvedCount: number }>();
+    for (const [practitionerId, { resolved, accurate }] of counts) {
+      if (resolved < MIN_RESOLVED_FOR_PUBLIC_STAT) continue;
+      aggregated.set(practitionerId, { accuracyPercent: Math.round((accurate / resolved) * 100), resolvedCount: resolved });
+    }
+    return aggregated;
+  }
   const snap = await db.collection("predictions").where("status", "in", ["came_true", "did_not_happen"]).get();
   const byPractitioner = new Map<string, { resolved: number; accurate: number }>();
   for (const doc of snap.docs) {

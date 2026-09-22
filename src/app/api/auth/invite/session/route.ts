@@ -1,9 +1,8 @@
-import { getAuth } from "firebase-admin/auth";
-import { db } from "@/lib/firestore";
 import { createAdminSession, getCurrentAdmin } from "@/lib/admin-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { checkTwoFactorGate } from "@/lib/two-factor";
+import { verifyAuthToken } from "@/lib/auth-verify";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +25,7 @@ export async function POST(request: Request) {
 
   let uid: string;
   try {
-    uid = (await getAuth().verifyIdToken(body.idToken, true)).uid;
+    uid = (await verifyAuthToken(body.idToken)).uid;
   } catch {
     return Response.json({ error: "Sign-in could not be completed." }, { status: 401 });
   }
@@ -34,7 +33,7 @@ export async function POST(request: Request) {
   const authThrottle = await checkAuthThrottle("admin-invite-session", uid, request);
   if (!authThrottle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(authThrottle.retryAfter) } });
 
-  const challengeToken = await checkTwoFactorGate("admin", uid, body.idToken, db.collection("adminUsers").doc(uid));
+  const challengeToken = await checkTwoFactorGate("admin", uid, body.idToken);
   if (challengeToken) {
     await clearAuthFailures(authThrottle.keyHash);
     return Response.json({ error: "This account requires additional verification — please sign in from the admin login page instead." }, { status: 409 });

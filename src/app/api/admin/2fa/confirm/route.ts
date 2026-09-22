@@ -1,7 +1,5 @@
-import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
 import { getCurrentAdmin, recordAudit } from "@/lib/admin-auth";
-import { generateBackupCodes, verifyTotpCode } from "@/lib/two-factor";
+import { confirmTwoFactorEnrollment, generateBackupCodes, getTwoFactorState, verifyTotpCode } from "@/lib/two-factor";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 
 export const dynamic = "force-dynamic";
@@ -10,9 +8,9 @@ export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
 
-  const ref = db.collection("adminUsers").doc(admin.id);
-  const snap = await ref.get();
-  const secret = snap.data()?.totpPendingSecret as string | undefined;
+  const account = { role: "admin" as const, id: admin.id };
+  const state = await getTwoFactorState(account);
+  const secret = state?.totpPendingSecret;
   if (!secret) return Response.json({ error: "Start enrollment before confirming a code." }, { status: 409 });
 
   const throttle = await checkAuthThrottle("admin-2fa-confirm", admin.id, request);
@@ -26,7 +24,7 @@ export async function POST(request: Request) {
   await clearAuthFailures(throttle.keyHash);
 
   const { codes, hashed } = generateBackupCodes();
-  await ref.update({ totpSecret: secret, totpPendingSecret: FieldValue.delete(), totpEnabled: true, totpBackupCodes: hashed });
+  await confirmTwoFactorEnrollment(account, secret, hashed);
   await recordAudit(admin, "auth.2fa_enabled", "administrator", admin.id);
   return Response.json({ ok: true, backupCodes: codes });
 }

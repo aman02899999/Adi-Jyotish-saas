@@ -3,6 +3,18 @@ import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { getAdminInbox } from "@/lib/messaging";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  createThreadWithMessageInSupabase,
+  deleteThreadInSupabase,
+  getThreadForAdminInSupabase,
+  getThreadForMemberInSupabase,
+  markThreadReadByAdminInSupabase,
+  markThreadReadByMemberInSupabase,
+  replyToThreadInSupabase,
+  setThreadStatusInSupabase,
+} from "@/lib/messaging-supabase";
+import { getMemberForEditInSupabase } from "@/lib/member-admin-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -25,9 +37,28 @@ export async function POST(request: Request) {
   const messageBody = body.message?.trim().slice(0, 3000) ?? "";
   const category = ["support", "booking", "billing", "general"].includes(body.category ?? "") ? body.category! : "general";
   if (!memberId || !subject || !messageBody) return Response.json({ error: "Member, subject, and message are required." }, { status: 400 });
-  const memberSnap = await db.collection("members").doc(memberId).get();
-  if (!memberSnap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
-  const member = memberSnap.data() as { name: string; email: string };
+  let member: { name: string; email: string } | null;
+  if (isSupabaseCutoverActive()) {
+    member = await getMemberForEditInSupabase(memberId);
+  } else {
+    const memberSnap = await db.collection("members").doc(memberId).get();
+    member = memberSnap.exists ? (memberSnap.data() as { name: string; email: string }) : null;
+  }
+  if (!member) return Response.json({ error: "Member not found." }, { status: 404 });
+
+  if (isSupabaseCutoverActive()) {
+    const result = await createThreadWithMessageInSupabase({
+      memberId, subject, category, senderType: "admin", senderName: admin.name, body: messageBody,
+    });
+    await recordAudit(admin, "message.thread_created", "message_thread", result.thread.id, { memberId, category });
+    return Response.json({
+      id: result.thread.id, memberId, bookingId: null,
+      subject: result.thread.subject, category: result.thread.category, status: result.thread.status,
+      lastMessageAt: result.thread.lastMessageAt, createdAt: result.thread.createdAt, updatedAt: result.thread.updatedAt,
+      memberName: member.name, memberEmail: member.email,
+      messages: [result.message],
+    }, { status: 201 });
+  }
 
   const now = FieldValue.serverTimestamp();
   const threadRef = db.collection("messageThreads").doc();

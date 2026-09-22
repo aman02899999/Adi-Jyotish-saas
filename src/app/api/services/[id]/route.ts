@@ -1,6 +1,13 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
+import {
+  countBookingsForServiceInSupabase,
+  deleteServiceInSupabase,
+  getServiceByIdInSupabase,
+  updateServiceInSupabase,
+} from "@/lib/services-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
 
@@ -29,9 +36,16 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return Response.json({ error: "Title, category, and description are required." }, { status: 400 });
   }
 
-  const ref = db.collection("services").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) return Response.json({ error: "Service not found." }, { status: 404 });
+  let slug: string | null;
+  if (isSupabaseCutoverActive()) {
+    const existing = await getServiceByIdInSupabase(id);
+    if (!existing) return Response.json({ error: "Service not found." }, { status: 404 });
+    slug = existing.slug;
+  } else {
+    const snap = await db.collection("services").doc(id).get();
+    if (!snap.exists) return Response.json({ error: "Service not found." }, { status: 404 });
+    slug = (snap.data()?.slug as string | undefined) ?? null;
+  }
 
   const patch = {
     title,
@@ -43,9 +57,13 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     active: body.active ?? true,
     featured: body.featured ?? false,
   };
-  await ref.update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
+  if (isSupabaseCutoverActive()) {
+    await updateServiceInSupabase(id, patch);
+  } else {
+    await db.collection("services").doc(id).update({ ...patch, updatedAt: FieldValue.serverTimestamp() });
+  }
 
-  const updated = { ...patch, id, slug: snap.data()?.slug, updatedAt: new Date() };
+  const updated = { ...patch, id, slug, updatedAt: new Date() };
   await recordAudit(admin, "service.updated", "service", updated.id, { title: updated.title, active: updated.active, featured: updated.featured });
   return Response.json(updated);
 }
@@ -56,11 +74,29 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   if (!hasAdminPermission(admin, "services")) return Response.json({ error: "Catalogue permission required." }, { status: 403 });
 
   const { id } = await params;
-  const ref = db.collection("services").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) return Response.json({ error: "Service not found." }, { status: 404 });
-  const title = snap.data()?.title as string;
-  await ref.delete();
+
+  let title: string;
+  if (isSupabaseCutoverActive()) {
+    const existing = await getServiceByIdInSupabase(id);
+    if (!existing) return Response.json({ error: "Service not found." }, { status: 404 });
+    title = existing.title;
+
+    // bookings.service_id is a foreign key with NO ACTION, so the delete below would fail
+    // with 23503 and surface as a 500. Refusing up front is the block-or-resolve pattern
+    // the rest of the catalogue uses, and it beats a stack trace.
+    const bookings = await countBookingsForServiceInSupabase(id);
+    if (bookings > 0) {
+      return Response.json({
+        error: `${bookings} booking${bookings === 1 ? "" : "s"} still reference this service. Deactivate it instead of deleting it, so those bookings keep a valid service.`,
+      }, { status: 409 });
+    }
+    await deleteServiceInSupabase(id);
+  } else {
+    const snap = await db.collection("services").doc(id).get();
+    if (!snap.exists) return Response.json({ error: "Service not found." }, { status: 404 });
+    title = snap.data()?.title as string;
+    await db.collection("services").doc(id).delete();
+  }
   await recordAudit(admin, "service.deleted", "service", id, { title });
   return Response.json({ ok: true, id });
 }

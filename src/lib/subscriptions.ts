@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { getMemberSubscriptionInSupabase, getSubscriptionInvoicesInSupabase } from "@/lib/subscriptions-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import type { MembershipPlan } from "@/lib/plans";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId, verifyRazorpaySubscriptionSignature } from "@/lib/razorpay";
@@ -118,6 +120,15 @@ async function planById(planId: string): Promise<MembershipPlan> {
 }
 
 export async function getMemberSubscription(memberId: string): Promise<MemberSubscriptionWithPlan | null> {
+  if (isSupabaseCutoverActive()) {
+    const row = await getMemberSubscriptionInSupabase(memberId);
+    if (!row) return null;
+    // getPlanById is itself gated, so the plan comes from the same database as
+    // the subscription — mixing a Firestore plan with a Postgres subscription
+    // would read a discount off a tier nobody is billed against.
+    const plan = await planById(row.planId);
+    return { ...row, plan };
+  }
   const snap = await subscriptionsCollection().doc(memberId).get();
   if (!snap.exists) return null;
   const subscription = subscriptionFromSnap(snap);
@@ -126,6 +137,9 @@ export async function getMemberSubscription(memberId: string): Promise<MemberSub
 }
 
 export async function getSubscriptionInvoices(memberId: string): Promise<SubscriptionInvoice[]> {
+  if (isSupabaseCutoverActive()) {
+    return getSubscriptionInvoicesInSupabase(memberId);
+  }
   const snap = await subscriptionInvoicesCollection().where("memberId", "==", memberId).orderBy("createdAt", "asc").get();
   return snap.docs.map((doc) => subscriptionInvoiceFromSnap(doc));
 }

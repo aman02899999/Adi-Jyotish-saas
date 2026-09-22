@@ -5,7 +5,7 @@ import { Link } from "@/i18n/navigation";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail } from "lucide-react";
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { TwoFactorChallenge } from "@/components/two-factor-challenge";
-import { signInWithEmailAndPassword } from "@/lib/firebase-client";
+import { signInWithEmailAndPassword } from "@/lib/auth-client";
 
 export function PractitionerAuthForm() {
   const [email, setEmail] = useState("");

@@ -15,6 +15,7 @@ import {
   toPlainJson,
 } from "@/lib/account-privacy";
 import type { MemberIdentity } from "@/lib/member-auth";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 /**
  * Self-service PII export and account deletion — the two "your rights" flows the privacy policy
@@ -26,6 +27,26 @@ import type { MemberIdentity } from "@/lib/member-auth";
  */
 
 export class AccountDeletionBlockedError extends Error {}
+
+/**
+ * These two flows still read and write Firestore directly — they were written before the
+ * Supabase port and have no Postgres path yet. Under cutover that is not a degraded export or a
+ * slower delete, it is a wrong answer: the export would return a stale shell and the delete would
+ * erase documents the app no longer reads while the real rows survive in Postgres. Since this is
+ * the GDPR erasure path, a loud failure the member can retry is the only acceptable behaviour
+ * until the Supabase port lands.
+ */
+function assertFirestoreIsSourceOfTruth(): void {
+  if (isSupabaseCutoverActive()) {
+    throw new AccountDeletionUnavailableError(
+      "Account export and deletion are temporarily unavailable while we migrate our database. Please contact support and we will action your request manually.",
+    );
+  }
+}
+
+/** Raised when the flow cannot run against the active data provider. Distinct from
+ * AccountDeletionBlockedError, which means the member has something to resolve first. */
+export class AccountDeletionUnavailableError extends Error {}
 
 /** Docs matched by a simple where(field == value) that are deleted outright, subcollections and
  * all. Kept as data (not code) so export and delete stay in sync about what a member "owns". */
@@ -62,6 +83,7 @@ async function queryAll(collection: string, field: string, value: string) {
 /** Everything the platform knows about this member, as a plain-JSON bundle suitable for a
  * download. Secrets (TOTP material) and internal QA flags are excluded. */
 export async function buildMemberDataExport(member: MemberIdentity): Promise<Record<string, unknown>> {
+  assertFirestoreIsSourceOfTruth();
   const memberRef = db.collection("members").doc(member.id);
 
   const [
@@ -157,6 +179,7 @@ export async function buildMemberDataExport(member: MemberIdentity): Promise<Rec
 /** Preconditions that must clear before deletion may start. Returns the human reason when
  * blocked so the UI can tell the member exactly what to resolve. */
 export async function getDeletionBlockers(member: MemberIdentity): Promise<string[]> {
+  assertFirestoreIsSourceOfTruth();
   const blockers: string[] = [];
 
   const walletSnap = await db.collection("wallets").doc(member.id).get();
@@ -222,6 +245,7 @@ async function anonymizeSnap(
  * sign in.
  */
 export async function deleteMemberAccount(member: MemberIdentity): Promise<void> {
+  assertFirestoreIsSourceOfTruth();
   const blockers = await getDeletionBlockers(member);
   if (blockers.length) throw new AccountDeletionBlockedError(blockers.join(" "));
 
