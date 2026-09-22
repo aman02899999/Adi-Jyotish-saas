@@ -119,7 +119,14 @@ jobs:
           PGDATABASE: jyotish_test
 
       - name: Run the suite against Postgres with the cutover flag on
-        run: npx vitest run
+        # --no-file-parallelism because all 35 suites share one database and at least one
+        # operation under test is global by design: backfillInvoicesInSupabase inserts an
+        # invoice for every booking that lacks one. Run in parallel, it creates invoices for
+        # the bookings suite's own fixtures mid-test, and that suite's "no invoices yet"
+        # assertion sees one. Reproduced locally: 2 of 3 parallel runs failed, 4 of 4
+        # serialized runs passed. Scoping the backfill is not the fix — inserting across all
+        # bookings is what the production function is for. Costs ~22s.
+        run: npx vitest run --no-file-parallelism
         env:
           SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/jyotish_test
           # isSupabaseConfigured() requires a well-formed https URL and a service-role key
