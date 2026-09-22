@@ -46,9 +46,24 @@ function poolConfig(): PoolConfig {
   // which serves a certificate. Never set it against a real Supabase endpoint.
   const sslDisabled = process.env.PGSSLMODE?.trim().toLowerCase() === "disable";
 
+  // Certificate verification. rejectUnauthorized:false — the previous default here — completes
+  // the handshake against ANY certificate, including one an active attacker presents. TLS without
+  // verification authenticates nobody: whoever answers gets the service_role connection password
+  // from the startup packet, and that role bypasses RLS, so the deny-all policies on every table
+  // provide no second line of defence.
+  //
+  // SUPABASE_CA_CERT holds Supabase's CA bundle (Project Settings -> Database -> SSL
+  // configuration, "Download certificate"), PEM, newlines escaped as \n the way
+  // FIREBASE_SERVICE_ACCOUNT_KEY already is. With it set the chain and hostname are both checked.
+  // Without it we fall back to Node's default trust store, which may or may not carry the issuer
+  // — a connection that fails loudly is the right outcome there, because the alternative is a
+  // credential travelling to an unverified peer.
+  const ca = process.env.SUPABASE_CA_CERT?.trim().replace(/\\n/g, "\n");
+  const ssl = sslDisabled ? undefined : ca ? { ca, rejectUnauthorized: true as const } : { rejectUnauthorized: true as const };
+
   return {
     connectionString: config.connectionString,
-    ...(sslDisabled ? {} : { ssl: { rejectUnauthorized: false } }),
+    ...(ssl ? { ssl } : {}),
     // Serverless runtimes recycle containers aggressively. A short idle timeout
     // returns connections before Supabase's own proxy drops them, which is what
     // produces "Connection terminated unexpectedly" on the next request.

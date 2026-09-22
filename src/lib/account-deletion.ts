@@ -16,6 +16,8 @@ import {
 } from "@/lib/account-privacy";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { deleteGoTrueUser } from "@/lib/gotrue-admin";
+import { deleteSupabaseStoragePrefix, isSupabaseStorageConfigured } from "@/lib/supabase-storage";
 import {
   buildMemberDataExportInSupabase,
   deleteMemberAccountInSupabase,
@@ -246,17 +248,43 @@ async function anonymizeSnap(
 }
 
 /**
- * Uploaded photos and the Firebase Auth user, neither of which lives in either database. Storage
- * keys are the uid, and Firebase Auth remains the identity provider under cutover too, so this
- * runs identically on both paths.
+ * Uploaded photos and the identity record, neither of which lives in either database — so both
+ * have to be removed explicitly, and BOTH move at cutover.
+ *
+ * An earlier version of this helper assumed Firebase stayed the identity provider and ran the
+ * same Firebase calls on both paths. It does not: ai-readings.ts writes reading images to
+ * Supabase Storage once the flag is on, GoTrue owns the identity, and the health route treats
+ * missing Firebase credentials as expected after cutover. Both calls would therefore have
+ * silently no-opped — leaving the member's palm and face photographs readable in the bucket, and
+ * their GoTrue login still working, after they had been told the account was irreversibly
+ * deleted. Signing in again would re-create a live profile under the same uid.
+ * src/app/api/members/[id]/route.ts already branches correctly for the admin-initiated delete;
+ * this is the same shape.
  *
  * Auth goes last on purpose: if anything before it failed, the member can still sign in and retry
  * the deletion rather than being locked out of an account that still holds their data.
  */
 async function deleteMemberStorageAndAuth(member: MemberIdentity): Promise<void> {
+  const prefixes = [`palm-readings/${member.id}/`, `face-readings/${member.id}/`];
+
+  if (isSupabaseCutoverActive()) {
+    if (isSupabaseStorageConfigured()) {
+      for (const prefix of prefixes) {
+        await deleteSupabaseStoragePrefix(prefix).catch(() => {});
+      }
+    }
+    try {
+      await deleteGoTrueUser(member.id);
+    } catch {
+      // Identity already gone — the app's own data removal is what matters.
+    }
+    return;
+  }
+
   if (isStorageConfigured()) {
-    await bucket().deleteFiles({ prefix: `palm-readings/${member.id}/` }).catch(() => {});
-    await bucket().deleteFiles({ prefix: `face-readings/${member.id}/` }).catch(() => {});
+    for (const prefix of prefixes) {
+      await bucket().deleteFiles({ prefix }).catch(() => {});
+    }
   }
   try {
     await getAuth().revokeRefreshTokens(member.id);

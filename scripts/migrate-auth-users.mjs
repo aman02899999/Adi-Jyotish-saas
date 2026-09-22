@@ -181,9 +181,20 @@ async function createSupabaseUser(user) {
   return res.json();
 }
 
+
+// Same certificate-verification reasoning as src/lib/postgres.ts: an unverified TLS session
+// authenticates nobody, and this script carries the service_role connection password.
+// SUPABASE_CA_CERT (PEM, \n-escaped) pins Supabase's CA; without it Node's default trust store
+// is used and a failure is the correct outcome. PGSSLMODE=disable stays the local-Postgres escape.
+function pgSslOptions() {
+  if (process.env.PGSSLMODE?.trim().toLowerCase() === "disable") return undefined;
+  const ca = process.env.SUPABASE_CA_CERT?.trim().replace(/\\n/g, "\n");
+  return ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: true };
+}
+
 async function main() {
   const connectionString = requireEnv("SUPABASE_DB_URL");
-  const client = new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } });
+  const client = new pg.Client({ connectionString, ssl: pgSslOptions() });
   await client.connect();
 
   const token = await firebaseToken();

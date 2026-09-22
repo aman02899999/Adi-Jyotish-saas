@@ -325,6 +325,17 @@ async function upsert(client, spec, rows) {
   return res.rowCount ?? 0;
 }
 
+
+// Same certificate-verification reasoning as src/lib/postgres.ts: an unverified TLS session
+// authenticates nobody, and this script carries the service_role connection password.
+// SUPABASE_CA_CERT (PEM, \n-escaped) pins Supabase's CA; without it Node's default trust store
+// is used and a failure is the correct outcome. PGSSLMODE=disable stays the local-Postgres escape.
+function pgSslOptions() {
+  if (process.env.PGSSLMODE?.trim().toLowerCase() === "disable") return undefined;
+  const ca = process.env.SUPABASE_CA_CERT?.trim().replace(/\\n/g, "\n");
+  return ca ? { ca, rejectUnauthorized: true } : { rejectUnauthorized: true };
+}
+
 async function main() {
   const db = connectFirestore();
   const connectionString = process.env.SUPABASE_DB_URL;
@@ -333,7 +344,7 @@ async function main() {
     process.exit(1);
   }
 
-  const client = connectionString ? new pg.Client({ connectionString, ssl: { rejectUnauthorized: false } }) : null;
+  const client = connectionString ? new pg.Client({ connectionString, ssl: pgSslOptions() }) : null;
   if (client) await client.connect();
 
   const selected = TABLES.filter((s) => !ONLY || ONLY.includes(s.table) || ONLY.includes(s.collection));

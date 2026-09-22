@@ -104,3 +104,48 @@ export async function downloadFromSupabaseStorage(path: string): Promise<StoredO
   const contentType = response.headers.get("content-type")?.split(";")[0]?.trim() || "image/jpeg";
   return { buffer: Buffer.from(await response.arrayBuffer()), contentType };
 }
+
+/**
+ * Removes every object under a prefix. Mirrors Firebase's bucket().deleteFiles({ prefix }), which
+ * the erasure path used before the migration — without this, deleting an account under cutover
+ * left the member's palm and face photographs readable in the bucket indefinitely, after they had
+ * been told their data was destroyed.
+ *
+ * Storage has no "delete by prefix" call, so this lists and then deletes by name. The list is
+ * paged because the API caps a page at 100 and a member can have more reading images than that.
+ */
+export async function deleteSupabaseStoragePrefix(prefix: string): Promise<number> {
+  const { url, key, bucket } = requireConfig();
+  const normalized = normalizeStoragePath(prefix);
+  const names: string[] = [];
+
+  for (let offset = 0; ; offset += 100) {
+    const listed = await fetch(`${url}/storage/v1/object/list/${bucket}`, {
+      method: "POST",
+      headers: authHeaders(key, "application/json"),
+      body: JSON.stringify({ prefix: normalized, limit: 100, offset }),
+    });
+    if (!listed.ok) {
+      throw new SupabaseStorageError(`Listing ${normalized} failed: ${await listed.text()}`, listed.status);
+    }
+    const page = (await listed.json()) as Array<{ name?: string }>;
+    if (!Array.isArray(page) || page.length === 0) break;
+    // list returns names relative to the prefix; the delete call wants full object paths.
+    for (const entry of page) {
+      if (entry?.name) names.push(`${normalized.replace(/\/$/, "")}/${entry.name}`);
+    }
+    if (page.length < 100) break;
+  }
+
+  if (names.length === 0) return 0;
+
+  const removed = await fetch(`${url}/storage/v1/object/${bucket}`, {
+    method: "DELETE",
+    headers: authHeaders(key, "application/json"),
+    body: JSON.stringify({ prefixes: names }),
+  });
+  if (!removed.ok) {
+    throw new SupabaseStorageError(`Deleting ${names.length} object(s) under ${normalized} failed: ${await removed.text()}`, removed.status);
+  }
+  return names.length;
+}
