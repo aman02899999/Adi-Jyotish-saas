@@ -36,11 +36,19 @@ audit longer.
    blob: the `service_role` key is still readable from main's history by anyone
    with repo access, and that key bypasses RLS entirely. Rotate first, then purge
    the blob.
-2. **Port the privacy flows to Postgres.** `buildMemberDataExport`,
-   `getDeletionBlockers` and `deleteMemberAccount` in `src/lib/account-deletion.ts`
-   are Firestore-only. They now raise `AccountDeletionUnavailableError` under
-   cutover rather than half-deleting, but that guard must be replaced with a real
-   implementation before `SUPABASE_CUTOVER` is ever set to `true`.
+2. ~~**Port the privacy flows to Postgres.**~~ Done. `buildMemberDataExport`,
+   `getDeletionBlockers` and `deleteMemberAccount` now route to
+   `src/lib/account-deletion-supabase.ts` under cutover, covered by 16 integration
+   tests against a real database. The refusal guard is gone.
+
+   Porting it surfaced a worse bug first: six `members` foreign keys inverted the
+   retention policy, so an erasure would have destroyed practitioner earnings and
+   subscription invoices while leaving birth data behind. Migration `0011` fixes
+   that; the port is built on the corrected schema.
+
+   `cosmic_weather` is deliberately absent from both paths. Firestore keys it by
+   member; the Postgres table is keyed by `day` with no `member_id` — it is a global
+   almanac, so there is nothing member-specific to export or erase.
 3. **Test coverage.** ~~165 API routes and 515 source files against 12 unit test
    files.~~ Partly addressed. The merge brought the suite to 57 files, but all 35
    integration suites gate on `SUPABASE_DB_URL && SUPABASE_CUTOVER === "true"`,
