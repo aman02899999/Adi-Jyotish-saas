@@ -41,5 +41,15 @@ audit longer.
    are Firestore-only. They now raise `AccountDeletionUnavailableError` under
    cutover rather than half-deleting, but that guard must be replaced with a real
    implementation before `SUPABASE_CUTOVER` is ever set to `true`.
-3. **Test coverage.** 165 API routes and 515 source files against 12 unit test
-   files. The suite that exists is good; it covers a small share of the surface.
+3. **Test coverage.** ~~165 API routes and 515 source files against 12 unit test
+   files.~~ Partly addressed. The merge brought the suite to 57 files, but all 35
+   integration suites gate on `SUPABASE_DB_URL && SUPABASE_CUTOVER === "true"`,
+   so 443 of their tests self-skipped and never ran anywhere — the ported money
+   paths included. CI now runs an `integration` job with a Postgres 16 service
+   container and the migration schema applied, which takes the suite from 394
+   passing / 443 skipped to **837 passing / 0 skipped**. Both data providers are
+   now verified on every PR: `build-and-test` covers the Firestore paths serving
+   traffic today, `integration` covers the Postgres paths behind the cutover flag.
+   Still thin: the two money modules that are pure and live (`payout-crypto`,
+   `payment-bypass`) got direct unit tests, but most of the 165 API routes are
+   still only exercised indirectly.

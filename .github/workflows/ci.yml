@@ -65,6 +65,73 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # The 35 integration suites gate on SUPABASE_DB_URL && SUPABASE_CUTOVER === "true".
+  # Without a database they self-skip, so build-and-test above proves only the Firestore
+  # paths — 443 tests, including every ported money path, never executed anywhere. This job
+  # gives them a real Postgres so both data providers are verified on every PR: build-and-test
+  # covers the provider serving traffic today, this one covers the provider behind the cutover
+  # flag, and neither can rot unnoticed while the migration is in flight.
+  integration:
+    runs-on: ubuntu-latest
+
+    services:
+      postgres:
+        # Match the major version Supabase runs, so a syntax or type difference fails here
+        # rather than at cutover.
+        image: postgres:16
+        env:
+          POSTGRES_USER: postgres
+          POSTGRES_PASSWORD: postgres
+          POSTGRES_DB: jyotish_test
+        ports:
+          - 5432:5432
+        # Without this the first migration can race the server's own startup restart.
+        options: >-
+          --health-cmd "pg_isready -U postgres"
+          --health-interval 10s
+          --health-timeout 5s
+          --health-retries 10
+
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Apply the migration schema
+        # ON_ERROR_STOP makes a bad migration fail the job instead of leaving a half-built
+        # schema that surfaces later as a confusing missing-column error in an unrelated test.
+        run: |
+          for f in supabase/migrations/*.sql; do
+            echo "applying $f"
+            psql -v ON_ERROR_STOP=1 -q -f "$f"
+          done
+        env:
+          PGHOST: localhost
+          PGPORT: "5432"
+          PGUSER: postgres
+          PGPASSWORD: postgres
+          PGDATABASE: jyotish_test
+
+      - name: Run the suite against Postgres with the cutover flag on
+        run: npx vitest run
+        env:
+          SUPABASE_DB_URL: postgresql://postgres:postgres@localhost:5432/jyotish_test
+          # isSupabaseConfigured() requires a well-formed https URL and a service-role key
+          # before the cutover gate will open. Neither is contacted by these tests — the
+          # Postgres connection is what they exercise — so placeholders are enough.
+          SUPABASE_URL: https://example.supabase.co
+          SUPABASE_SERVICE_ROLE_KEY: ci-placeholder-not-a-real-key
+          SUPABASE_CUTOVER: "true"
+          # The service container speaks plaintext on localhost; the pool defaults to SSL
+          # because real Supabase requires it.
+          PGSSLMODE: disable
+
   lighthouse:
     runs-on: ubuntu-latest
     steps:
