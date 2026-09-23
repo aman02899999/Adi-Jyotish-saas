@@ -4,6 +4,15 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getMemberSubscriptionInSupabase, getSubscriptionInvoicesInSupabase } from "@/lib/subscriptions-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  activateSubscriptionInSupabase,
+  cancelSubscriptionInSupabase,
+  claimSubscriptionCheckoutInSupabase,
+  recordSubscriptionCheckoutInSupabase,
+  recordSubscriptionInvoiceInSupabase,
+  releaseSubscriptionCheckoutInSupabase,
+  syncMemberPlanLabelInSupabase,
+} from "@/lib/subscriptions-supabase";
 import type { MembershipPlan } from "@/lib/plans";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId, verifyRazorpaySubscriptionSignature } from "@/lib/razorpay";
@@ -156,7 +165,53 @@ export function applyDiscount(amount: number, discountPercent: number) {
 }
 
 async function syncMemberPlanLabel(memberId: string, label: string) {
+  if (isSupabaseCutoverActive()) return syncMemberPlanLabelInSupabase(memberId, label);
   await db.collection("members").doc(memberId).update({ plan: label, updatedAt: FieldValue.serverTimestamp() });
+}
+
+/**
+ * The Postgres half of startSubscriptionCheckout. Same shape as the Firestore path: claim the
+ * slot before calling Razorpay, release the claim if that call fails, record the subscription
+ * once it succeeds.
+ */
+async function startSubscriptionCheckoutInSupabase(
+  member: MemberIdentity,
+  plan: MembershipPlan,
+  interval: "monthly" | "yearly",
+  razorpayPlanId: string,
+) {
+  const razorpay = getRazorpay();
+  if (!razorpay) throw new Error("Online payments are not configured.");
+
+  const claim = await claimSubscriptionCheckoutInSupabase(
+    member.id,
+    plan.id,
+    [...activeStatuses],
+    PENDING_CHECKOUT_TTL_MS,
+  );
+
+  let subscription;
+  try {
+    subscription = await razorpay.subscriptions.create({
+      plan_id: razorpayPlanId,
+      total_count: interval === "yearly" ? 5 : 60,
+      customer_notify: true,
+      notes: { memberId: member.id, planKey: plan.key },
+    });
+  } catch (error) {
+    await releaseSubscriptionCheckoutInSupabase(member.id, claim.previousStatus).catch(() => {});
+    throw error;
+  }
+
+  await recordSubscriptionCheckoutInSupabase({
+    memberId: member.id,
+    planId: plan.id,
+    billingInterval: interval,
+    status: subscription.status,
+    razorpaySubscriptionId: subscription.id,
+  });
+
+  return { subscriptionId: subscription.id, key: getRazorpayKeyId()! };
 }
 
 export async function startSubscriptionCheckout(member: MemberIdentity, plan: MembershipPlan, interval: "monthly" | "yearly") {
@@ -165,6 +220,13 @@ export async function startSubscriptionCheckout(member: MemberIdentity, plan: Me
 
   const razorpayPlanId = interval === "yearly" ? plan.razorpayPlanIdYearly : plan.razorpayPlanIdMonthly;
   if (!razorpayPlanId) throw new Error("This plan is not available for the selected billing interval.");
+
+  // Under cutover the whole lifecycle runs on Postgres. Gating only the reads (as an earlier
+  // revision did) charges the member at Razorpay and then fails verification against an empty
+  // table, because the claim was written to the other database.
+  if (isSupabaseCutoverActive()) {
+    return startSubscriptionCheckoutInSupabase(member, plan, interval, razorpayPlanId);
+  }
 
   const ref = subscriptionsCollection().doc(member.id);
   const now = FieldValue.serverTimestamp();
@@ -233,12 +295,24 @@ export async function verifySubscriptionCheckout(member: MemberIdentity, subscri
   const razorpay = getRazorpay();
   const remote = razorpay ? await razorpay.subscriptions.fetch(subscriptionId) : null;
   const now = new Date();
-  await subscriptionsCollection().doc(member.id).update({
-    status: remote?.status ?? "active",
-    currentPeriodStart: remote?.current_start ? new Date(remote.current_start * 1000) : now,
-    currentPeriodEnd: remote?.current_end ? new Date(remote.current_end * 1000) : null,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  const periodStart = remote?.current_start ? new Date(remote.current_start * 1000) : now;
+  const periodEnd = remote?.current_end ? new Date(remote.current_end * 1000) : null;
+
+  if (isSupabaseCutoverActive()) {
+    await activateSubscriptionInSupabase({
+      memberId: member.id,
+      status: remote?.status ?? "active",
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+    });
+  } else {
+    await subscriptionsCollection().doc(member.id).update({
+      status: remote?.status ?? "active",
+      currentPeriodStart: periodStart,
+      currentPeriodEnd: periodEnd,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   await syncMemberPlanLabel(member.id, record.plan.key);
 
@@ -251,6 +325,25 @@ export async function verifySubscriptionCheckout(member: MemberIdentity, subscri
 
   // Doc id == razorpayPaymentId: idempotency via "does this doc exist" (create() fails silently
   // if it does), replacing the old onConflictDoNothing({ target: subscriptionInvoices.razorpayPaymentId }).
+  if (isSupabaseCutoverActive()) {
+    // Same idempotency as the Firestore create() below, via the partial unique index on
+    // razorpay_payment_id (migration 0012): a retried verify records the payment once.
+    await recordSubscriptionInvoiceInSupabase({
+      id: paymentId,
+      subscriptionId: record.id,
+      memberId: member.id,
+      amount,
+      subtotal,
+      taxAmount,
+      taxRate: settings.gstRate,
+      currency: record.plan.currency,
+      razorpayPaymentId: paymentId,
+      periodStart,
+      periodEnd,
+    });
+    return;
+  }
+
   const invoiceRef = subscriptionInvoicesCollection().doc(paymentId);
   try {
     await invoiceRef.create({
@@ -263,8 +356,8 @@ export async function verifySubscriptionCheckout(member: MemberIdentity, subscri
       currency: record.plan.currency,
       status: "paid",
       razorpayPaymentId: paymentId,
-      periodStart: remote?.current_start ? new Date(remote.current_start * 1000) : now,
-      periodEnd: remote?.current_end ? new Date(remote.current_end * 1000) : null,
+      periodStart,
+      periodEnd,
       createdAt: FieldValue.serverTimestamp(),
     });
   } catch (error) {
@@ -283,12 +376,21 @@ export async function cancelMemberSubscription(memberId: string, immediately: bo
   const cancelled = await razorpay.subscriptions.cancel(record.razorpaySubscriptionId, !immediately);
 
   const now = new Date();
-  await subscriptionsCollection().doc(memberId).update({
-    status: cancelled.status,
-    cancelAtPeriodEnd: !immediately,
-    cancelledAt: immediately ? now : null,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  if (isSupabaseCutoverActive()) {
+    await cancelSubscriptionInSupabase({
+      memberId,
+      status: cancelled.status,
+      cancelAtPeriodEnd: !immediately,
+      cancelledAt: immediately ? now : null,
+    });
+  } else {
+    await subscriptionsCollection().doc(memberId).update({
+      status: cancelled.status,
+      cancelAtPeriodEnd: !immediately,
+      cancelledAt: immediately ? now : null,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   if (immediately) await syncMemberPlanLabel(memberId, "free");
 }
