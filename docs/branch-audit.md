@@ -88,9 +88,14 @@ writes it is retired, move the assets to object storage first.
    so 443 of their tests self-skipped and never ran anywhere — the ported money
    paths included. CI now runs an `integration` job with a Postgres 16 service
    container and the migration schema applied, which takes the suite from 394
-   passing / 443 skipped to **837 passing / 0 skipped**. Both data providers are
+   passing / 443 skipped to **982 passing / 0 skipped**. Both data providers are
    now verified on every PR: `build-and-test` covers the Firestore paths serving
-   traffic today, `integration` covers the Postgres paths behind the cutover flag.
-   Still thin: the two money modules that are pure and live (`payout-crypto`,
-   `payment-bypass`) got direct unit tests, but most of the 165 API routes are
-   still only exercised indirectly.
+   traffic today (523 of those tests), `integration` covers the Postgres paths
+   behind the cutover flag.
+
+   Six API routes now have route-level suites, chosen by one criterion — an
+   unauthenticated or destructive action where a dropped check still returns
+   200: the Razorpay webhook, account deletion, the owner-bootstrap gate, the
+   two invoice payment routes, and administrator invite acceptance. Every one is
+   mutation-checked. Still thin: the remaining 159 routes are exercised only
+   indirectly, which is breadth rather than exposure.
