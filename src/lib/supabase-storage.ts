@@ -105,39 +105,88 @@ export async function downloadFromSupabaseStorage(path: string): Promise<StoredO
   return { buffer: Buffer.from(await response.arrayBuffer()), contentType };
 }
 
+/** A page of `object/list`. A real object carries a uuid `id`; a pseudo-folder comes back with
+ * `id: null`. That distinction is the only thing separating the two in the response. */
+type StorageListEntry = { name?: string; id?: string | null };
+
+const LIST_PAGE = 100;
+
+/** Lists one folder level, paging past the API's per-page cap. */
+async function listStorageFolder(url: string, key: string, bucket: string, folder: string): Promise<StorageListEntry[]> {
+  const entries: StorageListEntry[] = [];
+  for (let offset = 0; ; offset += LIST_PAGE) {
+    const listed = await fetch(`${url}/storage/v1/object/list/${bucket}`, {
+      method: "POST",
+      headers: authHeaders(key, "application/json"),
+      body: JSON.stringify({ prefix: folder, limit: LIST_PAGE, offset }),
+    });
+    if (!listed.ok) {
+      throw new SupabaseStorageError(`Listing ${folder} failed: ${await listed.text()}`, listed.status);
+    }
+    const page = (await listed.json()) as StorageListEntry[];
+    if (!Array.isArray(page) || page.length === 0) break;
+    entries.push(...page);
+    if (page.length < LIST_PAGE) break;
+  }
+  return entries;
+}
+
 /**
  * Removes every object under a prefix. Mirrors Firebase's bucket().deleteFiles({ prefix }), which
  * the erasure path used before the migration — without this, deleting an account under cutover
  * left the member's palm and face photographs readable in the bucket indefinitely, after they had
  * been told their data was destroyed.
  *
- * Storage has no "delete by prefix" call, so this lists and then deletes by name. The list is
- * paged because the API caps a page at 100 and a member can have more reading images than that.
+ * Storage has no "delete by prefix" call, so this lists and then deletes by name. Two things that
+ * an earlier version of this function got wrong, both of which erased nothing while reporting
+ * success:
+ *
+ *   - `object/list` is *folder-scoped*, not recursive. Reading images live two levels under the
+ *     erasure prefix (palm-readings/{memberId}/{readingId}/left.jpg), so a single listing of
+ *     palm-readings/{memberId}/ returns pseudo-folders named after reading ids, not images.
+ *     Handing those folder paths to the delete endpoint removes nothing. Hence the walk below.
+ *   - A page is capped at 100 entries, so each level is paged.
+ *
+ * Classification is deliberately fail-safe: an entry counts as a folder only when the API
+ * explicitly says so with `id: null`. An unrecognised shape is treated as an object and passed to
+ * delete, where a path that is not really an object is a harmless no-op — whereas misreading an
+ * object as a folder would silently leave a photograph behind, which is the failure this exists
+ * to prevent.
  */
 export async function deleteSupabaseStoragePrefix(prefix: string): Promise<number> {
   const { url, key, bucket } = requireConfig();
-  const normalized = normalizeStoragePath(prefix);
-  const names: string[] = [];
+  const root = normalizeStoragePath(prefix);
+  if (!root) throw new Error("Storage prefix is empty.");
 
-  for (let offset = 0; ; offset += 100) {
-    const listed = await fetch(`${url}/storage/v1/object/list/${bucket}`, {
-      method: "POST",
-      headers: authHeaders(key, "application/json"),
-      body: JSON.stringify({ prefix: normalized, limit: 100, offset }),
-    });
-    if (!listed.ok) {
-      throw new SupabaseStorageError(`Listing ${normalized} failed: ${await listed.text()}`, listed.status);
+  const names: string[] = [];
+  const queue: string[] = [root];
+  const walked = new Set<string>();
+  let sawAnything = false;
+
+  while (queue.length > 0) {
+    const folder = queue.shift() as string;
+    if (walked.has(folder)) continue;
+    walked.add(folder);
+
+    for (const entry of await listStorageFolder(url, key, bucket, folder)) {
+      if (!entry?.name) continue;
+      sawAnything = true;
+      const path = `${folder}/${entry.name}`;
+      if (entry.id === null) queue.push(path);
+      else names.push(path);
     }
-    const page = (await listed.json()) as Array<{ name?: string }>;
-    if (!Array.isArray(page) || page.length === 0) break;
-    // list returns names relative to the prefix; the delete call wants full object paths.
-    for (const entry of page) {
-      if (entry?.name) names.push(`${normalized.replace(/\/$/, "")}/${entry.name}`);
-    }
-    if (page.length < 100) break;
   }
 
-  if (names.length === 0) return 0;
+  if (names.length === 0) {
+    // Nothing under the prefix is a legitimate outcome for a member who never uploaded a photo.
+    // Finding entries and yet resolving no deletable object is not: it means the tree was walked
+    // wrongly, and returning 0 there is exactly the "reported success, destroyed nothing" failure
+    // this function was written to close. Fail loudly instead.
+    if (sawAnything) {
+      throw new SupabaseStorageError(`Listing ${root} found entries but resolved no objects to delete.`, 500);
+    }
+    return 0;
+  }
 
   const removed = await fetch(`${url}/storage/v1/object/${bucket}`, {
     method: "DELETE",
@@ -145,7 +194,7 @@ export async function deleteSupabaseStoragePrefix(prefix: string): Promise<numbe
     body: JSON.stringify({ prefixes: names }),
   });
   if (!removed.ok) {
-    throw new SupabaseStorageError(`Deleting ${names.length} object(s) under ${normalized} failed: ${await removed.text()}`, removed.status);
+    throw new SupabaseStorageError(`Deleting ${names.length} object(s) under ${root} failed: ${await removed.text()}`, removed.status);
   }
   return names.length;
 }
