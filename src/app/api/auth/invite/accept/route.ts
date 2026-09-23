@@ -5,11 +5,19 @@ import { recordAudit } from "@/lib/admin-auth";
 import { createAdminInSupabase } from "@/lib/admin-auth-supabase";
 import { findAdminInviteByToken, markAdminInviteAccepted } from "@/lib/admin-invites";
 import { createGoTrueUser } from "@/lib/gotrue-admin";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  // Unauthenticated, and on the happy path it creates a user at the identity provider — the same
+  // exposure the practitioner invite route throttles, at the same 10/hour. The token is 256 bits
+  // so this is not about guessing it; it is about not offering an anonymous caller unlimited
+  // Firestore reads and Auth writes.
+  const throttle = await checkRateLimit("admin-invite-accept", requestIp(request), 10, 3600);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const body = (await request.json()) as { token?: string; name?: string; password?: string };
   const token = body.token ?? "";
   const name = body.name?.trim().slice(0, 120) ?? "";
