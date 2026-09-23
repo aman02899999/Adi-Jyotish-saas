@@ -54,9 +54,11 @@ describe("memberBypassesPayment", () => {
   });
 
   it("denies a member whose document has no paymentBypass field at all", () => {
-    // MemberIdentity types this as boolean, but getCurrentMember copies it straight off the
-    // Firestore document, where the field is optional — so undefined does reach here at runtime
-    // for every member created before the flag existed. The cast reflects that reality.
+    // Both of getCurrentMember's construction sites do produce a real boolean today — the
+    // Firestore path coerces with `=== true`, and the Postgres column is `not null default
+    // false` — so the cast here is not describing current behaviour. It guards the boundary:
+    // Firestore documents are schemaless, this predicate decides whether money changes hands,
+    // and a third construction site that forgot the coercion must still fail closed.
     vi.stubEnv("ALLOW_PAYMENT_BYPASS", "true");
     expect(memberBypassesPayment({ paymentBypass: undefined as never })).toBe(false);
   });
