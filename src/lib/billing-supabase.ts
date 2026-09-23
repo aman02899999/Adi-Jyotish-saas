@@ -434,9 +434,20 @@ export async function claimInvoiceRefundInSupabase(invoiceId: string): Promise<I
       );
       // Nothing changed: either the invoice is gone or it was not paid. Both are
       // decided without a write, so a plain return is safe here.
+      //
+      // Deliberately `client.query` and not getInvoiceByIdInSupabase: that helper goes through
+      // the pool and would check out a SECOND connection while this transaction still holds one.
+      // With max: 10, ten concurrent claims on non-refundable invoices each hold a client and
+      // wait for an eleventh that cannot exist — every one of them blocks until
+      // connectionTimeoutMillis and then fails with a timeout instead of the invoice_not_found
+      // or not_paid the caller is meant to get. It also reads outside this transaction, so it
+      // cannot see the transaction's own state.
       if (!claimed.rows[0]) {
-        const existing = await getInvoiceByIdInSupabase(invoiceId);
-        if (!existing) throw new RollbackSignal("invoice_not_found");
+        const existing = await client.query<InvoiceSqlRow>(
+          `select ${INVOICE_COLUMNS} from public.invoices where id = $1`,
+          [invoiceId],
+        );
+        if (!existing.rows[0]) throw new RollbackSignal("invoice_not_found");
         throw new RollbackSignal("not_paid");
       }
       const invoice = invoiceRowFromSql(claimed.rows[0]);

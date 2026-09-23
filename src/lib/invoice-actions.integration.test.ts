@@ -1,6 +1,7 @@
 import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 import { closePgPool, query } from "@/lib/postgres";
+import { claimInvoiceRefundInSupabase } from "@/lib/billing-supabase";
 import {
   InvoiceConflictError,
   InvoiceNotFoundError,
@@ -287,5 +288,43 @@ describeCutover("checkout and verify reads", () => {
     expect((await getInvoiceById(INVOICE))?.number).toBe("INV-2027-INVACT01");
     expect((await getBookingForInvoice(BOOKING))?.serviceTitle).toBe("Kundli Reading");
     expect(await getBookingForInvoice("no-such-booking")).toBeNull();
+  });
+});
+
+describeCutover("refund claim connection use", () => {
+  /**
+   * The claim runs inside withTransaction, so it is holding one pooled client. An earlier version
+   * looked the invoice up through getInvoiceByIdInSupabase on the not-claimed branch, which goes
+   * through the pool and checks out a SECOND connection while the first is still held.
+   *
+   * The pool is max: 10. Ten concurrent claims on non-refundable invoices each hold a client and
+   * wait for an eleventh that cannot exist, so every one blocks until connectionTimeoutMillis and
+   * then fails with a timeout instead of the not_paid the caller is meant to get. Firing more
+   * than the pool size at once is the only way to see it: a couple of sequential calls return
+   * their connection between attempts and look perfectly healthy.
+   */
+  it("does not exhaust the pool when more claims than connections all miss", async () => {
+    await seed("open");
+
+    const attempts = 24;
+    const results = await Promise.all(
+      Array.from({ length: attempts }, () => claimInvoiceRefundInSupabase(INVOICE)),
+    );
+
+    // Every one must come back with the real reason, not a connection timeout.
+    expect(results).toHaveLength(attempts);
+    for (const result of results) {
+      expect(result).toEqual({ ok: false, code: "not_paid" });
+    }
+  });
+
+  it("still reports a missing invoice under the same pressure", async () => {
+    await cleanup();
+    const results = await Promise.all(
+      Array.from({ length: 24 }, () => claimInvoiceRefundInSupabase(INVOICE)),
+    );
+    for (const result of results) {
+      expect(result).toEqual({ ok: false, code: "invoice_not_found" });
+    }
   });
 });
