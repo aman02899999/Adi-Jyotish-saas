@@ -89,14 +89,19 @@ language switcher and locale-aware SEO (hreflang, sitemap).
 ## Tech stack
 
 - **Framework:** Next.js 16 (App Router, Turbopack) · React 19 · TypeScript
-- **Data:** Firebase (Firestore, Auth, Storage) — no separate database
+- **Data:** Firebase (Firestore, Auth, Storage) — the live store. A Supabase/Postgres migration
+  sits alongside it, **dormant**: every ported read and write branches on `isSupabaseCutoverActive()`,
+  which needs valid credentials *and* `SUPABASE_CUTOVER=true`. With the flag unset the app runs the
+  Firestore paths exactly as before, so the switch is one environment variable rather than a deploy.
+  See `docs/supabase-migration.md`.
 - **Payments:** Razorpay (one-time checkout, subscriptions, webhooks)
 - **Realtime:** Ably (instant chat)
 - **AI:** Google Gemini (readings, recommendations, chat)
 - **i18n:** next-intl (English/Hindi)
 - **Email:** Resend · **Error tracking:** Sentry · **CAPTCHA:** Cloudflare Turnstile
 - **Styling:** a single hand-written `globals.css` (no component CSS framework)
-- **Testing:** Vitest (unit) · Playwright (E2E, against the Firebase emulator) · Lighthouse CI (performance/accessibility budget)
+- **Testing:** Vitest (unit, plus an integration suite that runs against a real Postgres) ·
+  Playwright (E2E, against the Firebase emulator) · Lighthouse CI (performance/accessibility budget)
 
 ## Getting started
 
@@ -136,14 +141,22 @@ seeds demo admin/member/practitioner roles into the emulator for local QA.
 
 ## CI
 
-`.github/workflows/ci.yml` runs three jobs on every push and pull request: `build-and-test`
-(typecheck, lint, unit tests, build), `e2e` (the full Playwright suite against the emulator), and
-`lighthouse` (a non-blocking performance/accessibility/best-practices/SEO budget via Lighthouse CI —
+`.github/workflows/ci.yml` runs four jobs on every push and pull request: `build-and-test`
+(typecheck, lint, unit tests, build), `integration` (the whole suite against a Postgres 16 service
+container with the migration schema applied and `SUPABASE_CUTOVER=true`), `e2e` (the full Playwright
+suite against the emulator), and `lighthouse` (a non-blocking performance/accessibility/best-practices/SEO budget via Lighthouse CI —
 see `lighthouserc.js`). `.github/workflows/cron.yml` runs a synthetic uptime check against the
 site's key routes (`/`, `/pricing`, `/book`, `/astrologers`) — see Automation above for what used
 to also run there; `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/
 `firestore.indexes.json` on changes to either file; `.github/workflows/firestore-backup.yml` runs a
 daily Firestore export to Cloud Storage.
+
+Both data providers are verified on every pull request, and that is deliberate. The integration
+suites self-skip unless `SUPABASE_DB_URL` and `SUPABASE_CUTOVER` are both set, so before the
+`integration` job existed they had never executed anywhere — the suite reported a healthy pass while
+every ported money path went unexercised. They also share one database and one operation under test
+is global by design, so that job runs with `--no-file-parallelism`; running the files concurrently
+lets one suite's fixtures be changed by another mid-test.
 
 ## Deploying to production
 
@@ -168,6 +181,14 @@ Settings → Environment Variables) instead of committed to the repo. At minimum
 - **Site URL**: `NEXT_PUBLIC_SITE_URL=https://astronomers.in`.
 - **Optional**: Sentry (`SENTRY_DSN`, `NEXT_PUBLIC_SENTRY_DSN`, `SENTRY_AUTH_TOKEN`/`ORG`/`PROJECT`) and
   the Meta Pixel (`NEXT_PUBLIC_META_PIXEL_ID`) — the app gracefully runs without either.
+- **Supabase** — not needed until the cutover, and safe to add days ahead of it since nothing routes
+  to Postgres while `SUPABASE_CUTOVER` is unset: `SUPABASE_URL`, `SUPABASE_DB_URL`,
+  `SUPABASE_SERVICE_ROLE_KEY`, `SUPABASE_JWT_SECRET`, and `SUPABASE_CA_CERT`. That last one is
+  Supabase's CA bundle (Project Settings → Database → SSL configuration → Download certificate),
+  PEM with newlines escaped as `\n`. The pool verifies the certificate chain; without the bundle it
+  falls back to Node's default trust store, which may not carry Supabase's issuer — the connection
+  then **fails rather than silently downgrading**, which is deliberate. Read
+  `docs/supabase-migration.md` before setting `SUPABASE_CUTOVER=true` anywhere.
 
 `.github/workflows/firestore-deploy.yml` deploys `firestore.rules`/`firestore.indexes.json`
 automatically on push to `main` — no manual step needed for those.
@@ -192,4 +213,8 @@ scripts/            CI/local helper scripts
 ## Documentation
 
 - `docs/astrology-platform-blueprint.md` — product, marketplace, and architecture blueprint.
+- `docs/supabase-migration.md` — the Firebase → Supabase runbook: schema, copy scripts, the cutover
+  phases, and the silent-fallback traps to read *before* flipping the flag.
+- `docs/branch-audit.md` — what every remote branch contained and why it was merged, left alone, or
+  is safe to delete.
 - `.env.example` — every environment variable, with a comment on what it enables.

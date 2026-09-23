@@ -29,6 +29,39 @@ audit longer.
 | `hotfix-gemini-main` | Its single commit enables `GEMINI_API_KEY` in `apphosting.yaml`. Main deleted that file in 75f825c — "Remove Firebase App Hosting config; Vercel is the real production deploy". Merging it would resurrect dead config for a platform the project left. `GEMINI_API_KEY` belongs in the Vercel project's environment variables instead. Safe to delete. |
 | `daily-posts` | **No merge base with main** — an orphan history holding 7 binary marketing assets (`public/daily/*.jpg`, `reel_today.mp4`, `voice_today.wav`) produced by a scheduled bot. Merging needs `--allow-unrelated-histories` and would put regenerated media into the application repo's history forever. Keep it as a separate asset branch, or move the pipeline to object storage. |
 
+## Deleting the dead branches
+
+Branch deletion is not available from the automation that produced this audit —
+`git push origin --delete` returns **HTTP 403**, and the GitHub app it runs under
+has no `delete_ref` permission. These have to be run by someone with push access,
+or clicked in the repository's branch list.
+
+Safe now — each is fully contained in `main`, so deleting loses nothing:
+
+```bash
+git push origin --delete codespace-effective-meme-97q6xg65455v2pr5g
+git push origin --delete feature/razorpay
+git push origin --delete production/adi-jyotish-hardening-20260901-043549
+git push origin --delete arena/01a07196-adi-jyotish-saas   # identical content to main (landed as #23)
+git push origin --delete arena/01a06ebf-adi-jyotish-saas   # strictly behind main; would remove the privacy feature if merged
+git push origin --delete hotfix-gemini-main                # only commit edits apphosting.yaml, deleted in 75f825c
+```
+
+**Wait for PR #25 to merge** before deleting these two. Their work is in that pull
+request and nowhere else in `main` yet, so deleting them while it is open loses the
+work if the PR is ever closed unmerged:
+
+```bash
+# only after #25 is merged
+git push origin --delete arena/01a079b9-adi-jyotish-saas          # the Supabase migration, 8 commits
+git push origin --delete claude/website-saas-conversion-0agq71    # the Gemini downscaling, cherry-picked (so not an ancestor)
+```
+
+**Do not delete `daily-posts`.** It has no merge base with `main` and holds the only
+copy of seven bot-generated media files (`public/daily/*.jpg`, `reel_today.mp4`,
+`voice_today.wav`) across 19 commits. Deleting it destroys them. If the pipeline that
+writes it is retired, move the assets to object storage first.
+
 ## Follow-ups this audit opened
 
 1. **Rotate the leaked Supabase credentials.** `supabase_keys.env` was committed
