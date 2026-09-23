@@ -6,6 +6,7 @@ import {
   isSupabaseConfigured,
   isSupabaseCutoverActive,
   isSupabaseServiceRolePresent,
+  isSupabaseSessionSecretPresent,
 } from "@/lib/supabase-config";
 
 /**
@@ -24,6 +25,7 @@ const VALID = {
   SUPABASE_URL: "https://qgaklmvkvyljqivvryfs.supabase.co",
   SUPABASE_DB_URL: "postgresql://postgres:secret@db.qgaklmvkvyljqivvryfs.supabase.co:5432/postgres",
   SUPABASE_SERVICE_ROLE_KEY: "service-role-key",
+  SUPABASE_JWT_SECRET: "session-signing-secret",
 };
 
 function setEnv(partial: Record<string, string | undefined>) {
@@ -158,6 +160,43 @@ describe("isSupabaseCutoverActive", () => {
   });
 });
 
+describe("isSupabaseSessionSecretPresent", () => {
+  it("is false when SUPABASE_JWT_SECRET is unset", () => {
+    expect(isSupabaseSessionSecretPresent()).toBe(false);
+  });
+
+  it("is false when it is only whitespace", () => {
+    vi.stubEnv("SUPABASE_JWT_SECRET", "   ");
+    expect(isSupabaseSessionSecretPresent()).toBe(false);
+  });
+
+  it("is true once it is set", () => {
+    vi.stubEnv("SUPABASE_JWT_SECRET", "a-signing-secret");
+    expect(isSupabaseSessionSecretPresent()).toBe(true);
+  });
+
+  it("does not gate the data connection, which the migration scripts need on its own", () => {
+    // Folding it into isSupabaseConfigured() would stop the copy scripts running with a
+    // database URL and nothing else, which is a legitimate configuration.
+    vi.stubEnv("SUPABASE_URL", "https://abcdefgh.supabase.co");
+    vi.stubEnv("SUPABASE_DB_URL", "postgresql://postgres:pw@db.abcdefgh.supabase.co:5432/postgres");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role");
+    expect(isSupabaseSessionSecretPresent()).toBe(false);
+    expect(isSupabaseConfigured()).toBe(true);
+  });
+
+  it("does not silently divert a cutover back to Firebase", () => {
+    // A cutover missing this secret must stay a cutover and be reported as broken, not
+    // quietly keep serving from the old store.
+    vi.stubEnv("SUPABASE_URL", "https://abcdefgh.supabase.co");
+    vi.stubEnv("SUPABASE_DB_URL", "postgresql://postgres:pw@db.abcdefgh.supabase.co:5432/postgres");
+    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role");
+    vi.stubEnv("SUPABASE_CUTOVER", "true");
+    expect(isSupabaseCutoverActive()).toBe(true);
+    expect(describeMissingSupabaseConfig()).toContain("SUPABASE_JWT_SECRET");
+  });
+});
+
 describe("describeMissingSupabaseConfig", () => {
   it("names every missing variable when none are set", () => {
     setEnv({});
@@ -170,6 +209,13 @@ describe("describeMissingSupabaseConfig", () => {
   it("names only what is actually missing", () => {
     setEnv({ ...VALID, SUPABASE_SERVICE_ROLE_KEY: undefined });
     expect(describeMissingSupabaseConfig()).toBe("missing or invalid: SUPABASE_SERVICE_ROLE_KEY");
+  });
+
+  it("names the session signing secret when it is the only thing missing", () => {
+    // It is required by every authenticated request but gates neither isSupabaseConfigured()
+    // nor the cutover, so this line is the only place an operator is told it is absent.
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: undefined });
+    expect(describeMissingSupabaseConfig()).toBe("missing or invalid: SUPABASE_JWT_SECRET");
   });
 
   it("reports all set when configured", () => {

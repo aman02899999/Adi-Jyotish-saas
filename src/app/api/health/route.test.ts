@@ -14,12 +14,14 @@ const SERVICE_ACCOUNT = JSON.stringify({
   private_key: "-----BEGIN PRIVATE KEY-----\nprobe\n-----END PRIVATE KEY-----\n",
 });
 const SERVICE_ROLE_KEY = "sb_secret_probe_value_that_must_never_be_echoed";
+const JWT_SECRET = "sb_jwt_probe_value_that_must_never_be_echoed";
 
 const KEYS = [
   "SUPABASE_CUTOVER",
   "SUPABASE_URL",
   "SUPABASE_DB_URL",
   "SUPABASE_SERVICE_ROLE_KEY",
+  "SUPABASE_JWT_SECRET",
   "FIREBASE_SERVICE_ACCOUNT_KEY",
   "FIREBASE_PROJECT_ID",
   "FIREBASE_STORAGE_BUCKET",
@@ -57,6 +59,7 @@ function supabaseEnvironment() {
   process.env.SUPABASE_URL = "https://probe.supabase.co";
   process.env.SUPABASE_DB_URL = "postgres://postgres:postgres@db.probe.supabase.co:5432/postgres";
   process.env.SUPABASE_SERVICE_ROLE_KEY = SERVICE_ROLE_KEY;
+  process.env.SUPABASE_JWT_SECRET = JWT_SECRET;
 }
 
 async function probe() {
@@ -103,6 +106,37 @@ describe("health probe", () => {
 
     expect(body.status).toBe("degraded");
     expect(body.dependencies.supabase).toBe("degraded");
+  });
+
+  it("reports unavailable when the session signing secret is missing after the cutover", async () => {
+    // SUPABASE_JWT_SECRET verifies every access token and derives the session cookie's
+    // signing key. Without it nobody can sign in or hold a session, so the site is up and
+    // unusable — a stronger signal than the service role key's "writes are broken".
+    // Before this, isSupabaseCutoverActive() never looked at it and the probe reported
+    // "healthy" while every authenticated request 401'd.
+    supabaseEnvironment();
+    delete process.env.SUPABASE_JWT_SECRET;
+    const { body } = await probe();
+
+    expect(body.status).toBe("degraded");
+    expect(body.dependencies.supabase).toBe("unavailable");
+  });
+
+  it("ranks a missing session secret above a missing service role key", async () => {
+    supabaseEnvironment();
+    delete process.env.SUPABASE_JWT_SECRET;
+    delete process.env.SUPABASE_SERVICE_ROLE_KEY;
+    const { body } = await probe();
+
+    // Both are broken; the one that stops every request winning is what an operator needs
+    // to see first.
+    expect(body.dependencies.supabase).toBe("unavailable");
+  });
+
+  it("never echoes the session signing secret", async () => {
+    supabaseEnvironment();
+    const { body } = await probe();
+    expect(JSON.stringify(body)).not.toContain(JWT_SECRET);
   });
 
   it("reports degraded on Firebase when the service account is absent", async () => {

@@ -1,5 +1,5 @@
 import { isFirebaseConfigured, isFirebaseProjectConfigured, isFirebaseServiceAccountPresent, isStorageConfigured } from "@/lib/firestore";
-import { isSupabaseCutoverActive, isSupabaseServiceRolePresent } from "@/lib/supabase-config";
+import { isSupabaseCutoverActive, isSupabaseServiceRolePresent, isSupabaseSessionSecretPresent } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
 
@@ -42,11 +42,19 @@ export async function GET() {
     supabase = "not_required";
   } else {
     // isSupabaseCutoverActive() already requires a well-formed SUPABASE_URL and
-    // SUPABASE_DB_URL, so reaching this branch means both are present — there is no
-    // "unavailable" state to report here. The service role key is the one piece it does
-    // not check, and a missing key leaves the database reachable while every write path
-    // is broken, which is exactly a degraded dependency.
-    supabase = isSupabaseServiceRolePresent() ? "configured" : "degraded";
+    // SUPABASE_DB_URL, so reaching this branch means both are present. Two credentials it
+    // does not check, in order of severity:
+    //
+    // SUPABASE_JWT_SECRET verifies every access token and derives the session cookie's
+    // signing key, so without it nobody can sign in or hold a session and every
+    // authenticated request fails closed — the site is up and unusable, which is
+    // "unavailable", not "degraded". Reporting "healthy" here is what let a cutover look
+    // fine while 401ing every request.
+    //
+    // The service_role key leaves the database reachable while write paths break, which
+    // is a genuine degradation rather than an outage.
+    if (!isSupabaseSessionSecretPresent()) supabase = "unavailable";
+    else supabase = isSupabaseServiceRolePresent() ? "configured" : "degraded";
   }
 
   // Supabase Storage needs no bucket variable to be usable (it falls back to the default

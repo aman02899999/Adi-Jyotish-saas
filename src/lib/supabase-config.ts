@@ -103,6 +103,7 @@ export function describeMissingSupabaseConfig(): string {
   if (!normalizeUrl(process.env.SUPABASE_URL ?? "")) missing.push("SUPABASE_URL");
   if (!normalizeConnectionString(process.env.SUPABASE_DB_URL ?? "")) missing.push("SUPABASE_DB_URL");
   if (!isNonEmpty(process.env.SUPABASE_SERVICE_ROLE_KEY)) missing.push("SUPABASE_SERVICE_ROLE_KEY");
+  if (!isNonEmpty(process.env.SUPABASE_JWT_SECRET)) missing.push("SUPABASE_JWT_SECRET");
   if (missing.length === 0) return "all Supabase variables are set";
   return `missing or invalid: ${missing.join(", ")}`;
 }
@@ -110,4 +111,24 @@ export function describeMissingSupabaseConfig(): string {
 /** True when the service_role key is absent — Auth admin calls will fail. */
 export function isSupabaseServiceRolePresent(): boolean {
   return isNonEmpty(process.env.SUPABASE_SERVICE_ROLE_KEY);
+}
+
+/**
+ * True when SUPABASE_JWT_SECRET is set.
+ *
+ * Deliberately not folded into isSupabaseConfigured(). That gate describes the *data*
+ * connection, and the migration scripts legitimately run with a database URL and nothing
+ * else. This secret is what the request path needs: verifySupabaseAccessToken uses it to
+ * check every access token, and app-session.ts derives the session cookie's signing key
+ * from it, so without it no member, practitioner or administrator can sign in or hold a
+ * session — every authenticated request fails closed.
+ *
+ * Folding it into the cutover gate instead would make a cutover without it silently keep
+ * serving from Firebase, which is the quiet kind of failure this codebase keeps paying
+ * for. So the routing decision is left alone and the gap is reported loudly: named by
+ * describeMissingSupabaseConfig() and surfaced as an unavailable dependency by
+ * /api/health.
+ */
+export function isSupabaseSessionSecretPresent(): boolean {
+  return isNonEmpty(process.env.SUPABASE_JWT_SECRET);
 }
