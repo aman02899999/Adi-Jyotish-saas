@@ -1,6 +1,7 @@
 import "server-only";
 
 import { createHmac, hkdfSync, timingSafeEqual } from "node:crypto";
+import { SESSION_SECRET_MIN_LENGTH } from "@/lib/supabase-config";
 
 /**
  * The app's own session cookie.
@@ -61,7 +62,7 @@ export type AppSessionSubject = {
 
 function sessionKey(): Buffer {
   const secret = process.env.SUPABASE_JWT_SECRET;
-  if (!secret || secret.trim().length < 16) {
+  if (!secret || secret.trim().length < SESSION_SECRET_MIN_LENGTH) {
     // Refuse rather than fall back to a default. A weak or predictable signing
     // key turns every session cookie into a forgery, and a silent fallback would
     // hide that behind a green health check.

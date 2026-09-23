@@ -122,6 +122,15 @@ describe("health probe", () => {
     expect(body.dependencies.supabase).toBe("unavailable");
   });
 
+  it("reports unavailable for a session secret too short to sign with", async () => {
+    // Present but unusable is the same outage as absent: app-session.ts refuses to derive a key
+    // from it, so nobody can hold a session.
+    supabaseEnvironment();
+    process.env.SUPABASE_JWT_SECRET = "too-short";
+    const { body } = await probe();
+    expect(body.dependencies.supabase).toBe("unavailable");
+  });
+
   it("ranks a missing session secret above a missing service role key", async () => {
     supabaseEnvironment();
     delete process.env.SUPABASE_JWT_SECRET;

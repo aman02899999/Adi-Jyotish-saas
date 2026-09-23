@@ -7,6 +7,7 @@ import {
   isSupabaseCutoverActive,
   isSupabaseServiceRolePresent,
   isSupabaseSessionSecretPresent,
+  SESSION_SECRET_MIN_LENGTH,
 } from "@/lib/supabase-config";
 
 /**
@@ -162,36 +163,54 @@ describe("isSupabaseCutoverActive", () => {
 
 describe("isSupabaseSessionSecretPresent", () => {
   it("is false when SUPABASE_JWT_SECRET is unset", () => {
+    // setEnv rather than reading ambient state: this must assert on an environment the test
+    // controls, not on one that happens to lack the variable.
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: undefined });
     expect(isSupabaseSessionSecretPresent()).toBe(false);
   });
 
   it("is false when it is only whitespace", () => {
-    vi.stubEnv("SUPABASE_JWT_SECRET", "   ");
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: "   " });
+    expect(isSupabaseSessionSecretPresent()).toBe(false);
+  });
+
+  it("is false for a secret too short for app-session.ts to accept", () => {
+    // sessionKey() refuses anything under the floor rather than derive a weak signing key, so a
+    // short secret breaks every request exactly like a missing one. Reporting it as configured
+    // would put a green probe over a site nobody can sign in to — in a narrower form, the same
+    // failure this check exists to prevent.
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: "x".repeat(SESSION_SECRET_MIN_LENGTH - 1) });
+    expect(isSupabaseSessionSecretPresent()).toBe(false);
+    expect(describeMissingSupabaseConfig()).toContain("SUPABASE_JWT_SECRET");
+  });
+
+  it("is true at exactly the floor", () => {
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: "x".repeat(SESSION_SECRET_MIN_LENGTH) });
+    expect(isSupabaseSessionSecretPresent()).toBe(true);
+  });
+
+  it("does not count surrounding whitespace toward the floor", () => {
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: `  ${"x".repeat(SESSION_SECRET_MIN_LENGTH - 2)}  ` });
     expect(isSupabaseSessionSecretPresent()).toBe(false);
   });
 
   it("is true once it is set", () => {
-    vi.stubEnv("SUPABASE_JWT_SECRET", "a-signing-secret");
+    setEnv(VALID);
     expect(isSupabaseSessionSecretPresent()).toBe(true);
   });
 
   it("does not gate the data connection, which the migration scripts need on its own", () => {
     // Folding it into isSupabaseConfigured() would stop the copy scripts running with a
     // database URL and nothing else, which is a legitimate configuration.
-    vi.stubEnv("SUPABASE_URL", "https://abcdefgh.supabase.co");
-    vi.stubEnv("SUPABASE_DB_URL", "postgresql://postgres:pw@db.abcdefgh.supabase.co:5432/postgres");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role");
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: undefined });
     expect(isSupabaseSessionSecretPresent()).toBe(false);
     expect(isSupabaseConfigured()).toBe(true);
   });
 
   it("does not silently divert a cutover back to Firebase", () => {
-    // A cutover missing this secret must stay a cutover and be reported as broken, not
-    // quietly keep serving from the old store.
-    vi.stubEnv("SUPABASE_URL", "https://abcdefgh.supabase.co");
-    vi.stubEnv("SUPABASE_DB_URL", "postgresql://postgres:pw@db.abcdefgh.supabase.co:5432/postgres");
-    vi.stubEnv("SUPABASE_SERVICE_ROLE_KEY", "service-role");
-    vi.stubEnv("SUPABASE_CUTOVER", "true");
+    // A cutover missing this secret must stay a cutover and be reported as broken, not quietly
+    // keep serving from the old store.
+    setEnv({ ...VALID, SUPABASE_JWT_SECRET: undefined, SUPABASE_CUTOVER: "true" });
     expect(isSupabaseCutoverActive()).toBe(true);
     expect(describeMissingSupabaseConfig()).toContain("SUPABASE_JWT_SECRET");
   });

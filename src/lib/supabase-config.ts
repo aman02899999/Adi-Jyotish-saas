@@ -35,6 +35,14 @@ function isNonEmpty(value: string | undefined): value is string {
   return typeof value === "string" && value.trim() !== "";
 }
 
+/** Mirrors the floor sessionKey() enforces in app-session.ts. Kept in step by the test that
+ * asserts a secret one character under it is reported missing. */
+export const SESSION_SECRET_MIN_LENGTH = 16;
+
+function usableSessionSecret(value: string | undefined): value is string {
+  return typeof value === "string" && value.trim().length >= SESSION_SECRET_MIN_LENGTH;
+}
+
 /**
  * Validates the project URL without contacting it. Supabase's Auth admin API is
  * reached at `${url}/auth/v1/...`, so a URL with a trailing slash would produce a
@@ -103,7 +111,7 @@ export function describeMissingSupabaseConfig(): string {
   if (!normalizeUrl(process.env.SUPABASE_URL ?? "")) missing.push("SUPABASE_URL");
   if (!normalizeConnectionString(process.env.SUPABASE_DB_URL ?? "")) missing.push("SUPABASE_DB_URL");
   if (!isNonEmpty(process.env.SUPABASE_SERVICE_ROLE_KEY)) missing.push("SUPABASE_SERVICE_ROLE_KEY");
-  if (!isNonEmpty(process.env.SUPABASE_JWT_SECRET)) missing.push("SUPABASE_JWT_SECRET");
+  if (!usableSessionSecret(process.env.SUPABASE_JWT_SECRET)) missing.push("SUPABASE_JWT_SECRET");
   if (missing.length === 0) return "all Supabase variables are set";
   return `missing or invalid: ${missing.join(", ")}`;
 }
@@ -128,7 +136,12 @@ export function isSupabaseServiceRolePresent(): boolean {
  * for. So the routing decision is left alone and the gap is reported loudly: named by
  * describeMissingSupabaseConfig() and surfaced as an unavailable dependency by
  * /api/health.
+ *
+ * "Present" means what app-session.ts will actually accept, not merely non-empty. sessionKey()
+ * refuses anything under SESSION_SECRET_MIN_LENGTH rather than derive a weak signing key, so a
+ * short secret fails every request exactly like a missing one — reporting it as configured would
+ * reintroduce the same green-probe-over-a-broken-site failure in a narrower form.
  */
 export function isSupabaseSessionSecretPresent(): boolean {
-  return isNonEmpty(process.env.SUPABASE_JWT_SECRET);
+  return usableSessionSecret(process.env.SUPABASE_JWT_SECRET);
 }

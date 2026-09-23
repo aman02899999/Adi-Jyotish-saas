@@ -4,6 +4,13 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getResolvedPredictionCountsInSupabase } from "@/lib/practitioners-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  insertPredictionInSupabase,
+  listMemberPredictionsInSupabase,
+  PredictionConflict,
+  resolvePredictionInSupabase,
+  type PredictionRow,
+} from "@/lib/predictions-supabase";
 
 /** Radical transparency as a differentiator: no other platform logs what a practitioner actually
  * predicted and later verifies whether it came true. A member logs a prediction against a completed
@@ -32,6 +39,30 @@ export type Prediction = {
   createdAt: Date;
   resolvedAt: Date | null;
 };
+
+/** Postgres row -> the shape the rest of the app already consumes. */
+function fromRow(row: PredictionRow): Prediction {
+  return { ...row, status: row.status as PredictionStatus };
+}
+
+/**
+ * Turns a database-layer conflict into the same PredictionError the Firestore path raises, so
+ * callers and the route see one behaviour whichever store is underneath. Anything else is a real
+ * fault and is rethrown untouched rather than being flattened into a friendly message.
+ */
+function translatePredictionConflict(error: unknown): unknown {
+  if (!(error instanceof PredictionConflict)) return error;
+  switch (error.reason) {
+    case "cap":
+      return new PredictionError(`You can log up to ${MAX_PREDICTIONS_PER_BOOKING} predictions per consultation.`);
+    case "already_resolved":
+      return new PredictionError("This prediction has already been resolved.");
+    case "not_yet":
+      return new PredictionError("This prediction can only be marked resolved once its expected-by date has passed.");
+    case "missing":
+      return new PredictionError("Prediction not found.");
+  }
+}
 
 function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): Prediction {
   const data = doc.data()!;
@@ -71,6 +102,17 @@ export async function createPrediction({ memberId, memberName, practitionerId, p
   // booking could be used to log an unlimited number of predictions and fabricate a practitioner's
   // public accuracy stat. Wrapped in a transaction so two concurrent submissions against the same
   // booking can't both read a count under the cap and both write, exceeding it.
+  if (isSupabaseCutoverActive()) {
+    try {
+      return fromRow(await insertPredictionInSupabase({
+        memberId, memberName, practitionerId, practitionerName, bookingId, serviceTitle,
+        text: cleanText, expectedByDate, maxPerBooking: MAX_PREDICTIONS_PER_BOOKING,
+      }));
+    } catch (error) {
+      throw translatePredictionConflict(error);
+    }
+  }
+
   const ref = db.collection("predictions").doc();
   await db.runTransaction(async (tx) => {
     const existing = await tx.get(db.collection("predictions").where("bookingId", "==", bookingId).count());
@@ -96,6 +138,9 @@ export async function createPrediction({ memberId, memberName, practitionerId, p
 }
 
 export async function listMemberPredictions(memberId: string): Promise<Prediction[]> {
+  if (isSupabaseCutoverActive()) {
+    return (await listMemberPredictionsInSupabase(memberId)).map(fromRow);
+  }
   const snap = await withIndexFallback(
     () => db.collection("predictions").where("memberId", "==", memberId).orderBy("createdAt", "desc").get(),
     { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
@@ -104,6 +149,16 @@ export async function listMemberPredictions(memberId: string): Promise<Predictio
 }
 
 export async function resolvePrediction({ memberId, predictionId, status }: { memberId: string; predictionId: string; status: Exclude<PredictionStatus, "pending"> }): Promise<Prediction> {
+  if (isSupabaseCutoverActive()) {
+    try {
+      return fromRow(await resolvePredictionInSupabase({
+        memberId, predictionId, status, today: new Date().toISOString().slice(0, 10),
+      }));
+    } catch (error) {
+      throw translatePredictionConflict(error);
+    }
+  }
+
   const ref = db.collection("predictions").doc(predictionId);
   // Transactional so two concurrent resolve calls on the same prediction can't both pass the
   // "still pending" check and race to write different outcomes.

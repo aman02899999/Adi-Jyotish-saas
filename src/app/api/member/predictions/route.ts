@@ -3,6 +3,8 @@ import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { createPrediction, listMemberPredictions, PredictionError } from "@/lib/predictions";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { getBookingByIdInSupabase } from "@/lib/bookings-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
 
@@ -23,11 +25,25 @@ export async function POST(request: Request) {
   const bookingId = body.bookingId?.trim();
   if (!bookingId) return Response.json({ error: "Please choose which consultation this came from." }, { status: 400 });
 
-  const bookingSnap = await db.collection("bookings").doc(bookingId).get();
-  if (!bookingSnap.exists) return Response.json({ error: "Only completed practitioner consultations can have predictions logged." }, { status: 403 });
-  const booking = bookingFromDoc(bookingSnap);
+  // The eligibility check has to read the booking from whichever store holds it. Reading
+  // Firestore unconditionally (as this did) means that under cutover no booking is ever found,
+  // so every legitimate prediction is refused with a 403 and the feature is simply dead.
+  const booking = isSupabaseCutoverActive()
+    ? await getBookingByIdInSupabase(bookingId)
+    : await (async () => {
+        const snap = await db.collection("bookings").doc(bookingId).get();
+        return snap.exists ? bookingFromDoc(snap) : null;
+      })();
+
+  // One message for "no such booking", "not yours" and "not completed": distinguishing them
+  // would let a caller probe which booking references exist.
+  const ineligible = Response.json(
+    { error: "Only completed practitioner consultations can have predictions logged." },
+    { status: 403 },
+  );
+  if (!booking) return ineligible;
   if (booking.clientEmail !== member.email || booking.status !== "completed" || !booking.practitionerId) {
-    return Response.json({ error: "Only completed practitioner consultations can have predictions logged." }, { status: 403 });
+    return ineligible;
   }
 
   try {
