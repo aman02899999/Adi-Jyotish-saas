@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AggregateField, FieldValue } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { publishChatEvent } from "@/lib/ably";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
@@ -9,11 +9,11 @@ import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
 import { getPractitionerChatReply, isGeminiConfigured } from "@/lib/gemini";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { countGenuinePublishedReviews } from "@/lib/synthetic-reviews";
 import {
   addChatMessageInSupabase,
   type ChatSessionRow,
   claimChatLockInSupabase,
-  countPublishedPractitionerReviewsFromSupabase,
   createChatSessionInSupabase,
   endChatSessionInSupabase,
   findActiveChatSessionForMemberFromSupabase,
@@ -370,12 +370,10 @@ export async function startChatSession(memberId: string, practitionerId: string)
     const discountPercent = await getMemberDiscountPercent(memberId);
 
     // Each of these is only needed by one pricing model, so only fetch the one in play.
-    const reviewCount = practitioner.isAiPowered
-      ? 0
-      : cutover
-        ? await countPublishedPractitionerReviewsFromSupabase(practitionerId)
-        : (await db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published")
-            .aggregate({ count: AggregateField.count() }).get()).data().count;
+    // Sets the new-practitioner discount, so it counts genuine reviews only — a synthetic batch of
+    // 30 used to clear the 25-review threshold on its own and bill members the full rate for
+    // someone with no real track record. See review-provenance.ts.
+    const reviewCount = practitioner.isAiPowered ? 0 : await countGenuinePublishedReviews(practitionerId);
     const marketplaceSessionPrice = practitioner.isAiPowered
       ? ((await getMarketplacePractitioners()).find((person) => person.id === practitionerId)?.sessionPrice ?? null)
       : null;

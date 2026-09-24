@@ -1,6 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
+import { expireReviewDerivedCaches } from "@/lib/synthetic-reviews";
 
 export const dynamic = "force-dynamic";
 const allowedStatuses = new Set(["published", "hidden"]);
@@ -18,6 +19,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const snap = await ref.get();
   if (!snap.exists) return Response.json({ error: "Review not found." }, { status: 404 });
   await ref.update({ status: body.status, updatedAt: FieldValue.serverTimestamp() });
+  expireReviewDerivedCaches();
   const updatedSnap = await ref.get();
   const updated = { id: updatedSnap.id, ...updatedSnap.data() };
   await recordAudit(admin, body.status === "hidden" ? "review.hidden" : "review.published", "practitioner_review", id, { practitionerId: (updatedSnap.data() as { practitionerId: string }).practitionerId });
@@ -35,6 +37,7 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   if (!snap.exists) return Response.json({ error: "Review not found." }, { status: 404 });
   const practitionerId = (snap.data() as { practitionerId: string }).practitionerId;
   await ref.delete();
+  expireReviewDerivedCaches();
   await recordAudit(admin, "review.deleted", "practitioner_review", id, { practitionerId });
   return Response.json({ ok: true, id });
 }

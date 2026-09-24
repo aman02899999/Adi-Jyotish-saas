@@ -32,6 +32,7 @@ import {
 } from "@/lib/practitioner-portal-supabase";
 import { getPublishedReviewsForPractitionerInSupabase } from "@/lib/practitioners-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { isSyntheticReview } from "@/lib/review-provenance";
 import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
 import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
 import { buildVarshphalChart, renderVarshphalReport, VarshphalError } from "@/lib/varshphal";
@@ -147,11 +148,11 @@ export async function getPractitionerStats(practitionerId: string) {
     if ((row.status === "pending" || row.status === "confirmed") && row.scheduledAt.getTime() >= now) upcomingCount += 1;
   }
 
-  let ratingSum = 0;
-  for (const doc of reviewsSnap.docs) {
-    ratingSum += (doc.data().rating as number) ?? 0;
-  }
-  const reviewCount = reviewsSnap.size;
+  // A practitioner's own dashboard is where they judge how clients rate them; synthetic reviews
+  // would tell them something no client said. See review-provenance.ts.
+  const genuine = reviewsSnap.docs.filter((doc) => !isSyntheticReview(doc.data()));
+  const ratingSum = genuine.reduce((sum, doc) => sum + ((doc.data().rating as number) ?? 0), 0);
+  const reviewCount = genuine.length;
   const avgRating = reviewCount ? ratingSum / reviewCount : 0;
 
   const availableBalance = Math.max(0, totalEarned - paidOut - pendingOut);
@@ -204,7 +205,7 @@ export async function getPractitionerReviews(practitionerId: string): Promise<Pr
     .where("status", "==", "published")
     .orderBy("createdAt", "desc")
     .get();
-  return snap.docs.map((doc) => {
+  return snap.docs.filter((doc) => !isSyntheticReview(doc.data())).map((doc) => {
     const data = doc.data() as { reviewerName: string; rating: number; clarity: number; empathy: number; usefulness: number; body: string; createdAt: FirebaseFirestore.Timestamp };
     return { id: doc.id, reviewerName: data.reviewerName, rating: data.rating, clarity: data.clarity, empathy: data.empathy, usefulness: data.usefulness, body: data.body, createdAt: data.createdAt?.toDate() ?? new Date() };
   });

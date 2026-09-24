@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
+import { GENUINE_REVIEW_SQL } from "@/lib/review-provenance";
 import { query, queryModel, queryModels, withTransaction } from "@/lib/postgres";
 import type { BookingRow } from "@/lib/bookings-supabase";
 
@@ -68,7 +69,7 @@ async function reviewStatsFor(practitionerId: string): Promise<{ reviewCount: nu
   const row = await queryModel<{ reviewCount: number; avgRating: number }>(
     `select count(*)::int as review_count, coalesce(avg(rating), 0) as avg_rating
        from public.practitioner_reviews
-      where practitioner_id = $1 and status = 'published'`,
+      where practitioner_id = $1 and status = 'published' and ${GENUINE_REVIEW_SQL}`,
     [practitionerId],
     ["reviewCount", "avgRating"],
   );

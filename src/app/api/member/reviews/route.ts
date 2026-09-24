@@ -6,6 +6,8 @@ import { bookingFromDoc } from "@/app/api/bookings/route";
 import { scanForContactInfo } from "@/lib/content-moderation";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
+import { MEMBER_REVIEW_SOURCE } from "@/lib/review-provenance";
+import { expireReviewDerivedCaches } from "@/lib/synthetic-reviews";
 
 export async function POST(request:Request){
   const member=await getCurrentMember();
@@ -36,6 +38,8 @@ export async function POST(request:Request){
     usefulness:scores[3],
     body:text,
     status:"published",
+    // Explicit provenance from here on; see review-provenance.ts.
+    source:MEMBER_REVIEW_SOURCE,
   };
   // Doc id = bookingId (one review per booking), so create() is an atomic fail-if-exists check —
   // a plain query-then-add here would let two concurrent submits for the same booking both pass
@@ -46,6 +50,7 @@ export async function POST(request:Request){
   } catch {
     return Response.json({error:"This consultation has already been reviewed."},{status:409});
   }
+  expireReviewDerivedCaches();
 
   const contactFlag = scanForContactInfo(text);
   if (contactFlag) {

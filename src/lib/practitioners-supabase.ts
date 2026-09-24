@@ -1,5 +1,6 @@
 import "server-only";
 
+import { GENUINE_REVIEW_SQL } from "@/lib/review-provenance";
 import { query, queryModel, queryModels } from "@/lib/postgres";
 
 /**
@@ -225,6 +226,7 @@ export type ReviewRow = {
   usefulness: number;
   body: string;
   status: string;
+  source: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -232,14 +234,14 @@ export type ReviewRow = {
 const REVIEW_SELECT = `
   select id, practitioner_id, member_id, booking_id, reviewer_name,
          rating::int as rating, clarity::int as clarity, empathy::int as empathy,
-         usefulness::int as usefulness, body, status, created_at, updated_at
+         usefulness::int as usefulness, body, status, source, created_at, updated_at
     from public.practitioner_reviews`;
 
 const REVIEW_NUMERIC_COLUMNS = ["rating", "clarity", "empathy", "usefulness"] as const;
 
 export async function getPublishedReviewsInSupabase(): Promise<ReviewRow[]> {
   return queryModels<ReviewRow>(
-    `${REVIEW_SELECT} where status = 'published' order by created_at desc`,
+    `${REVIEW_SELECT} where status = 'published' and ${GENUINE_REVIEW_SQL} order by created_at desc`,
     [],
     REVIEW_NUMERIC_COLUMNS,
   );
@@ -247,7 +249,7 @@ export async function getPublishedReviewsInSupabase(): Promise<ReviewRow[]> {
 
 export async function getPublishedReviewsForPractitionerInSupabase(practitionerId: string): Promise<ReviewRow[]> {
   return queryModels<ReviewRow>(
-    `${REVIEW_SELECT} where practitioner_id = $1 and status = 'published' order by created_at desc`,
+    `${REVIEW_SELECT} where practitioner_id = $1 and status = 'published' and ${GENUINE_REVIEW_SQL} order by created_at desc`,
     [practitionerId],
     REVIEW_NUMERIC_COLUMNS,
   );
