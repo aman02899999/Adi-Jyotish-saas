@@ -1,6 +1,6 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
-import { getAllServices, toSlug } from "@/lib/services";
+import { getAllServices, getPublishedServices, toSlug } from "@/lib/services";
 import { createServiceInSupabase } from "@/lib/services-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
@@ -19,7 +19,9 @@ type ServicePayload = {
 };
 
 export async function GET() {
-  const rows = await getAllServices();
+  // Inactive services are drafts and retired offerings, with their prices: catalogue admins only.
+  const admin = await getCurrentAdmin();
+  const rows = admin && hasAdminPermission(admin, "services") ? await getAllServices() : await getPublishedServices();
   return Response.json(rows);
 }
 

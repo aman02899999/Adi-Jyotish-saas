@@ -15,6 +15,8 @@ import {
   updateBookingInSupabase,
 } from "@/lib/bookings-supabase";
 import type { BookingRecord } from "@/lib/booking-creation";
+import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
+import { createNotification } from "@/lib/notifications";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +29,22 @@ type BookingUpdate = {
   paymentStatus?: string;
   scheduledAt?: string;
   notes?: string;
+  practitionerId?: string;
 };
+
+/** A practitioner a booking can be moved to: exists, active, and a person. */
+async function reassignableTarget(practitionerId: string): Promise<{ id: string; name: string } | { error: string }> {
+  let target: { id: string; name: string; active: boolean; isAiPowered?: boolean } | null;
+  if (isSupabaseCutoverActive()) {
+    target = await getPractitionerAvailabilityInSupabase(practitionerId);
+  } else {
+    const snap = await db.collection("practitioners").doc(practitionerId).get();
+    target = snap.exists ? { id: snap.id, ...(snap.data() as { name: string; active: boolean; isAiPowered?: boolean }) } : null;
+  }
+  if (!target || !target.active) return { error: "That astrologer is not available." };
+  if (target.isAiPowered) return { error: `${target.name} is an AI astrologer and cannot take a scheduled consultation.` };
+  return { id: target.id, name: target.name };
+}
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const admin = await getCurrentAdmin();
@@ -56,10 +73,22 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   }
   if (!existing) return Response.json({ error: "Booking not found." }, { status: 404 });
 
-  if (scheduledAt && existing.practitionerId) {
+  // Reassignment exists chiefly for bookings sold with an AI persona before those stopped being
+  // bookable: the member paid for a person, and moving them to one keeps the payment and invoice.
+  const requestedPractitionerId = body.practitionerId?.trim();
+  let reassignTo: { id: string; name: string } | undefined;
+  if (requestedPractitionerId && requestedPractitionerId !== existing.practitionerId) {
+    const target = await reassignableTarget(requestedPractitionerId);
+    if ("error" in target) return Response.json({ error: target.error }, { status: 409 });
+    reassignTo = target;
+  }
+
+  const practitionerId = reassignTo?.id ?? existing.practitionerId;
+  const startsAt = scheduledAt ?? existing.scheduledAt;
+  if ((scheduledAt || reassignTo) && practitionerId) {
     const settings = await getStudioSettings();
-    const available = await validateAvailableSlot({ date: dateInTimeZone(scheduledAt, settings.timezone), duration: existing.serviceDuration, practitionerId: existing.practitionerId, startsAt: scheduledAt, excludeBookingId: existing.id });
-    if (!available) return Response.json({ error: "That practitioner is unavailable at the new time." }, { status: 409 });
+    const available = await validateAvailableSlot({ date: dateInTimeZone(startsAt, settings.timezone), duration: existing.serviceDuration, practitionerId, startsAt, excludeBookingId: existing.id });
+    if (!available) return Response.json({ error: reassignTo ? `${reassignTo.name} is not available at that time.` : "That practitioner is unavailable at the new time." }, { status: 409 });
   }
 
   const notes = typeof body.notes === "string" ? body.notes.trim().slice(0, 1500) || null : undefined;
@@ -75,6 +104,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         ...(body.status ? { status: body.status } : {}),
         ...(scheduledAt ? { scheduledAt } : {}),
         ...(notes !== undefined ? { notes } : {}),
+        ...(reassignTo ? { practitioner: reassignTo } : {}),
       });
       if (!result) return Response.json({ error: "Booking not found." }, { status: 404 });
       updated = result;
@@ -89,17 +119,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     const ref = db.collection("bookings").doc(id);
     try {
       updated = await db.runTransaction(async (tx) => {
-        if (scheduledAt && existing.practitionerId) {
-          const endsAt = new Date(scheduledAt.getTime() + existing.serviceDuration * 60000);
+        if ((scheduledAt || reassignTo) && practitionerId) {
+          const endsAt = new Date(startsAt.getTime() + existing.serviceDuration * 60000);
           const candidatesSnap = await tx.get(
-            db.collection("bookings").where("practitionerId", "==", existing.practitionerId).where("status", "!=", "cancelled").where("scheduledAt", "<", endsAt),
+            db.collection("bookings").where("practitionerId", "==", practitionerId).where("status", "!=", "cancelled").where("scheduledAt", "<", endsAt),
           );
           const conflict = candidatesSnap.docs.some((doc) => {
             if (doc.id === existing.id) return false;
             const data = doc.data();
             const bookedStart = (data.scheduledAt as FirebaseFirestore.Timestamp).toDate();
             const bookedEnd = new Date(bookedStart.getTime() + (data.serviceDuration as number) * 60000);
-            return bookedEnd > scheduledAt;
+            return bookedEnd > startsAt;
           });
           if (conflict) throw new ScheduleConflictError();
         }
@@ -107,12 +137,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
         if (body.status) patch.status = body.status;
         if (scheduledAt) patch.scheduledAt = scheduledAt;
         if (typeof body.notes === "string") patch.notes = body.notes.trim().slice(0, 1500) || null;
+        if (reassignTo) {
+          patch.practitionerId = reassignTo.id;
+          patch.practitionerName = reassignTo.name;
+        }
         tx.update(ref, patch);
         return {
           ...existing,
           ...(body.status ? { status: body.status } : {}),
           ...(scheduledAt ? { scheduledAt } : {}),
           ...(typeof body.notes === "string" ? { notes: body.notes.trim().slice(0, 1500) || null } : {}),
+          ...(reassignTo ? { practitionerId: reassignTo.id, practitionerName: reassignTo.name } : {}),
           updatedAt: new Date(),
         };
       });
@@ -129,9 +164,21 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     status: updated.status,
     paymentStatus: updated.paymentStatus,
     rescheduled: Boolean(body.scheduledAt),
+    ...(reassignTo ? { reassignedFrom: existing.practitionerName, reassignedTo: reassignTo.name } : {}),
   });
-  if (body.status || body.paymentStatus || body.scheduledAt) {
+  if (reassignTo) {
+    createNotification({
+      recipientType: "practitioner",
+      recipientId: reassignTo.id,
+      type: "booking.created",
+      title: `Booking assigned to you · ${updated.serviceTitle}`,
+      body: `${updated.clientName} on ${updated.scheduledAt.toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" })}.`,
+      link: "/practitioner/bookings",
+    }).catch(() => {});
+  }
+  if (body.status || body.paymentStatus || body.scheduledAt || reassignTo) {
     const changes = [
+      reassignTo ? `Your astrologer is now ${reassignTo.name}.` : "",
       body.status ? `Booking status: ${updated.status}.` : "",
       body.paymentStatus ? `Payment status: ${updated.paymentStatus}.` : "",
       body.scheduledAt ? `New appointment: ${updated.scheduledAt.toLocaleString("en", { dateStyle: "long", timeStyle: "short", timeZone: "Asia/Kolkata" })}.` : "",

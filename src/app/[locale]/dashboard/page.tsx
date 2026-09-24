@@ -98,7 +98,7 @@ export default async function DashboardPage() {
 
       <div className="cosmic-grid">
         <article className="glass-card kundli-card">
-          <div className="card-heading"><div><p>Birth chart <span className="mini-tag">Lahiri</span></p><h2>Kundli</h2></div><button aria-label="More options"><MoreHorizontal size={19} /></button></div>
+          <div className="card-heading"><div><p>Birth chart <span className="mini-tag">Lahiri</span></p><h2>Kundli</h2></div><Link className="card-heading__action" href="/dashboard/kundli" aria-label="Open full Kundli" title="Open full Kundli"><MoreHorizontal size={19} /></Link></div>
           {kundli ? (
             <>
               <div className="kundli-art">

@@ -265,6 +265,8 @@ export type BookingPatch = {
   scheduledAt?: Date;
   /** `undefined` leaves notes alone; `null` clears them. */
   notes?: string | null;
+  /** Moves the booking to another practitioner. The caller has checked they can take it. */
+  practitioner?: { id: string; name: string };
 };
 
 /**
@@ -281,20 +283,20 @@ export type BookingPatch = {
  */
 export async function updateBookingInSupabase(id: string, patch: BookingPatch): Promise<BookingRow | null> {
   return withTransaction(async (client) => {
-    const existing = await client.query<{ practitioner_id: string; service_duration: number }>(
-      `select practitioner_id, service_duration from public.bookings where id = $1`,
+    const existing = await client.query<{ practitioner_id: string; service_duration: number; scheduled_at: Date }>(
+      `select practitioner_id, service_duration, scheduled_at from public.bookings where id = $1`,
       [id],
     );
     const row = existing.rows[0];
     if (!row) return null;
-    // Nothing ever reassigns a booking to another practitioner, so reading this
-    // before the lock is safe.
-    const practitionerId = row.practitioner_id;
+    // The slot is checked against whoever will hold the booking, at the time it will be held.
+    const practitionerId = patch.practitioner?.id ?? row.practitioner_id;
+    const startsAt = patch.scheduledAt ?? new Date(row.scheduled_at);
     const duration = Number(row.service_duration ?? 0);
 
-    if (patch.scheduledAt) {
+    if (patch.scheduledAt || (patch.practitioner && patch.practitioner.id !== row.practitioner_id)) {
       await client.query(`select pg_advisory_xact_lock(hashtextextended($1, 0))`, [`booking:${practitionerId}`]);
-      const endsAt = new Date(patch.scheduledAt.getTime() + duration * 60000);
+      const endsAt = new Date(startsAt.getTime() + duration * 60000);
       const conflict = await client.query<{ id: string }>(
         `select b.id
            from public.bookings b
@@ -304,7 +306,7 @@ export async function updateBookingInSupabase(id: string, patch: BookingPatch): 
             and b.scheduled_at < $3
             and b.scheduled_at + make_interval(mins => b.service_duration) > $4
           limit 1`,
-        [practitionerId, id, endsAt, patch.scheduledAt],
+        [practitionerId, id, endsAt, startsAt],
       );
       if (conflict.rows.length) throw new BookingSlotConflictError();
     }
@@ -322,6 +324,10 @@ export async function updateBookingInSupabase(id: string, patch: BookingPatch): 
     if (patch.notes !== undefined) {
       params.push(patch.notes);
       sets.push(`notes = $${params.length}`);
+    }
+    if (patch.practitioner) {
+      params.push(patch.practitioner.id, patch.practitioner.name);
+      sets.push(`practitioner_id = $${params.length - 1}`, `practitioner_name = $${params.length}`);
     }
 
     const updated = await client.query<BookingSqlRow>(

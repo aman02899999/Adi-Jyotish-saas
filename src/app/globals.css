@@ -830,7 +830,7 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .card-heading p, .insight-card > div + div p { margin:0 0 4px; color:var(--muted); font-size:12px; letter-spacing:.12em; text-transform:uppercase; }
 .card-heading h2, .insight-card h2 { margin:0; font:400 23px/.95 var(--serif); letter-spacing:-.025em; }
 .card-heading h2 em { color:var(--copper); font-weight:400; }
-.card-heading button { padding:2px; background:transparent; color:var(--muted); }
+.card-heading button, .card-heading__action { display:inline-flex; padding:2px; background:transparent; color:var(--muted); }
 .mini-tag { margin-left:5px; padding:3px 7px; border-radius:999px; color:var(--copper-dark); background:rgba(190,136,100,.15); font:12px var(--sans); vertical-align:middle; }
 .mini-tag--copper { color:white; background:var(--copper); }
 .kundli-card { grid-column:span 8; min-height:487px; padding:20px 22px; display:flex; flex-direction:column; }
@@ -1247,7 +1247,7 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .booking-detail-form { display:grid; gap:13px; padding:18px 24px; }
 .booking-detail-form label { display:flex; flex-direction:column; gap:7px; }
 .booking-detail-form label > span { font-size:12px; font-weight:700; }
-.booking-detail-form input,.booking-detail-form textarea { width:100%; padding:10px 11px; border:1px solid var(--line); border-radius:8px; outline:0; background:rgba(255,255,255,.44); font-size:13px; }
+.booking-detail-form input,.booking-detail-form select,.booking-detail-form textarea { width:100%; padding:10px 11px; border:1px solid var(--line); border-radius:8px; outline:0; background:rgba(255,255,255,.44); font-size:13px; }
 .booking-detail-form textarea { resize:vertical; line-height:1.5; }
 .booking-detail-actions { display:flex; align-items:center; justify-content:space-between; padding:0 24px 22px; }
 .booking-detail-actions > div { display:flex; gap:7px; }
