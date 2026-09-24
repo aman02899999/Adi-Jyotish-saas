@@ -60,7 +60,7 @@
     },
     "trustStrip": {
       "consultations": "Consultations delivered",
-      "astrologers": "Vedic astrologers",
+      "astrologers": "Astrologers, human & AI",
       "avgRating": "Average reading",
       "privatePersonal": "Private & personal"
     },
@@ -86,10 +86,10 @@
       "bookConsultation": "Book consultation"
     },
     "live": {
-      "onlineNow": "{count, plural, one {# astrologer online now} other {# astrologers online now}}",
+      "onlineNow": "{count, plural, one {# guide available now} other {# guides available now}}",
       "headline": "Talk to a guide",
       "headlineEm": "right now.",
-      "subhead": "Chat instantly, pay only for the minutes you use. Every guide below is studio-reviewed.",
+      "subhead": "Chat instantly with a human astrologer, or with an AI astrologer — each one labelled.",
       "isOnline": "Online now",
       "isOffline": "Offline",
       "reviews": "{count, plural, one {# review} other {# reviews}}",

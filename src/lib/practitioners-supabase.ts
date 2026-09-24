@@ -115,7 +115,7 @@ export async function getPractitionersInSupabase(activeOnly: boolean, includeDem
 }
 
 /** The minimum the booking flow needs to confirm an astrologer can take a reading. */
-export type PractitionerAvailabilityRow = { id: string; name: string; active: boolean };
+export type PractitionerAvailabilityRow = { id: string; name: string; active: boolean; isAiPowered: boolean };
 
 /**
  * One practitioner by id, or null.
@@ -127,7 +127,7 @@ export type PractitionerAvailabilityRow = { id: string; name: string; active: bo
  */
 export async function getPractitionerAvailabilityInSupabase(id: string): Promise<PractitionerAvailabilityRow | null> {
   return queryModel<PractitionerAvailabilityRow>(
-    `select id, name, active from public.practitioners where id = $1`,
+    `select id, name, active, is_ai_powered from public.practitioners where id = $1`,
     [id],
   );
 }

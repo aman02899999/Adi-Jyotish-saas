@@ -94,6 +94,7 @@ export default async function AstrologersPage({ searchParams }: { searchParams: 
     photoUrl: person.photoUrl,
     online: person.online,
     featured: person.featured,
+    isAiPowered: person.isAiPowered,
     rating: person.rating,
     reviewCount: person.reviewCount,
     chatRatePerMinute: person.chatRatePerMinute,

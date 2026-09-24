@@ -3040,3 +3040,8 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .gemini-health-detail { display:block; margin-top:4px; color:var(--muted); font-family:ui-monospace, SFMono-Regular, Menlo, monospace; font-size:11px; word-break:break-word; }
 .gemini-health-spin { animation:gemini-health-spin 1s linear infinite; }
 @keyframes gemini-health-spin { to { transform:rotate(360deg); } }
+
+/* AI persona disclosure — see src/components/ai-persona-badge.tsx */
+.ai-persona-badge { display:inline-flex; align-items:center; gap:5px; width:max-content; padding:3px 9px; border:1px solid rgba(76,116,141,.35); border-radius:999px; background:rgba(76,116,141,.1); color:#3f5f75; font-size:12px; font-weight:600; letter-spacing:.01em; white-space:nowrap; }
+.ai-persona-note { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border:1px solid rgba(76,116,141,.28); border-radius:10px; background:rgba(76,116,141,.07); color:#3f5f75; font-size:13px; line-height:1.5; }
+.ai-persona-note svg { flex-shrink:0; margin-top:2px; }

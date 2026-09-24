@@ -94,7 +94,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     name: "Anika Sharma",
     slug: "anika-sharma",
     email: "anika@jyotish.studio",
-    title: "Senior Vedic Astrologer",
+    title: "Vedic Astrologer",
     bio: "Anika brings classical Parashari technique into grounded conversations about purpose, timing, and visible growth.",
     specialties: "Birth charts, Career & dharma, Planetary periods",
     languages: "English, Hindi, Sanskrit",
@@ -157,7 +157,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "ravindra-bhatt",
     email: "ravindra.bhatt@jyotish.studio",
     title: "Prem aur Rishtey Visheshagya",
-    bio: "Ravindra ji has spent over a decade helping clients navigate love, courtship, and long-distance relationships through classical Jyotish, with a practical focus on timing and honest communication.",
+    bio: "Ravindra ji helps clients navigate love, courtship, and long-distance relationships through classical Jyotish, with a practical focus on timing and honest communication.",
     specialties: "Relationships, Prem Vivah, Love Astrology, Timing Guidance",
     languages: "Hindi, Gujarati",
     consultationModes: "Audio, Chat",
@@ -231,7 +231,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "harish-shukla",
     email: "harish.shukla@jyotish.studio",
     title: "Vivah Jyotish Visheshagya",
-    bio: "Harish ji has guided hundreds of families through kundli milan and vivah muhurat selection, blending classical Ashtakoot matching with honest conversation about real compatibility.",
+    bio: "Harish ji guides families through kundli milan and vivah muhurat selection, blending classical Ashtakoot matching with honest conversation about real compatibility.",
     specialties: "Marriage, Kundli Milan, Vivah Muhurat, Ashtakoot Matching",
     languages: "Hindi, Sanskrit",
     consultationModes: "Audio, Video, Chat",
@@ -599,7 +599,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "naresh-vyas",
     email: "naresh.vyas@jyotish.studio",
     title: "Education & Academic Jyotishi",
-    bio: "Naresh ji has guided students and parents through exam timing and academic focus concerns for nearly two decades, drawing on 5th-house analysis and Saraswati yoga indicators.",
+    bio: "Naresh ji guides students and parents through exam timing and academic focus concerns, drawing on 5th-house analysis and Saraswati yoga indicators.",
     specialties: "Education, Exam Timing, Academic Focus",
     languages: "Hindi, Sanskrit",
     consultationModes: "Audio, Video, Chat",
@@ -1007,7 +1007,14 @@ type BookingForConflictCheck = { id: string; practitionerId: string | null; stat
 export async function getAvailableSlots({ date, duration, practitionerId, excludeBookingId }: { date: string; duration: number; practitionerId?: string; excludeBookingId?: string }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { slots: [] as AvailableSlot[], practitioners: [] as Omit<PractitionerWithSchedule, "rules" | "timeOff">[], timezone: "UTC" };
   const [settings, directory] = await Promise.all([getStudioSettings(), getPractitionerDirectory(true)]);
-  const people = practitionerId ? directory.filter((person) => person.id === practitionerId) : directory;
+  // Scheduled consultations are with human astrologers only. AI personas answer instant chat —
+  // nothing attends a scheduled slot on their behalf — yet every seeded persona carries weekday
+  // 09:30-17:30 availability rules, and the booking flow pre-selects the first slot's
+  // practitioner. With 32 of 34 seeded practitioners AI-powered, the default path through /book
+  // sold a paid one-to-one consultation nobody could deliver. validateAvailableSlot goes through
+  // here too, so the booking API refuses them as well, not just the picker.
+  const people = (practitionerId ? directory.filter((person) => person.id === practitionerId) : directory)
+    .filter((person) => !person.isAiPowered);
   const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
   const dayStart = civilToUtc(date, "00:00", settings.timezone);
   const dayEnd = civilToUtc(date, "23:59", settings.timezone);

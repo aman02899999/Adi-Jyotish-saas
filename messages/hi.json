@@ -60,7 +60,7 @@
     },
     "trustStrip": {
       "consultations": "Consultations complete hue",
-      "astrologers": "Vedic astrologers",
+      "astrologers": "Astrologers, human aur AI",
       "avgRating": "Average rating",
       "privatePersonal": "Private aur personal"
     },
@@ -86,10 +86,10 @@
       "bookConsultation": "Consultation book karein"
     },
     "live": {
-      "onlineNow": "{count, plural, one {# astrologer abhi online hai} other {# astrologers abhi online hain}}",
+      "onlineNow": "{count, plural, one {# guide abhi uplabdh hai} other {# guides abhi uplabdh hain}}",
       "headline": "Abhi ek guide se",
       "headlineEm": "baat karein.",
-      "subhead": "Turant chat karein, sirf istemal kiye minutes ka payment karein. Har guide studio-reviewed hai.",
+      "subhead": "Turant chat karein — human astrologer se, ya AI astrologer se. Har ek par label hai.",
       "isOnline": "Abhi online",
       "isOffline": "Offline",
       "reviews": "{count, plural, one {# review} other {# reviews}}",

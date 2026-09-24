@@ -76,7 +76,10 @@ export async function getLivePractitioners(limit = 6) {
 
 export async function getSeniorAstrologers(limit = 4) {
   const people = await getMarketplacePractitioners();
-  return [...people]
+  // "Our most senior astrologers — decades of wisdom" is a claim about people's experience, and
+  // an AI persona has none; its experienceYears is a seeded number. Humans only.
+  return people
+    .filter((person) => !person.isAiPowered)
     .sort((a, b) => Number(b.featured) - Number(a.featured) || b.experienceYears - a.experienceYears)
     .slice(0, limit);
 }

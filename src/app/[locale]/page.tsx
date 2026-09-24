@@ -33,6 +33,7 @@ import {
 import { AvatarImage } from "@/components/avatar-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { AiPersonaBadge } from "@/components/ai-persona-badge";
 import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnlineNowCount, getSeniorAstrologers } from "@/lib/homepage";
@@ -269,7 +270,8 @@ export default async function HomePage() {
                     <span>{expert.online ? t("live.isOnline") : t("live.isOffline")}</span>
                   </div>
                 </div>
-                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating?.toFixed(1) ?? "New"}</strong><small>{t("live.reviews", { count: expert.reviewCount })} · {t("seniors.yrsShort", { years: expert.experienceYears })}</small></div>
+                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating?.toFixed(1) ?? "New"}</strong><small>{t("live.reviews", { count: expert.reviewCount })}{!expert.isAiPowered && <> · {t("seniors.yrsShort", { years: expert.experienceYears })}</>}</small></div>
+                {expert.isAiPowered && <AiPersonaBadge compact />}
                 <div className="live-card__tags">{expert.specialties.split(",").slice(0, 3).map((tag, tagIndex) => <span key={tag} className={tagIndex === 0 ? "primary-specialty" : undefined}>{tag.trim()}</span>)}</div>
                 <div className="live-card__foot">
                   <div className="live-card__price">{expert.sessionPrice != null ? (

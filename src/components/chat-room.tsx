@@ -4,10 +4,11 @@ import { FormEvent, useEffect, useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { Check, Clock3, MessageCircle, Send, ShieldCheck, X } from "lucide-react";
 import { createChatRealtimeClient } from "@/lib/ably-client";
+import { AiPersonaBadge } from "@/components/ai-persona-badge";
 
 export type ChatMessageRow = { id: string; sessionId: string; senderType: string; senderName: string; body: string; createdAt: string | Date };
 
-export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt, pricingModel, ratePerMinute, fixedPrice, currency, holdMinutes, counterpartName, viewerRole, senderName }: {
+export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt, pricingModel, ratePerMinute, fixedPrice, currency, holdMinutes, counterpartName, counterpartIsAi = false, viewerRole, senderName }: {
   sessionId: string;
   initialMessages: ChatMessageRow[];
   initialStatus: string;
@@ -18,6 +19,8 @@ export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt,
   currency: string;
   holdMinutes: number;
   counterpartName: string;
+  /** Labels the header so the member always knows the replies are generated. */
+  counterpartIsAi?: boolean;
   viewerRole: "member" | "practitioner";
   senderName: string;
 }) {
@@ -102,7 +105,7 @@ export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt,
   return (
     <section className="chat-room">
       <header className="chat-room__header">
-        <div><MessageCircle size={18} /><div><strong>{counterpartName}</strong><small>{status === "active" ? "Live instant chat" : "Chat ended"}</small></div></div>
+        <div><MessageCircle size={18} /><div><strong>{counterpartName}</strong>{counterpartIsAi && <AiPersonaBadge compact />}<small>{status === "active" ? (counterpartIsAi ? "AI chat" : "Live instant chat") : "Chat ended"}</small></div></div>
         <div className="chat-room__meter">
           <Clock3 size={13} />
           <span>{String(Math.floor(elapsedSeconds / 60)).padStart(2, "0")}:{String(elapsedSeconds % 60).padStart(2, "0")}</span>
