@@ -1,8 +1,16 @@
 import "server-only";
 
-import { createHash, randomBytes } from "node:crypto";
+import { createHash, randomBytes, randomUUID } from "node:crypto";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  deleteAdminInvitesByEmailInSupabase,
+  findAdminInviteByTokenHashInSupabase,
+  insertAdminInviteInSupabase,
+  listPendingAdminInvitesInSupabase,
+  markAdminInviteAcceptedInSupabase,
+} from "@/lib/admin-invites-supabase";
 
 const INVITE_DAYS = 7;
 
@@ -25,13 +33,32 @@ function toInvite(doc: FirebaseFirestore.QueryDocumentSnapshot): AdminInvite {
   return { id: doc.id, email: data.email, role: data.role, invitedBy: data.invitedBy, expiresAt: data.expiresAt.toDate(), acceptedAt: data.acceptedAt ? data.acceptedAt.toDate() : null, createdAt: data.createdAt?.toDate() ?? new Date() };
 }
 
+function tokenHashOf(token: string) {
+  return createHash("sha256").update(token).digest("hex");
+}
+
 export async function listPendingAdminInvites(): Promise<AdminInvite[]> {
+  if (isSupabaseCutoverActive()) return listPendingAdminInvitesInSupabase();
+
   const snap = await collection.where("acceptedAt", "==", null).orderBy("createdAt", "asc").get();
   const now = Date.now();
   return snap.docs.map(toInvite).filter((invite) => invite.expiresAt.getTime() > now);
 }
 
 export async function createAdminInvite(email: string, role: string, invitedBy: string) {
+  const token = randomBytes(32).toString("base64url");
+  const tokenHash = tokenHashOf(token);
+  const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
+
+  if (isSupabaseCutoverActive()) {
+    await deleteAdminInvitesByEmailInSupabase(email);
+    // admin_invites.id has no default: Firestore generated the document id, Postgres
+    // will not, so it has to be supplied.
+    const id = randomUUID();
+    await insertAdminInviteInSupabase({ id, email, role, invitedBy, tokenHash, expiresAt });
+    return { id, email, role, expiresAt, createdAt: new Date(), token };
+  }
+
   const existing = await collection.where("email", "==", email).get();
   if (!existing.empty) {
     const batch = db.batch();
@@ -39,19 +66,28 @@ export async function createAdminInvite(email: string, role: string, invitedBy: 
     await batch.commit();
   }
 
-  const token = randomBytes(32).toString("base64url");
-  const tokenHash = createHash("sha256").update(token).digest("hex");
-  const expiresAt = new Date(Date.now() + INVITE_DAYS * 24 * 60 * 60 * 1000);
-
   const ref = await collection.add({ email, role, tokenHash, invitedBy, expiresAt, acceptedAt: null, createdAt: FieldValue.serverTimestamp() });
   return { id: ref.id, email, role, expiresAt, createdAt: new Date(), token };
 }
 
+/** Returns the live invitation, or null when it is missing, already accepted, or expired.
+ * Callers pass the `id` to markAdminInviteAccepted rather than holding a document
+ * reference, so the same code path works against either provider. */
 export async function findAdminInviteByToken(token: string) {
-  const tokenHash = createHash("sha256").update(token).digest("hex");
+  const tokenHash = tokenHashOf(token);
+
+  if (isSupabaseCutoverActive()) return findAdminInviteByTokenHashInSupabase(tokenHash);
+
   const snap = await collection.where("tokenHash", "==", tokenHash).where("acceptedAt", "==", null).limit(1).get();
   if (snap.empty) return null;
   const invite = toInvite(snap.docs[0]);
   if (invite.expiresAt.getTime() < Date.now()) return null;
-  return { ...invite, ref: snap.docs[0].ref };
+  return invite;
+}
+
+/** Records that an invitation was accepted. */
+export async function markAdminInviteAccepted(id: string): Promise<boolean> {
+  if (isSupabaseCutoverActive()) return markAdminInviteAcceptedInSupabase(id);
+  await collection.doc(id).update({ acceptedAt: FieldValue.serverTimestamp() });
+  return true;
 }

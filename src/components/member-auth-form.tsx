@@ -6,7 +6,7 @@ import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } fr
 import { GoogleSignInButton } from "@/components/google-sign-in-button";
 import { TwoFactorChallenge } from "@/components/two-factor-challenge";
 import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widget";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/auth-client";
 import { trackEvent } from "@/lib/track-event";
 
 export function MemberAuthForm({ initialMode = "login" }: { initialMode?: "login" | "register" }) {

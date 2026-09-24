@@ -2,7 +2,17 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
+import { deleteGoTrueUser, updateGoTrueUser } from "@/lib/gotrue-admin";
+import {
+  deleteMemberAdminInSupabase,
+  getMemberForEditInSupabase,
+  updateBookingsClientEmailInSupabase,
+  updateMemberAdminInSupabase,
+} from "@/lib/member-admin-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { cancelMemberSubscription, getMemberSubscription } from "@/lib/subscriptions";
+import { revokeAllUserSessions } from "@/lib/session-cookie";
+import { getWalletBalanceInSupabase } from "@/lib/wallet-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +24,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_manage")) return Response.json({ error: "Member management permission required." }, { status: 403 });
   const { id } = await params;
-  const ref = db.collection("members").doc(id);
-  const existingSnap = await ref.get();
-  if (!existingSnap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
-  const existing = existingSnap.data() as { name: string; email: string; plan: string; active: boolean };
+
+  let existing: { name: string; email: string; plan: string; active: boolean };
+  if (isSupabaseCutoverActive()) {
+    const row = await getMemberForEditInSupabase(id);
+    if (!row) return Response.json({ error: "Member not found." }, { status: 404 });
+    existing = row;
+  } else {
+    const existingSnap = await db.collection("members").doc(id).get();
+    if (!existingSnap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
+    existing = existingSnap.data() as { name: string; email: string; plan: string; active: boolean };
+  }
 
   const body = await request.json() as MemberPayload;
   const name = body.name?.trim().slice(0, 120) ?? "";
@@ -37,18 +54,29 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     if (body.password) authUpdate.password = body.password;
     if (active === false) authUpdate.disabled = true;
     else if (active === true) authUpdate.disabled = false;
-    if (Object.keys(authUpdate).length) await getAuth().updateUser(id, authUpdate);
-    if (active === false) await getAuth().revokeRefreshTokens(id);
+    if (Object.keys(authUpdate).length) {
+      if (isSupabaseCutoverActive()) await updateGoTrueUser(id, authUpdate);
+      else await getAuth().updateUser(id, authUpdate);
+    }
+    if (active === false) await revokeAllUserSessions(id);
 
     if (email !== existing.email) {
-      const staleBookings = await db.collection("bookings").where("clientEmail", "==", existing.email).get();
-      const batch = db.batch();
-      for (const doc of staleBookings.docs) batch.update(doc.ref, { clientEmail: email, updatedAt: FieldValue.serverTimestamp() });
-      if (staleBookings.size) await batch.commit();
+      if (isSupabaseCutoverActive()) {
+        await updateBookingsClientEmailInSupabase(existing.email, email);
+      } else {
+        const staleBookings = await db.collection("bookings").where("clientEmail", "==", existing.email).get();
+        const batch = db.batch();
+        for (const doc of staleBookings.docs) batch.update(doc.ref, { clientEmail: email, updatedAt: FieldValue.serverTimestamp() });
+        if (staleBookings.size) await batch.commit();
+      }
     }
 
     const onboardingComplete = Boolean(birthDate && birthTime && birthPlace);
-    await ref.update({ name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete, updatedAt: FieldValue.serverTimestamp() });
+    if (isSupabaseCutoverActive()) {
+      await updateMemberAdminInSupabase(id, { name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete });
+    } else {
+      await db.collection("members").doc(id).update({ name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete, updatedAt: FieldValue.serverTimestamp() });
+    }
 
     const updated = { id, name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete };
     await recordAudit(admin, "member.updated", "member", id, { email, plan, active, passwordReset: Boolean(body.password) });
@@ -63,17 +91,28 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_manage")) return Response.json({ error: "Member management permission required." }, { status: 403 });
   const { id } = await params;
-  const ref = db.collection("members").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
-  const email = (snap.data() as { email: string }).email;
+
+  let email: string;
+  if (isSupabaseCutoverActive()) {
+    const row = await getMemberForEditInSupabase(id);
+    if (!row) return Response.json({ error: "Member not found." }, { status: 404 });
+    email = row.email;
+  } else {
+    const snap = await db.collection("members").doc(id).get();
+    if (!snap.exists) return Response.json({ error: "Member not found." }, { status: 404 });
+    email = (snap.data() as { email: string }).email;
+  }
 
   // Deleting a member with money still on the books used to just orphan it: a live Razorpay
   // subscription kept auto-renewing with no admin or user surface left to cancel it, and a wallet
   // balance had nowhere to go. Mirrors the block-or-resolve-first pattern already used for
   // gemstone products/practitioners/personas with outstanding references.
-  const walletSnap = await db.collection("wallets").doc(id).get();
-  const walletBalance = (walletSnap.data() as { balance?: number } | undefined)?.balance ?? 0;
+  //
+  // On Postgres this check has to stay before the delete: wallets cascade when the member
+  // row goes, so the balance would read as zero afterwards and the guard would be useless.
+  const walletBalance = isSupabaseCutoverActive()
+    ? await getWalletBalanceInSupabase(id)
+    : ((await db.collection("wallets").doc(id).get()).data() as { balance?: number } | undefined)?.balance ?? 0;
   if (walletBalance > 0) {
     return Response.json({ error: `This member has a wallet balance of ₹${walletBalance}. Refund or zero it out before deleting the account.` }, { status: 409 });
   }
@@ -87,11 +126,16 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
     }
   }
 
-  await ref.delete();
+  if (isSupabaseCutoverActive()) {
+    await deleteMemberAdminInSupabase(id);
+  } else {
+    await db.collection("members").doc(id).delete();
+  }
   try {
-    await getAuth().deleteUser(id);
+    if (isSupabaseCutoverActive()) await deleteGoTrueUser(id);
+    else await getAuth().deleteUser(id);
   } catch {
-    // Auth account already gone — Firestore doc removal is what matters for the app's own data.
+    // Auth account already gone — removing the app's own row is what matters.
   }
   await recordAudit(admin, "member.deleted", "member", id, { email });
   return Response.json({ ok: true, id });

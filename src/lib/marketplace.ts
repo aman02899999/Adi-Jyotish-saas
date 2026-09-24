@@ -3,6 +3,13 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
+import {
+  getAllReviewsInSupabase,
+  getPractitionerNameMapInSupabase,
+  getPublishedReviewsForPractitionerInSupabase,
+  getPublishedReviewsInSupabase,
+} from "@/lib/practitioners-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
 import { computeSessionPriceAnchor, computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
@@ -62,15 +69,19 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
 async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
   // Reviews fall back to empty (practitioners still list, just without ratings) if the
   // (status, createdAt) composite index isn't built yet.
-  const [directory, reviewsSnap, accuracyMap] = await Promise.all([
+  // Reviews fall back to empty (practitioners still list, just without ratings) if the
+  // (status, createdAt) composite index isn't built yet. Postgres has no equivalent
+  // failure mode, so the cutover branch needs no fallback wrapper.
+  const [directory, reviews, accuracyMap] = await Promise.all([
     getPractitionerDirectory(true),
-    withIndexFallback(
-      () => db.collection("practitionerReviews").where("status", "==", "published").orderBy("createdAt", "desc").get(),
-      { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
-    ),
+    isSupabaseCutoverActive()
+      ? getPublishedReviewsInSupabase()
+      : withIndexFallback(
+          () => db.collection("practitionerReviews").where("status", "==", "published").orderBy("createdAt", "desc").get(),
+          { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
+        ).then((snap) => snap.docs.map(reviewFromDoc)),
     getPractitionerAccuracyMap(),
   ]);
-  const reviews = reviewsSnap.docs.map(reviewFromDoc);
   const scored = directory.map((person) => {
     const personReviews = reviews.filter((review) => review.practitionerId === person.id);
     const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => personReviews.length ? personReviews.reduce((sum, review) => sum + review[field], 0) / personReviews.length : null;
@@ -129,12 +140,14 @@ export async function getMarketplacePractitioner(slug: string) {
   const people = await getMarketplacePractitioners();
   const practitioner = people.find((person) => person.slug === slug);
   if (!practitioner) return null;
-  const snap = await db.collection("practitionerReviews")
-    .where("practitionerId", "==", practitioner.id)
-    .where("status", "==", "published")
-    .orderBy("createdAt", "desc")
-    .get();
-  return { practitioner, reviews: snap.docs.map(reviewFromDoc) };
+  const reviews = isSupabaseCutoverActive()
+    ? await getPublishedReviewsForPractitionerInSupabase(practitioner.id)
+    : (await db.collection("practitionerReviews")
+        .where("practitionerId", "==", practitioner.id)
+        .where("status", "==", "published")
+        .orderBy("createdAt", "desc")
+        .get()).docs.map(reviewFromDoc);
+  return { practitioner, reviews };
 }
 
 /** Favorites are stored as members/{memberId}/favorites/{practitionerId} — doc existence IS the
@@ -164,11 +177,18 @@ export async function getEligibleReviewBookings(memberEmail: string, practitione
 }
 
 export async function getAdminReviews() {
-  const reviewsSnap = await db.collection("practitionerReviews").orderBy("createdAt", "desc").get();
-  const reviews = reviewsSnap.docs.map(reviewFromDoc);
+  const reviews = isSupabaseCutoverActive()
+    ? await getAllReviewsInSupabase()
+    : (await db.collection("practitionerReviews").orderBy("createdAt", "desc").get()).docs.map(reviewFromDoc);
   const practitionerIds = [...new Set(reviews.map((review) => review.practitionerId))];
-  const practitionerDocs = await Promise.all(practitionerIds.map((id) => db.collection("practitioners").doc(id).get()));
-  const practitionerById = new Map(practitionerDocs.filter((doc) => doc.exists).map((doc) => [doc.id, doc.data() as { name: string; slug: string }]));
+  const practitionerById = isSupabaseCutoverActive()
+    // One `= any(...)` query instead of a doc read per distinct practitioner.
+    ? await getPractitionerNameMapInSupabase(practitionerIds)
+    : new Map(
+        (await Promise.all(practitionerIds.map((id) => db.collection("practitioners").doc(id).get())))
+          .filter((doc) => doc.exists)
+          .map((doc) => [doc.id, doc.data() as { name: string; slug: string }]),
+      );
   return reviews.map((review) => {
     const practitioner = practitionerById.get(review.practitionerId);
     return { ...review, practitionerName: practitioner?.name ?? "Unknown", practitionerSlug: practitioner?.slug ?? "" };

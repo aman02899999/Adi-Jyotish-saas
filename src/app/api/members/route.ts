@@ -2,6 +2,9 @@ import { getAuth } from "firebase-admin/auth";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
+import { createGoTrueUser } from "@/lib/gotrue-admin";
+import { createMemberAdminInSupabase, listMembersInSupabase, type MemberAdminRow } from "@/lib/member-admin-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
 
@@ -17,12 +20,9 @@ function toDate(value: FirebaseFirestore.Timestamp | Date | undefined | null): D
   return value instanceof Date ? value : value.toDate();
 }
 
-export async function GET() {
-  const admin = await getCurrentAdmin();
-  if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
-  if (!hasAdminPermission(admin, "members_view")) return Response.json({ error: "Member access required." }, { status: 403 });
+async function firestoreMembers(): Promise<MemberAdminRow[]> {
   const snap = await db.collection("members").orderBy("name", "asc").get();
-  const rows = snap.docs.map((doc) => {
+  return snap.docs.map((doc) => {
     const data = doc.data() as Record<string, unknown>;
     return {
       id: doc.id,
@@ -34,12 +34,22 @@ export async function GET() {
       birthPlace: (data.birthPlace as string | null) ?? null,
       plan: (data.plan as string) ?? "member",
       onboardingComplete: Boolean(data.onboardingComplete),
+      // A Firestore document with no `active` field is active; the Postgres column is
+      // not null default true, so reading it directly is the same rule.
       active: data.active !== false,
       lastLoginAt: toDate(data.lastLoginAt as FirebaseFirestore.Timestamp | undefined),
       createdAt: toDate(data.createdAt as FirebaseFirestore.Timestamp | undefined) ?? new Date(),
       updatedAt: toDate(data.updatedAt as FirebaseFirestore.Timestamp | undefined) ?? new Date(),
     };
   });
+}
+
+export async function GET() {
+  const admin = await getCurrentAdmin();
+  if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
+  if (!hasAdminPermission(admin, "members_view")) return Response.json({ error: "Member access required." }, { status: 403 });
+
+  const rows = isSupabaseCutoverActive() ? await listMembersInSupabase() : await firestoreMembers();
   return Response.json(rows);
 }
 
@@ -64,19 +74,23 @@ export async function POST(request: Request) {
 
   let uid: string;
   try {
-    const userRecord = await getAuth().createUser({ email, password, displayName: name });
-    uid = userRecord.uid;
+    uid = isSupabaseCutoverActive()
+      ? (await createGoTrueUser({ email, password, name })).uid
+      : (await getAuth().createUser({ email, password, displayName: name })).uid;
   } catch {
     return Response.json({ error: "A member with this email already exists." }, { status: 409 });
   }
 
-  const ref = db.collection("members").doc(uid);
-  await ref.set({
-    name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete,
-    createdAt: FieldValue.serverTimestamp(),
-    updatedAt: FieldValue.serverTimestamp(),
-    lastLoginAt: null,
-  });
+  if (isSupabaseCutoverActive()) {
+    await createMemberAdminInSupabase({ id: uid, name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete });
+  } else {
+    await db.collection("members").doc(uid).set({
+      name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete,
+      createdAt: FieldValue.serverTimestamp(),
+      updatedAt: FieldValue.serverTimestamp(),
+      lastLoginAt: null,
+    });
+  }
 
   const created = { id: uid, name, email, phone, birthDate, birthTime, birthPlace, plan, active, onboardingComplete, lastLoginAt: null, createdAt: new Date(), updatedAt: new Date() };
   await recordAudit(admin, "member.created", "member", uid, { email, plan });

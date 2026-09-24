@@ -4,6 +4,16 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { creditWalletBonus } from "@/lib/wallet";
 import { createNotification } from "@/lib/notifications";
+import {
+  allocateReferralCodeInSupabase,
+  findMemberIdByReferralCodeInSupabase,
+  getReferralCodeInSupabase,
+  getReferralCountsInSupabase,
+  getReferralInSupabase,
+  insertReferralInSupabase,
+  settleReferralRewardInSupabase,
+} from "@/lib/referrals-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 const REFERRAL_MILESTONES = [5, 10, 25, 50, 100];
 
@@ -36,6 +46,20 @@ function membersCollection() {
 /** Every member gets a referral code lazily — generated on first read for members created before
  * this feature shipped, and at signup for everyone after. Retries on the rare collision. */
 export async function ensureReferralCode(memberId: string): Promise<string> {
+  if (isSupabaseCutoverActive()) {
+    const existing = await getReferralCodeInSupabase(memberId);
+    if (existing) return existing;
+
+    for (let attempt = 0; attempt < 5; attempt++) {
+      const outcome = await allocateReferralCodeInSupabase(memberId, randomCode());
+      // already_set means a concurrent call won the race for this member; its code
+      // is the right answer. code_taken means the generated code clashed with
+      // somebody else's, which the unique index caught — try another.
+      if (outcome.kind !== "code_taken") return outcome.code;
+    }
+    throw new Error("Could not allocate a unique referral code.");
+  }
+
   const ref = membersCollection().doc(memberId);
   const snap = await ref.get();
   const existing = snap.data()?.referralCode as string | undefined;
@@ -53,6 +77,8 @@ export async function ensureReferralCode(memberId: string): Promise<string> {
 }
 
 async function findMemberIdByReferralCode(code: string): Promise<string | null> {
+  if (isSupabaseCutoverActive()) return findMemberIdByReferralCodeInSupabase(code);
+
   const snap = await membersCollection().where("referralCode", "==", code).limit(1).get();
   return snap.empty ? null : snap.docs[0].id;
 }
@@ -67,6 +93,12 @@ export async function recordReferral({ refereeId, code }: { refereeId: string; c
 
   const referrerId = await findMemberIdByReferralCode(trimmed);
   if (!referrerId || referrerId === refereeId) return;
+
+  if (isSupabaseCutoverActive()) {
+    // on conflict do nothing is the same no-op the Firestore catch produced.
+    await insertReferralInSupabase({ refereeId, referrerId, code: trimmed });
+    return;
+  }
 
   const referralRef = db.collection("referrals").doc(refereeId);
   await referralRef.create({
@@ -88,6 +120,42 @@ export async function recordReferral({ refereeId, code }: { refereeId: string; c
  * status flip both guard against double-pay). */
 export async function processReferralReward(memberId: string, rechargeAmount: number) {
   if (rechargeAmount < MIN_RECHARGE_FOR_REWARD) return;
+
+  if (isSupabaseCutoverActive()) {
+    const pending = await getReferralInSupabase(memberId);
+    if (!pending || pending.status !== "pending") return;
+
+    await creditWalletBonus({
+      memberId,
+      amount: REFERRAL_REFEREE_REWARD,
+      type: "referral_bonus",
+      referenceType: "referral",
+      referenceId: `referral_referee_${memberId}`,
+    });
+
+    const outcome = await settleReferralRewardInSupabase(memberId, MAX_REWARDED_REFERRALS_PER_REFERRER);
+    if (outcome.kind !== "rewarded") return;
+
+    await creditWalletBonus({
+      memberId: outcome.referrerId,
+      amount: REFERRAL_REFERRER_REWARD,
+      type: "referral_bonus",
+      referenceType: "referral",
+      referenceId: `referral_referrer_${memberId}`,
+    });
+
+    if (REFERRAL_MILESTONES.includes(outcome.newRewardedTotal)) {
+      await createNotification({
+        recipientType: "member",
+        recipientId: outcome.referrerId,
+        type: "referral_milestone",
+        title: `You've referred ${outcome.newRewardedTotal} friends!`,
+        body: `That's ${outcome.newRewardedTotal} successful referrals and counting — thank you for spreading the word. Keep inviting for more wallet credit.`,
+        link: "/dashboard/referrals",
+      }).catch((error) => console.error("Referral milestone notification failed", error));
+    }
+    return;
+  }
 
   const referralRef = db.collection("referrals").doc(memberId);
   const snap = await referralRef.get();
@@ -157,6 +225,12 @@ export type ReferralStats = {
 
 export async function getReferralStats(memberId: string): Promise<ReferralStats> {
   const code = await ensureReferralCode(memberId);
+
+  if (isSupabaseCutoverActive()) {
+    const { invited, rewarded } = await getReferralCountsInSupabase(memberId);
+    return { code, invited, rewarded, totalEarned: rewarded * REFERRAL_REFERRER_REWARD };
+  }
+
   const snap = await db.collection("referrals").where("referrerId", "==", memberId).get();
   const invited = snap.size;
   const rewarded = snap.docs.filter((doc) => doc.data().status === "rewarded").length;

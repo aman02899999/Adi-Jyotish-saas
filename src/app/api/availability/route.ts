@@ -1,5 +1,7 @@
 import { db } from "@/lib/firestore";
 import { getAvailableSlots } from "@/lib/scheduling";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getServiceByIdInSupabase } from "@/lib/services-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +11,14 @@ export async function GET(request: Request) {
   const serviceId = url.searchParams.get("serviceId") ?? "";
   const practitionerId = url.searchParams.get("practitionerId") || undefined;
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date) || !serviceId) return Response.json({ error: "Date and service are required." }, { status: 400 });
-  const snap = await db.collection("services").doc(serviceId).get();
-  const service = snap.exists ? (snap.data() as { duration: number; active: boolean }) : null;
+  let service: { duration: number; active: boolean } | null;
+  if (isSupabaseCutoverActive()) {
+    const row = await getServiceByIdInSupabase(serviceId);
+    service = row ? { duration: row.duration, active: row.active } : null;
+  } else {
+    const snap = await db.collection("services").doc(serviceId).get();
+    service = snap.exists ? (snap.data() as { duration: number; active: boolean }) : null;
+  }
   if (!service || !service.active) return Response.json({ error: "Service not available." }, { status: 404 });
   return Response.json(await getAvailableSlots({ date, duration: service.duration, practitionerId }));
 }

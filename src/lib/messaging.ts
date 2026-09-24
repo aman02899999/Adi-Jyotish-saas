@@ -2,6 +2,16 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import {
+  countAdminUnreadInSupabase,
+  countMemberUnreadInSupabase,
+  findMemberIdByEmailInSupabase,
+  findOrCreateBookingThreadInSupabase,
+  getMessagesForThreadsInSupabase,
+  getThreadRowsInSupabase,
+  insertSystemMessageInSupabase,
+} from "@/lib/messaging-supabase";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export type InboxMessage = {
   id: string;
@@ -96,13 +106,35 @@ function threadRowFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot) {
   };
 }
 
+/** Groups the fetched messages onto their threads, preserving the thread order the
+ * caller asked for and each thread's own oldest-first message order. */
+function withMessages<T extends { id: string }>(threads: T[], messages: InboxMessage[]): Array<T & { messages: InboxMessage[] }> {
+  const byThread = new Map<string, InboxMessage[]>();
+  for (const message of messages) {
+    const list = byThread.get(message.threadId);
+    if (list) list.push(message);
+    else byThread.set(message.threadId, [message]);
+  }
+  return threads.map((thread) => ({ ...thread, messages: byThread.get(thread.id) ?? [] }));
+}
+
+async function loadThreadsInSupabase(memberId?: string): Promise<InboxThread[]> {
+  const threads = await getThreadRowsInSupabase(memberId);
+  const messages = await getMessagesForThreadsInSupabase(threads.map((thread) => thread.id));
+  return withMessages(threads, messages);
+}
+
 export async function getAdminInbox(): Promise<InboxThread[]> {
+  if (isSupabaseCutoverActive()) return loadThreadsInSupabase();
+
   const snap = await threadsCollection.orderBy("lastMessageAt", "desc").get();
   const rows = await attachMemberDetails(snap.docs.map(threadRowFromDoc));
   return attachMessages(rows);
 }
 
 export async function getMemberInbox(memberId: string): Promise<InboxThread[]> {
+  if (isSupabaseCutoverActive()) return loadThreadsInSupabase(memberId);
+
   const snap = await threadsCollection.where("memberId", "==", memberId).orderBy("lastMessageAt", "desc").get();
   const rows = await attachMemberDetails(snap.docs.map(threadRowFromDoc));
   return attachMessages(rows);
@@ -114,6 +146,17 @@ export async function getAdminUnreadCount() {
   // is easy to forget. AdminShell calls this on every single admin page load to show the unread
   // badge, so a missing index here (FAILED_PRECONDITION) used to crash the entire admin panel
   // for a purely decorative count. Never worth taking the whole workspace down for a badge.
+  if (isSupabaseCutoverActive()) {
+    // The try/catch stays: AdminShell calls this on every admin page load for a
+    // decorative badge, and no count is worth taking the workspace down for.
+    try {
+      return await countAdminUnreadInSupabase();
+    } catch (error) {
+      console.error("getAdminUnreadCount failed", error);
+      return 0;
+    }
+  }
+
   try {
     const snap = await db.collectionGroup("messages").where("senderType", "==", "member").where("readByAdmin", "==", false).count().get();
     return snap.data().count;
@@ -124,6 +167,15 @@ export async function getAdminUnreadCount() {
 }
 
 export async function getMemberUnreadCount(memberId: string) {
+  if (isSupabaseCutoverActive()) {
+    try {
+      return await countMemberUnreadInSupabase(memberId);
+    } catch (error) {
+      console.error("getMemberUnreadCount failed", error);
+      return 0;
+    }
+  }
+
   try {
     const threadsSnap = await threadsCollection.where("memberId", "==", memberId).select().get();
     if (threadsSnap.empty) return 0;
@@ -153,6 +205,17 @@ export async function sendBookingNotification({
   subject: string;
   body: string;
 }) {
+  if (isSupabaseCutoverActive()) {
+    // members.email is citext, so the lookup is case-insensitive without the
+    // toLowerCase() the Firestore path needed to match at all.
+    const memberId = await findMemberIdByEmailInSupabase(memberEmail);
+    if (!memberId) return null;
+
+    const thread = await findOrCreateBookingThreadInSupabase({ memberId, bookingId, subject });
+    const message = await insertSystemMessageInSupabase(thread.threadId, body.trim().slice(0, 3000));
+    return message;
+  }
+
   const memberSnap = await db.collection("members").where("email", "==", memberEmail.toLowerCase()).limit(1).get();
   if (memberSnap.empty) return null;
   const memberId = memberSnap.docs[0].id;

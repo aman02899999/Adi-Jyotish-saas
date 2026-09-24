@@ -3,9 +3,26 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getStudioSettings } from "@/lib/studio-settings";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  captureHoldInSupabase,
+  creditWalletInSupabase,
+  createHoldInSupabase,
+  debitWalletInSupabase,
+  getAdminWalletBalancesFromSupabase,
+  getAdminWalletLedgerFromSupabase,
+  getAdminWalletSummaryFromSupabase,
+  getHoldFromSupabase,
+  getOrCreateWalletInSupabase,
+  getWalletHistoryFromSupabase,
+  releaseHoldInSupabase,
+} from "@/lib/wallet-supabase";
 
-export class InsufficientBalanceError extends Error {}
-export class WalletHoldNotFoundError extends Error {}
+// Re-exported so existing `instanceof` checks against these classes keep working.
+// They moved to their own module so wallet-supabase.ts can throw them without a
+// circular import.
+export { InsufficientBalanceError, WalletHoldNotFoundError } from "@/lib/wallet-errors";
+import { InsufficientBalanceError, WalletHoldNotFoundError } from "@/lib/wallet-errors";
 
 export type Wallet = {
   id: string; // == memberId
@@ -95,6 +112,10 @@ function isAlreadyExists(error: unknown) {
 /** Wallet doc id == memberId, so creation is a simple `create()` (fails if it already exists,
  * exactly like the old `onConflictDoNothing` on `wallets.memberId`) rather than a lock+upsert. */
 export async function getOrCreateWallet(memberId: string): Promise<Wallet> {
+  if (isSupabaseCutoverActive()) {
+    const settings = await getStudioSettings();
+    return getOrCreateWalletInSupabase(memberId, settings.currency);
+  }
   const ref = walletsCollection().doc(memberId);
   const existing = await ref.get();
   if (existing.exists) return walletFromSnap(existing);
@@ -115,11 +136,13 @@ export async function getOrCreateWallet(memberId: string): Promise<Wallet> {
 }
 
 export async function getWalletHistory(walletId: string): Promise<WalletEntry[]> {
+  if (isSupabaseCutoverActive()) return getWalletHistoryFromSupabase(walletId);
   const snap = await walletsCollection().doc(walletId).collection("entries").orderBy("createdAt", "desc").get();
   return snap.docs.map((doc) => entryFromSnap(doc, walletId));
 }
 
 export async function getActiveHold(memberId: string, holdId: string): Promise<WalletHold | null> {
+  if (isSupabaseCutoverActive()) return getHoldFromSupabase(memberId, holdId);
   const snap = await walletsCollection().doc(memberId).collection("holds").doc(holdId).get();
   if (!snap.exists) return null;
   return holdFromSnap(snap, memberId);
@@ -133,6 +156,19 @@ export async function getActiveHold(memberId: string, holdId: string): Promise<W
  * wallet doc changes concurrently — the equivalent of the old `pg_advisory_xact_lock`). */
 export async function rechargeWallet({ memberId, amount, razorpayPaymentId }: { memberId: string; amount: number; razorpayPaymentId: string }): Promise<Wallet> {
   await getOrCreateWallet(memberId);
+  if (isSupabaseCutoverActive()) {
+    const settings = await getStudioSettings();
+    return creditWalletInSupabase({
+      memberId,
+      entryId: razorpayPaymentId,
+      type: "recharge",
+      amount,
+      referenceType: null,
+      referenceId: null,
+      razorpayPaymentId,
+      currency: settings.currency,
+    });
+  }
   const walletRef = walletsCollection().doc(memberId);
   const entryRef = walletRef.collection("entries").doc(razorpayPaymentId);
 
@@ -162,6 +198,19 @@ export async function rechargeWallet({ memberId, amount, razorpayPaymentId }: { 
  * deterministic id so re-invoking this for the same reward is a safe no-op. */
 export async function creditWalletBonus({ memberId, amount, type, referenceType, referenceId }: { memberId: string; amount: number; type: string; referenceType: string; referenceId: string }): Promise<Wallet> {
   await getOrCreateWallet(memberId);
+  if (isSupabaseCutoverActive()) {
+    const settings = await getStudioSettings();
+    return creditWalletInSupabase({
+      memberId,
+      entryId: referenceId,
+      type,
+      amount,
+      referenceType,
+      referenceId,
+      razorpayPaymentId: null,
+      currency: settings.currency,
+    });
+  }
   const walletRef = walletsCollection().doc(memberId);
   const entryRef = walletRef.collection("entries").doc(referenceId);
 
@@ -226,6 +275,19 @@ export async function debitWallet({ memberId, amount, type, referenceType, refer
 }): Promise<Wallet> {
   if (!(amount > 0)) throw new Error("A wallet debit must be for a positive amount.");
   await getOrCreateWallet(memberId);
+  if (isSupabaseCutoverActive()) {
+    const settings = await getStudioSettings();
+    return debitWalletInSupabase({
+      memberId,
+      // Same composite key the Firestore path uses as the entry doc id.
+      entryId: `${referenceType}_${referenceId}`,
+      type,
+      amount,
+      referenceType,
+      referenceId,
+      currency: settings.currency,
+    });
+  }
   const walletRef = walletsCollection().doc(memberId);
   const entryRef = walletRef.collection("entries").doc(`${referenceType}_${referenceId}`);
 
@@ -247,6 +309,10 @@ export async function debitWallet({ memberId, amount, type, referenceType, refer
 /** Reserves funds against a wallet. Throws InsufficientBalanceError if the wallet cannot cover the amount. */
 export async function createHold({ memberId, amount, referenceType }: { memberId: string; amount: number; referenceType: string }): Promise<WalletHold> {
   await getOrCreateWallet(memberId);
+  if (isSupabaseCutoverActive()) {
+    const settings = await getStudioSettings();
+    return createHoldInSupabase(memberId, amount, referenceType, settings.currency);
+  }
   const walletRef = walletsCollection().doc(memberId);
   const holdRef = walletRef.collection("holds").doc();
   const entryRef = walletRef.collection("entries").doc();
@@ -272,6 +338,7 @@ export async function createHold({ memberId, amount, referenceType }: { memberId
  * per-wallet subcollection — a bare hold id is no longer globally addressable the way the old
  * serial primary key was. */
 export async function captureHold({ memberId, holdId, capturedAmount, referenceType }: { memberId: string; holdId: string; capturedAmount: number; referenceType: string }): Promise<WalletHold> {
+  if (isSupabaseCutoverActive()) return captureHoldInSupabase(memberId, holdId, capturedAmount, referenceType);
   const walletRef = walletsCollection().doc(memberId);
   const holdRef = walletRef.collection("holds").doc(holdId);
 
@@ -303,6 +370,7 @@ export async function captureHold({ memberId, holdId, capturedAmount, referenceT
 
 /** Fully releases a hold back to the wallet (e.g. a session that never started). */
 export async function releaseHold({ memberId, holdId, referenceType }: { memberId: string; holdId: string; referenceType: string }): Promise<WalletHold> {
+  if (isSupabaseCutoverActive()) return releaseHoldInSupabase(memberId, holdId, referenceType);
   const walletRef = walletsCollection().doc(memberId);
   const holdRef = walletRef.collection("holds").doc(holdId);
 
@@ -328,6 +396,7 @@ export async function releaseHold({ memberId, holdId, referenceType }: { memberI
 }
 
 export async function getAdminWalletSummary(): Promise<{ totalBalance: number; walletCount: number }> {
+  if (isSupabaseCutoverActive()) return getAdminWalletSummaryFromSupabase();
   const { AggregateField } = await import("firebase-admin/firestore");
   const snap = await walletsCollection().aggregate({
     totalBalance: AggregateField.sum("balance"),
@@ -350,6 +419,7 @@ export async function getAdminWalletLedger(limit = 200): Promise<Array<WalletEnt
   // (firebase deploy --only firestore:indexes) — same class of bug as the earlier admin-panel
   // crashes (getAdminUnreadCount, getAnalytics): a single unindexed query here, unguarded, used
   // to be able to take down the entire Wallets page. Degrade to an empty ledger instead.
+  if (isSupabaseCutoverActive()) return getAdminWalletLedgerFromSupabase(limit);
   let snap;
   try {
     snap = await db.collectionGroup("entries").orderBy("createdAt", "desc").limit(limit).get();
@@ -381,6 +451,7 @@ export async function getAdminWalletLedger(limit = 200): Promise<Array<WalletEnt
 }
 
 export async function getAdminWalletBalances(): Promise<Array<Wallet & { memberName: string; memberEmail: string }>> {
+  if (isSupabaseCutoverActive()) return getAdminWalletBalancesFromSupabase();
   const snap = await walletsCollection().orderBy("balance", "desc").get();
   const wallets = snap.docs.map((doc) => walletFromSnap(doc));
   const members = await Promise.all(wallets.map((wallet) => memberLiteById(wallet.memberId)));

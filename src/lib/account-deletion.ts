@@ -15,6 +15,14 @@ import {
   toPlainJson,
 } from "@/lib/account-privacy";
 import type { MemberIdentity } from "@/lib/member-auth";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { deleteGoTrueUser } from "@/lib/gotrue-admin";
+import { deleteSupabaseStoragePrefix, isSupabaseStorageConfigured } from "@/lib/supabase-storage";
+import {
+  buildMemberDataExportInSupabase,
+  deleteMemberAccountInSupabase,
+  getDeletionBlockersInSupabase,
+} from "@/lib/account-deletion-supabase";
 
 /**
  * Self-service PII export and account deletion — the two "your rights" flows the privacy policy
@@ -26,6 +34,15 @@ import type { MemberIdentity } from "@/lib/member-auth";
  */
 
 export class AccountDeletionBlockedError extends Error {}
+
+/**
+ * Raised when a flow cannot run against the active data provider. Distinct from
+ * AccountDeletionBlockedError, which means the member has something to resolve first. Both
+ * providers are implemented now, so nothing in this module raises it — it stays exported because
+ * the routes still map it to a 503, and because a future provider gap should surface that way
+ * rather than as a 500.
+ */
+export class AccountDeletionUnavailableError extends Error {}
 
 /** Docs matched by a simple where(field == value) that are deleted outright, subcollections and
  * all. Kept as data (not code) so export and delete stay in sync about what a member "owns". */
@@ -62,6 +79,7 @@ async function queryAll(collection: string, field: string, value: string) {
 /** Everything the platform knows about this member, as a plain-JSON bundle suitable for a
  * download. Secrets (TOTP material) and internal QA flags are excluded. */
 export async function buildMemberDataExport(member: MemberIdentity): Promise<Record<string, unknown>> {
+  if (isSupabaseCutoverActive()) return buildMemberDataExportInSupabase(member);
   const memberRef = db.collection("members").doc(member.id);
 
   const [
@@ -157,6 +175,7 @@ export async function buildMemberDataExport(member: MemberIdentity): Promise<Rec
 /** Preconditions that must clear before deletion may start. Returns the human reason when
  * blocked so the UI can tell the member exactly what to resolve. */
 export async function getDeletionBlockers(member: MemberIdentity): Promise<string[]> {
+  if (isSupabaseCutoverActive()) return getDeletionBlockersInSupabase(member);
   const blockers: string[] = [];
 
   const walletSnap = await db.collection("wallets").doc(member.id).get();
@@ -180,10 +199,24 @@ export async function getDeletionBlockers(member: MemberIdentity): Promise<strin
  * AccountDeletionBlockedError when Razorpay refuses, so money never keeps flowing into a
  * deleted account. */
 async function cancelSubscriptionIfAny(memberId: string) {
-  const snap = await db.collection("memberSubscriptions").doc(memberId).get();
-  if (!snap.exists) return;
-  const data = snap.data() as { status?: string; razorpaySubscriptionId?: string | null };
   const terminal = ["cancelled", "completed", "expired", "pending_checkout"];
+  let data: { status?: string; razorpaySubscriptionId?: string | null } | null;
+
+  if (isSupabaseCutoverActive()) {
+    // Reading this from Firestore under cutover would look at a stale row and silently skip the
+    // cancellation, leaving Razorpay billing a deleted account.
+    const { queryModel } = await import("@/lib/postgres");
+    data = await queryModel<{ status?: string; razorpaySubscriptionId?: string | null }>(
+      `select status, razorpay_subscription_id as "razorpaySubscriptionId"
+         from public.member_subscriptions where member_id = $1`,
+      [memberId],
+    );
+    if (!data) return;
+  } else {
+    const snap = await db.collection("memberSubscriptions").doc(memberId).get();
+    if (!snap.exists) return;
+    data = snap.data() as { status?: string; razorpaySubscriptionId?: string | null };
+  }
   if (!data.razorpaySubscriptionId || terminal.includes(data.status ?? "")) return;
   const { cancelMemberSubscription } = await import("@/lib/subscriptions");
   try {
@@ -215,6 +248,53 @@ async function anonymizeSnap(
 }
 
 /**
+ * Uploaded photos and the identity record, neither of which lives in either database — so both
+ * have to be removed explicitly, and BOTH move at cutover.
+ *
+ * An earlier version of this helper assumed Firebase stayed the identity provider and ran the
+ * same Firebase calls on both paths. It does not: ai-readings.ts writes reading images to
+ * Supabase Storage once the flag is on, GoTrue owns the identity, and the health route treats
+ * missing Firebase credentials as expected after cutover. Both calls would therefore have
+ * silently no-opped — leaving the member's palm and face photographs readable in the bucket, and
+ * their GoTrue login still working, after they had been told the account was irreversibly
+ * deleted. Signing in again would re-create a live profile under the same uid.
+ * src/app/api/members/[id]/route.ts already branches correctly for the admin-initiated delete;
+ * this is the same shape.
+ *
+ * Auth goes last on purpose: if anything before it failed, the member can still sign in and retry
+ * the deletion rather than being locked out of an account that still holds their data.
+ */
+async function deleteMemberStorageAndAuth(member: MemberIdentity): Promise<void> {
+  const prefixes = [`palm-readings/${member.id}/`, `face-readings/${member.id}/`];
+
+  if (isSupabaseCutoverActive()) {
+    if (isSupabaseStorageConfigured()) {
+      for (const prefix of prefixes) {
+        await deleteSupabaseStoragePrefix(prefix).catch(() => {});
+      }
+    }
+    try {
+      await deleteGoTrueUser(member.id);
+    } catch {
+      // Identity already gone — the app's own data removal is what matters.
+    }
+    return;
+  }
+
+  if (isStorageConfigured()) {
+    for (const prefix of prefixes) {
+      await bucket().deleteFiles({ prefix }).catch(() => {});
+    }
+  }
+  try {
+    await getAuth().revokeRefreshTokens(member.id);
+    await getAuth().deleteUser(member.id);
+  } catch {
+    // Auth user already gone — the app's own data removal is what matters.
+  }
+}
+
+/**
  * Irreversibly deletes the member's account. Caller is responsible for having verified the
  * member's intent (typed confirmation + a fresh TOTP code when 2FA is on) and for revoking the
  * session cookie afterwards. Order matters: blockers first, then Razorpay, then data, then the
@@ -225,7 +305,15 @@ export async function deleteMemberAccount(member: MemberIdentity): Promise<void>
   const blockers = await getDeletionBlockers(member);
   if (blockers.length) throw new AccountDeletionBlockedError(blockers.join(" "));
 
+  // Razorpay is provider-independent — money must stop flowing before either data layer is
+  // touched, and cancelMemberSubscription itself branches on the cutover flag.
   await cancelSubscriptionIfAny(member.id);
+
+  if (isSupabaseCutoverActive()) {
+    await deleteMemberAccountInSupabase(member);
+    await deleteMemberStorageAndAuth(member);
+    return;
+  }
 
   const anonEmail = anonymizedEmailFor(member.id);
 
@@ -270,19 +358,7 @@ export async function deleteMemberAccount(member: MemberIdentity): Promise<void>
   await db.recursiveDelete(db.collection("memberSubscriptions").doc(member.id)).catch(() => {});
   await db.recursiveDelete(db.collection("members").doc(member.id));
 
-  // 5. Uploaded palm/face photos live under prefixes keyed by uid in the private bucket.
-  if (isStorageConfigured()) {
-    await bucket().deleteFiles({ prefix: `palm-readings/${member.id}/` }).catch(() => {});
-    await bucket().deleteFiles({ prefix: `face-readings/${member.id}/` }).catch(() => {});
-  }
-
-  // 6. Firebase Auth last — if anything above failed, the member can still sign in and retry.
-  try {
-    await getAuth().revokeRefreshTokens(member.id);
-    await getAuth().deleteUser(member.id);
-  } catch {
-    // Auth user already gone — the app's own data removal is what matters.
-  }
+  await deleteMemberStorageAndAuth(member);
 
   // A deletion is an audit-worthy event even without an admin actor.
   await db.collection("auditLogs").add({

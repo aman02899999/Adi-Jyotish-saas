@@ -2,6 +2,12 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  getAllServicesFromSupabase,
+  getPublishedServicesFromSupabase,
+  seedServiceInSupabase,
+} from "@/lib/services-supabase";
 
 export type Service = {
   id: string;
@@ -103,6 +109,10 @@ function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestor
 /** Services collection is keyed by slug (stable, human-readable, matches the old unique-slug
  * constraint) rather than an auto-generated ID. */
 export async function seedServices() {
+  if (isSupabaseCutoverActive()) {
+    for (const service of starterServices) await seedServiceInSupabase(service);
+    return;
+  }
   const collection = db.collection("services");
   for (const service of starterServices) {
     const ref = collection.doc(service.slug);
@@ -125,6 +135,7 @@ function seedDefaults() {
 export async function getAllServices(): Promise<Service[]> {
   try {
     await seedServices();
+    if (isSupabaseCutoverActive()) return await getAllServicesFromSupabase();
     const snap = await db.collection("services").orderBy("featured", "desc").orderBy("title", "asc").get();
     return snap.docs.map(fromDoc);
   } catch (error) {
@@ -139,6 +150,7 @@ export async function getAllServices(): Promise<Service[]> {
 export async function getPublishedServices(): Promise<Service[]> {
   try {
     await seedServices();
+    if (isSupabaseCutoverActive()) return await getPublishedServicesFromSupabase();
     const snap = await db.collection("services").where("active", "==", true).orderBy("featured", "desc").orderBy("title", "asc").get();
     return snap.docs.map(fromDoc);
   } catch (error) {

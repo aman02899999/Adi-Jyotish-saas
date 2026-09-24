@@ -2,6 +2,8 @@ import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { parseReportRange } from "@/lib/analytics";
 import { bookingFromDoc } from "@/app/api/bookings/route";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getBookingsSinceInSupabase } from "@/lib/bookings-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -18,11 +20,17 @@ export async function GET(request: Request) {
   const url = new URL(request.url);
   const range = parseReportRange(url.searchParams.get("range") ?? undefined);
   const days = range === "30d" ? 30 : range === "90d" ? 90 : range === "365d" ? 365 : null;
-  const query = days
-    ? db.collection("bookings").where("createdAt", ">=", new Date(Date.now() - days * 86400000))
-    : db.collection("bookings");
-  const snap = await query.get();
-  const rows = snap.docs.map(bookingFromDoc);
+  const since = days ? new Date(Date.now() - days * 86400000) : null;
+  let rows;
+  if (isSupabaseCutoverActive()) {
+    rows = await getBookingsSinceInSupabase(since);
+  } else {
+    const query = since
+      ? db.collection("bookings").where("createdAt", ">=", since)
+      : db.collection("bookings");
+    const snap = await query.get();
+    rows = snap.docs.map(bookingFromDoc);
+  }
   const headers = ["Reference","Created","Appointment","Customer","Email","Service","Price USD","Booking status","Payment status"];
   const lines = [headers.map(csvCell).join(","),...rows.map(row=>[
     row.reference,row.createdAt,row.scheduledAt,row.clientName,row.clientEmail,row.serviceTitle,row.servicePrice,row.status,row.paymentStatus,

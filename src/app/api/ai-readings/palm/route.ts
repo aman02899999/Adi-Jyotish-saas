@@ -4,19 +4,32 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { PALM_MAX_EDGE, prepareReadingImage } from "@/lib/reading-image";
 
 export const dynamic = "force-dynamic";
 
 const ALLOWED_MIME_TYPES = new Set(["image/jpeg", "image/png", "image/webp"]);
 const MAX_IMAGE_BYTES = 6 * 1024 * 1024;
 
+/** Downscaling happens here, before the photo is stored, rather than on the way out to Gemini.
+ * A reading retries up to three times, so resizing at send time would redo the work on every
+ * attempt — and the stored copy would stay full-size, paying for bytes nobody reads at that
+ * resolution. Doing it once on the way in shrinks the Gemini bill, the Storage bill, and the
+ * download on each retry together. */
 async function readImageField(form: FormData, field: string): Promise<{ buffer: Buffer; mimeType: string } | { error: string }> {
   const file = form.get(field);
   if (!(file instanceof File)) return { error: `Please upload a clear photo of your ${field.includes("left") ? "left" : "right"} palm.` };
   if (!ALLOWED_MIME_TYPES.has(file.type)) return { error: "Palm photos must be JPEG, PNG, or WebP images." };
   if (file.size > MAX_IMAGE_BYTES) return { error: "Each palm photo must be under 6MB." };
-  const buffer = Buffer.from(await file.arrayBuffer());
-  return { buffer, mimeType: file.type };
+
+  try {
+    const prepared = await prepareReadingImage(Buffer.from(await file.arrayBuffer()), PALM_MAX_EDGE);
+    return { buffer: Buffer.from(prepared.base64, "base64"), mimeType: prepared.mimeType };
+  } catch {
+    // A file can pass the mime-type check and still not decode — a renamed document, a truncated
+    // upload. Better a clear message here than a decode failure much later, after payment.
+    return { error: "That palm photo could not be read. Please try a different image." };
+  }
 }
 
 export async function POST(request: Request) {

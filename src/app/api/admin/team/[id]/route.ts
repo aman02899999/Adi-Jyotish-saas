@@ -2,14 +2,41 @@ import { getAuth } from "firebase-admin/auth";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { roleSlugExists } from "@/lib/admin-roles";
+import {
+  countActiveOwnersInSupabase,
+  deleteAdminUserInSupabase,
+  getAdminUserInSupabase,
+  updateAdminUserInSupabase,
+  type AdminUserRow,
+} from "@/lib/admin-team-supabase";
+import { deleteGoTrueUser } from "@/lib/gotrue-admin";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { revokeAllUserSessions } from "@/lib/session-cookie";
 
 export const dynamic = "force-dynamic";
 
 type AdminUserDoc = { name: string; email: string; role: string; active: boolean; lastLoginAt?: FirebaseFirestore.Timestamp | null; createdAt?: FirebaseFirestore.Timestamp };
 
 async function ownerCount() {
+  if (isSupabaseCutoverActive()) return countActiveOwnersInSupabase();
   const snap = await db.collection("adminUsers").where("role", "==", "owner").where("active", "==", true).count().get();
   return snap.data().count;
+}
+
+async function loadAdmin(id: string): Promise<AdminUserRow | null> {
+  if (isSupabaseCutoverActive()) return getAdminUserInSupabase(id);
+  const snap = await db.collection("adminUsers").doc(id).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as AdminUserDoc;
+  return {
+    id: snap.id,
+    name: data.name,
+    email: data.email,
+    role: data.role,
+    active: data.active,
+    lastLoginAt: data.lastLoginAt ? data.lastLoginAt.toDate() : null,
+    createdAt: data.createdAt ? data.createdAt.toDate() : new Date(),
+  };
 }
 
 export async function PUT(request: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -18,10 +45,8 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!hasAdminPermission(admin, "team")) return Response.json({ error: "Owner access required." }, { status: 403 });
 
   const { id } = await params;
-  const ref = db.collection("adminUsers").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) return Response.json({ error: "Administrator not found." }, { status: 404 });
-  const existing = snap.data() as AdminUserDoc;
+  const existing = await loadAdmin(id);
+  if (!existing) return Response.json({ error: "Administrator not found." }, { status: 404 });
 
   const body = await request.json() as { role?: string; active?: boolean };
   const role = body.role && await roleSlugExists(body.role) ? body.role : existing.role;
@@ -39,14 +64,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     return Response.json({ error: "The workspace must retain at least one active owner." }, { status: 409 });
   }
 
-  await ref.update({ role, active, updatedAt: new Date() });
+  if (isSupabaseCutoverActive()) {
+    await updateAdminUserInSupabase(id, { role, active });
+  } else {
+    await db.collection("adminUsers").doc(id).update({ role, active, updatedAt: new Date() });
+  }
   if (!active) {
-    try { await getAuth().revokeRefreshTokens(id); } catch { /* user may already be gone */ }
+    try { await revokeAllUserSessions(id); } catch { /* user may already be gone */ }
   }
   await recordAudit(admin, "team.updated", "administrator", id, { role, active });
 
-  const updated = { id, name: existing.name, email: existing.email, role, active, lastLoginAt: existing.lastLoginAt ? existing.lastLoginAt.toDate() : null, createdAt: existing.createdAt ? existing.createdAt.toDate() : new Date() };
-  return Response.json(updated);
+  return Response.json({ id, name: existing.name, email: existing.email, role, active, lastLoginAt: existing.lastLoginAt, createdAt: existing.createdAt });
 }
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -57,16 +85,21 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   const { id } = await params;
   if (id === admin.id) return Response.json({ error: "You cannot delete your own account." }, { status: 409 });
 
-  const ref = db.collection("adminUsers").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) return Response.json({ error: "Administrator not found." }, { status: 404 });
-  const existing = snap.data() as AdminUserDoc;
+  const existing = await loadAdmin(id);
+  if (!existing) return Response.json({ error: "Administrator not found." }, { status: 404 });
   if (existing.role === "owner" && existing.active && await ownerCount() <= 1) {
     return Response.json({ error: "The workspace must retain an active owner." }, { status: 409 });
   }
 
-  await ref.delete();
-  try { await getAuth().deleteUser(id); } catch { /* Firebase Auth user may already be gone */ }
+  if (isSupabaseCutoverActive()) {
+    await deleteAdminUserInSupabase(id);
+  } else {
+    await db.collection("adminUsers").doc(id).delete();
+  }
+  try {
+    if (isSupabaseCutoverActive()) await deleteGoTrueUser(id);
+    else await getAuth().deleteUser(id);
+  } catch { /* the auth account may already be gone */ }
   await recordAudit(admin, "team.deleted", "administrator", id, { email: existing.email, role: existing.role });
   return Response.json({ ok: true, id });
 }

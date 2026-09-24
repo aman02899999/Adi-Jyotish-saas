@@ -1,13 +1,13 @@
-import { db } from "@/lib/firestore";
 import {
   AccountDeletionBlockedError,
+  AccountDeletionUnavailableError,
   deleteMemberAccount,
   getDeletionBlockers,
 } from "@/lib/account-deletion";
 import { DELETE_CONFIRMATION_PHRASE } from "@/lib/account-privacy";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { getCurrentMember, revokeMemberSession } from "@/lib/member-auth";
-import { verifyTotpOrBackupCode } from "@/lib/two-factor";
+import { getTwoFactorState, verifyTotpOrBackupCode, type TwoFactorAccount } from "@/lib/two-factor";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +16,15 @@ export const dynamic = "force-dynamic";
 export async function GET() {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
-  const blockers = await getDeletionBlockers(member);
+  let blockers: string[];
+  try {
+    blockers = await getDeletionBlockers(member);
+  } catch (error) {
+    if (error instanceof AccountDeletionUnavailableError) {
+      return Response.json({ error: error.message }, { status: 503 });
+    }
+    throw error;
+  }
   return Response.json({ blockers, twoFactorRequired: member.totpEnabled, confirmationPhrase: DELETE_CONFIRMATION_PHRASE });
 }
 
@@ -40,10 +48,12 @@ export async function POST(request: Request) {
   }
 
   if (member.totpEnabled) {
-    const ref = db.collection("members").doc(member.id);
-    const snap = await ref.get();
-    const secret = snap.data()?.totpSecret as string | undefined;
-    if (!secret || !(await verifyTotpOrBackupCode(ref, secret, body.code ?? ""))) {
+    // Goes through the two-factor abstraction rather than reading the Firestore doc directly, so
+    // the re-authentication keeps working after the Supabase cutover instead of failing closed
+    // against a collection that is no longer the source of truth.
+    const account: TwoFactorAccount = { role: "member", id: member.id };
+    const secret = (await getTwoFactorState(account))?.totpSecret;
+    if (!secret || !(await verifyTotpOrBackupCode(account, secret, body.code ?? ""))) {
       await recordAuthFailure(throttle.keyHash);
       return Response.json({ error: "That two-factor code is incorrect." }, { status: 401 });
     }
@@ -55,6 +65,9 @@ export async function POST(request: Request) {
   } catch (error) {
     if (error instanceof AccountDeletionBlockedError) {
       return Response.json({ error: error.message }, { status: 409 });
+    }
+    if (error instanceof AccountDeletionUnavailableError) {
+      return Response.json({ error: error.message }, { status: 503 });
     }
     throw error;
   }

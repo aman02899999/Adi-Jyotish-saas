@@ -2,7 +2,7 @@
 
 import { FormEvent, useEffect, useState } from "react";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, ShieldCheck } from "lucide-react";
-import { confirmPasswordReset, verifyPasswordResetCode } from "@/lib/firebase-client";
+import { confirmPasswordReset, verifyPasswordResetCode } from "@/lib/auth-client";
 
 export function ResetPasswordForm({ oobCode, signInHref }: { oobCode: string; signInHref: string }) {
   const [password, setPassword] = useState("");

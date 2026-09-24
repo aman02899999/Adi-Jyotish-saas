@@ -4,7 +4,7 @@ import { FormEvent, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { ArrowRight, Eye, EyeOff, LockKeyhole, Mail, ShieldCheck, UserRound } from "lucide-react";
 import { TwoFactorChallenge } from "@/components/two-factor-challenge";
-import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/firebase-client";
+import { createUserWithEmailAndPassword, signInWithEmailAndPassword } from "@/lib/auth-client";
 
 export function AdminAuthForm({ setup }: { setup: boolean }) {
   const [name, setName] = useState("");

@@ -3,39 +3,27 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { STUDIO_SETTINGS_DEFAULTS, type StudioSettings } from "@/lib/studio-settings-defaults";
+import { fetchStudioSettingsFromSupabase, updateStudioSettingsInSupabase } from "@/lib/studio-settings-supabase";
 
-export type StudioSettings = {
-  studioName: string;
-  supportEmail: string;
-  timezone: string;
-  currency: string;
-  cancellationHours: number;
-  bookingLeadMinutes: number;
-  replySlaHours: number;
-  gstRate: number;
-  gstin: string | null;
-  // ISO string, not a Date — same fix as promo-banner.ts's PromoBanner.updatedAt: unstable_cache
-  // persists its return value through a serialization round-trip, so a cache-hit silently hands
-  // back a plain string where a cache-miss would have handed back a real Date under the same field
-  // name. Storing the string form up front keeps the type honest regardless of cache state.
-  updatedAt: string;
-};
+// Re-exported so existing imports of the type from this module keep working.
+export type { StudioSettings };
 
-const defaults: Omit<StudioSettings, "updatedAt"> = {
-  studioName: "Adi Jyotish Guru",
-  supportEmail: "support@adijyotishguru.com",
-  timezone: "Asia/Kolkata",
-  currency: "INR",
-  cancellationHours: 24,
-  bookingLeadMinutes: 15,
-  replySlaHours: 24,
-  gstRate: 18,
-  gstin: null,
-};
+const defaults = STUDIO_SETTINGS_DEFAULTS;
 
 const ref = db.collection("studioSettings").doc("main");
 
+/**
+ * Reads settings from whichever data layer the cutover flag selects.
+ *
+ * The branch lives here rather than in callers so that nothing downstream has to
+ * know a migration is in progress — every consumer keeps calling
+ * getStudioSettings() exactly as before.
+ */
 async function fetchStudioSettings(): Promise<StudioSettings> {
+  if (isSupabaseCutoverActive()) return fetchStudioSettingsFromSupabase();
+
   const snap = await ref.get();
   if (!snap.exists) {
     await ref.set({ ...defaults, updatedAt: FieldValue.serverTimestamp() });
@@ -69,6 +57,7 @@ export const getStudioSettings = unstable_cache(fetchStudioSettingsSafely, ["stu
 });
 
 export async function updateStudioSettings(patch: Partial<StudioSettings>) {
+  if (isSupabaseCutoverActive()) return updateStudioSettingsInSupabase(patch);
   await ref.set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return fetchStudioSettings();
 }
