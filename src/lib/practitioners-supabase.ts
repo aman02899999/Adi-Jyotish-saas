@@ -259,6 +259,58 @@ export async function getAllReviewsInSupabase(): Promise<ReviewRow[]> {
   return queryModels<ReviewRow>(`${REVIEW_SELECT} order by created_at desc`, [], REVIEW_NUMERIC_COLUMNS);
 }
 
+const REVIEW_RETURNING = `returning id, practitioner_id, member_id, booking_id, reviewer_name,
+  rating::int as rating, clarity::int as clarity, empathy::int as empathy,
+  usefulness::int as usefulness, body, status, source, created_at, updated_at`;
+
+/** Admin moderation. Null when the review is gone. */
+export async function setReviewStatusInSupabase(id: string, status: string): Promise<ReviewRow | null> {
+  return queryModel<ReviewRow>(
+    `update public.practitioner_reviews set status = $2, updated_at = now() where id = $1 ${REVIEW_RETURNING}`,
+    [id, status],
+    REVIEW_NUMERIC_COLUMNS,
+  );
+}
+
+/** The deleted review's practitioner, or null when there was nothing to delete. */
+export async function deleteReviewInSupabase(id: string): Promise<{ practitionerId: string } | null> {
+  return queryModel<{ practitionerId: string }>(
+    `delete from public.practitioner_reviews where id = $1 returning practitioner_id`,
+    [id],
+  );
+}
+
+export type MemberReviewInsert = {
+  practitionerId: string;
+  memberId: string;
+  bookingId: string;
+  reviewerName: string;
+  rating: number;
+  clarity: number;
+  empathy: number;
+  usefulness: number;
+  body: string;
+  status: string;
+  source: string;
+};
+
+/**
+ * One review per booking: the id is the booking id, as it is in Firestore (whose create() failed
+ * if the document existed), so a second submit — or two racing — inserts nothing. Null then.
+ */
+export async function insertMemberReviewInSupabase(input: MemberReviewInsert): Promise<ReviewRow | null> {
+  return queryModel<ReviewRow>(
+    `insert into public.practitioner_reviews
+       (id, practitioner_id, member_id, booking_id, reviewer_name, rating, clarity, empathy, usefulness, body, status, source)
+     values ($1, $2, $3, $1, $4, $5, $6, $7, $8, $9, $10, $11)
+     on conflict (id) do nothing
+     ${REVIEW_RETURNING}`,
+    [input.bookingId, input.practitionerId, input.memberId, input.reviewerName, input.rating, input.clarity,
+      input.empathy, input.usefulness, input.body, input.status, input.source],
+    REVIEW_NUMERIC_COLUMNS,
+  );
+}
+
 /** Practitioner names/slugs for the admin review list, in one query. */
 export async function getPractitionerNameMapInSupabase(practitionerIds: string[]): Promise<Map<string, { name: string; slug: string }>> {
   if (!practitionerIds.length) return new Map();

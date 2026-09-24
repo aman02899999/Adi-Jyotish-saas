@@ -15,6 +15,8 @@ import { getPractitionerAccuracyMap } from "@/lib/predictions";
 import { computeSessionPriceAnchor, computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
 import { genuineReviews } from "@/lib/review-provenance";
+import { listFavoritePractitionerIdsInSupabase } from "@/lib/member-favorites-supabase";
+import { getUnreviewedCompletedBookingsInSupabase } from "@/lib/bookings-supabase";
 
 export type PractitionerReview = {
   id: string;
@@ -161,11 +163,13 @@ export async function getMarketplacePractitioner(slug: string) {
 /** Favorites are stored as members/{memberId}/favorites/{practitionerId} — doc existence IS the
  * membership check, so add/remove/list are all simple, no separate unique-index needed. */
 export async function getFavoritePractitionerIds(memberId: string) {
+  if (isSupabaseCutoverActive()) return listFavoritePractitionerIdsInSupabase(memberId);
   const snap = await db.collection("members").doc(memberId).collection("favorites").get();
   return snap.docs.map((doc) => doc.id);
 }
 
 export async function getEligibleReviewBookings(memberEmail: string, practitionerId: string) {
+  if (isSupabaseCutoverActive()) return getUnreviewedCompletedBookingsInSupabase(memberEmail, practitionerId);
   const [completedSnap, existingSnap] = await Promise.all([
     db.collection("bookings")
       .where("clientEmail", "==", memberEmail)

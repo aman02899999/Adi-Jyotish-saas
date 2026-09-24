@@ -341,6 +341,30 @@ export async function updateBookingInSupabase(id: string, patch: BookingPatch): 
 }
 
 /**
+ * A member's completed bookings with one practitioner that have no review yet — the choices the
+ * profile page's review form offers. Any review counts, hidden or not, as it did on Firestore: a
+ * booking gets one review, and moderation does not reopen it.
+ */
+export async function getUnreviewedCompletedBookingsInSupabase(
+  memberEmail: string,
+  practitionerId: string,
+): Promise<Array<{ id: string; serviceTitle: string; scheduledAt: Date }>> {
+  const { rows } = await query<{ id: string; service_title: string; scheduled_at: Date }>(
+    `select b.id, b.service_title, b.scheduled_at
+       from public.bookings b
+      where b.client_email = $1
+        and b.practitioner_id = $2
+        and b.status = 'completed'
+        and not exists (
+          select 1 from public.practitioner_reviews r where r.booking_id = b.id or r.id = b.id
+        )
+      order by b.scheduled_at desc`,
+    [memberEmail, practitionerId],
+  );
+  return rows.map((row) => ({ id: row.id, serviceTitle: row.service_title, scheduledAt: new Date(row.scheduled_at) }));
+}
+
+/**
  * Financial rows still pointing at a booking.
  *
  * Five tables reference `bookings`, all `ON DELETE SET NULL`, so a delete would
