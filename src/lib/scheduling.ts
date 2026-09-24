@@ -267,7 +267,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "om-prakash-tiwari",
     email: "omprakash.tiwari@jyotish.studio",
     title: "Marriage & Muhurat Expert",
-    bio: "With over two decades of experience, Om Prakash ji is known for precise vivah muhurat selection and practical remedies for dosha concerns raised before marriage.",
+    bio: "Om Prakash ji focuses on precise vivah muhurat selection and practical remedies for dosha concerns raised before marriage.",
     specialties: "Marriage, Vivah Muhurat, Dosha Remedies, Panchang",
     languages: "Hindi, Bhojpuri",
     consultationModes: "Audio, Chat",
@@ -487,7 +487,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "ramesh-iyengar",
     email: "ramesh.iyengar@jyotish.studio",
     title: "Vitality & Longevity Jyotishi",
-    bio: "Ramesh ji has two decades of experience reading longevity indicators and planetary health remedies, widely respected for his calm, thorough consultations.",
+    bio: "Ramesh ji reads longevity indicators and planetary health remedies in calm, thorough conversations.",
     specialties: "Health, Longevity, Planetary Health Remedies",
     languages: "Tamil, Telugu, Hindi",
     consultationModes: "Audio, Video, Chat",
@@ -507,7 +507,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "vinod-chaubey",
     email: "vinod.chaubey@jyotish.studio",
     title: "Vastu Shastra Consultant",
-    bio: "Vinod ji has consulted on Vastu for homes and offices for over two decades, focused on practical, non-structural remedies rather than costly renovations.",
+    bio: "Vinod ji advises on Vastu for homes and offices, focused on practical, non-structural remedies rather than costly renovations.",
     specialties: "Vastu, Home Harmony, Directional Remedies",
     languages: "Hindi, Sanskrit",
     consultationModes: "Audio, Video, Chat",
@@ -671,7 +671,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "ravi-shankar-pillai",
     email: "ravishankar.pillai@jyotish.studio",
     title: "Learning & Focus Jyotishi",
-    bio: "Ravi Shankar ji has nearly two decades of experience helping students with concentration remedies and guidance on career direction after their studies.",
+    bio: "Ravi Shankar ji helps students with concentration remedies and guidance on career direction after their studies.",
     specialties: "Education, Concentration Remedies, Career-after-Education Guidance",
     languages: "Tamil, Malayalam, Hindi",
     consultationModes: "Audio, Video, Chat",
@@ -693,14 +693,65 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
 // of leaving them stuck at the false default forever.
 const REAL_PRACTITIONER_SLUGS = new Set(["jagmohan-shashtri-ji", "arun-dubey-ji"]);
 
+/**
+ * Starter copy that was published and later corrected — every AI persona above once claimed years
+ * of experience or seniority it cannot have. A stored field still holding the old text has never
+ * been edited, so it is safe to replace; anything else is someone's edit and is left alone.
+ */
+const SUPERSEDED_STARTER_COPY: Array<{ slug: string; field: "title" | "bio"; text: string }> = [
+  { slug: "anika-sharma", field: "title", text: "Senior Vedic Astrologer" },
+  { slug: "ravindra-bhatt", field: "bio", text: "Ravindra ji has spent over a decade helping clients navigate love, courtship, and long-distance relationships through classical Jyotish, with a practical focus on timing and honest communication." },
+  { slug: "harish-shukla", field: "bio", text: "Harish ji has guided hundreds of families through kundli milan and vivah muhurat selection, blending classical Ashtakoot matching with honest conversation about real compatibility." },
+  { slug: "om-prakash-tiwari", field: "bio", text: "With over two decades of experience, Om Prakash ji is known for precise vivah muhurat selection and practical remedies for dosha concerns raised before marriage." },
+  { slug: "ramesh-iyengar", field: "bio", text: "Ramesh ji has two decades of experience reading longevity indicators and planetary health remedies, widely respected for his calm, thorough consultations." },
+  { slug: "vinod-chaubey", field: "bio", text: "Vinod ji has consulted on Vastu for homes and offices for over two decades, focused on practical, non-structural remedies rather than costly renovations." },
+  { slug: "naresh-vyas", field: "bio", text: "Naresh ji has guided students and parents through exam timing and academic focus concerns for nearly two decades, drawing on 5th-house analysis and Saraswati yoga indicators." },
+  { slug: "ravi-shankar-pillai", field: "bio", text: "Ravi Shankar ji has nearly two decades of experience helping students with concentration remedies and guidance on career direction after their studies." },
+];
+
+/** Admin-deleted starter practitioners; seeding never recreates one listed here. */
+export const DELETED_STARTER_COLLECTION = "deletedStarterPractitioners";
+
+export function isStarterPractitioner(id: string) {
+  return starterPractitioners.some((starter) => starter.slug === id);
+}
+
+/**
+ * Creates any starter practitioner that does not exist yet, and otherwise changes only what no
+ * person owns. This runs on every directory read, so it used to be the thing reverting admins:
+ * it rewrote title, bio, rates, verification and featured on all 34 starters each time — including
+ * inside the admin update route itself, whose response came back with the edit already undone —
+ * recreated starters an admin had deleted, and re-added weekday hours to any starter whose
+ * availability had been cleared.
+ *
+ * For an existing starter it now only: keeps isAiPowered true to the roster, keeps AI personas
+ * online (there is nobody to switch them on), fills a missing photo, and replaces copy listed in
+ * SUPERSEDED_STARTER_COPY that has not been edited since. Writes happen only when something
+ * differs, and all 34 documents are read in one round trip.
+ */
 export async function seedPractitioners() {
   const collection = db.collection("practitioners");
-  for (const starter of starterPractitioners) {
+  const refs = starterPractitioners.map((starter) => collection.doc(starter.slug));
+  const [snaps, deleted] = await Promise.all([
+    db.getAll(...refs),
+    db.collection(DELETED_STARTER_COLLECTION).select().get(),
+  ]);
+  const deletedIds = new Set(deleted.docs.map((doc) => doc.id));
+
+  await Promise.all(starterPractitioners.map(async (starter, index) => {
     const isAiPowered = !REAL_PRACTITIONER_SLUGS.has(starter.slug);
-    const ref = collection.doc(starter.slug);
-    const snap = await ref.get();
+    const ref = refs[index];
+    const snap = snaps[index];
+
     if (!snap.exists) {
-      await ref.set({
+      if (deletedIds.has(starter.slug)) return;
+      // Availability is written with the profile, once. After that it belongs to the schedule
+      // editor, and an empty schedule is a choice, not something to repair.
+      const weekdays = starter.featured ? [1, 2, 3, 4, 5] : [2, 3, 4, 5, 6];
+      const batch = db.batch();
+      // create() rather than set(): two concurrent first reads both see the document missing, and
+      // the loser must not overwrite what the winner wrote.
+      batch.create(ref, {
         ...starter,
         firebaseUid: null,
         isAiPowered,
@@ -708,48 +759,28 @@ export async function seedPractitioners() {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
-    } else {
-      // photoUrl is deliberately excluded from this always-on update — it's an admin/practitioner
-      // editable field (see updatePractitionerProfile), so blindly overwriting it here on every
-      // directory fetch would silently revert a real uploaded photo back to the seed default.
-      // Backfilling it only when the existing doc has none lets a newly-added seed photo reach
-      // practitioners that were already seeded (e.g. in production) without ever touching one
-      // that's already set. online is similarly left alone for real practitioners (their own
-      // toggle), but force-corrected back to true for AI ones on every pass — there's no human on
-      // the other end to accidentally flip it off, so if it's ever false that's drift, not intent.
-      const existingPhotoUrl = (snap.data() as { photoUrl?: string | null }).photoUrl ?? null;
-      await ref.update({
-        title: starter.title,
-        bio: starter.bio,
-        specialties: starter.specialties,
-        languages: starter.languages,
-        consultationModes: starter.consultationModes,
-        experienceYears: starter.experienceYears,
-        verified: starter.verified,
-        verificationLevel: starter.verificationLevel,
-        chatRatePerMinute: starter.chatRatePerMinute,
-        featured: starter.featured,
-        isAiPowered,
-        ...(existingPhotoUrl ? {} : { photoUrl: starter.photoUrl }),
-        ...(isAiPowered ? { online: true } : {}),
-      });
-    }
-
-    const rulesSnap = await ref.collection("availabilityRules").limit(1).get();
-    if (rulesSnap.empty) {
-      const weekdays = starter.featured ? [1, 2, 3, 4, 5] : [2, 3, 4, 5, 6];
-      const batch = db.batch();
       for (const weekday of weekdays) {
-        // A deterministic doc ID (not an auto-generated one) keeps this idempotent: this whole
-        // block runs on every directory read, so without it, two concurrent reads that both see
-        // rulesSnap.empty === true (the check-then-act race is real — nothing here locks between
-        // the read and the write) each create their own random-ID doc for the same weekday,
-        // doubling every slot the availability grid ever offers for that practitioner.
         batch.set(ref.collection("availabilityRules").doc(`starter-${weekday}`), { weekday, startTime: "09:30", endTime: "17:30", active: true });
       }
-      await batch.commit();
+      await batch.commit().catch((error: unknown) => {
+        // gRPC ALREADY_EXISTS: a concurrent read created it first.
+        if ((error as { code?: number }).code !== 6) throw error;
+      });
+      return;
     }
-  }
+
+    const data = snap.data() as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+    if (data.isAiPowered !== isAiPowered) patch.isAiPowered = isAiPowered;
+    if (isAiPowered && data.online !== true) patch.online = true;
+    if (!data.photoUrl && starter.photoUrl) patch.photoUrl = starter.photoUrl;
+    for (const superseded of SUPERSEDED_STARTER_COPY) {
+      if (superseded.slug === starter.slug && data[superseded.field] === superseded.text) {
+        patch[superseded.field] = starter[superseded.field];
+      }
+    }
+    if (Object.keys(patch).length) await ref.update(patch);
+  }));
 }
 
 function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): Practitioner {

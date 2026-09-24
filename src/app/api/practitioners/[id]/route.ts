@@ -1,7 +1,7 @@
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin,hasAdminPermission,recordAudit } from "@/lib/admin-auth";
-import { getPractitionerDirectory, sanitizeMediaUrl } from "@/lib/scheduling";
+import { DELETED_STARTER_COLLECTION, getPractitionerDirectory, isStarterPractitioner, sanitizeMediaUrl } from "@/lib/scheduling";
 
 type PractitionerPayload = {
   name?: string;
@@ -77,7 +77,12 @@ export async function DELETE(_:Request,{params}:{params:Promise<{id:string}>}){
   const snap = await ref.get();
   if(!snap.exists)return Response.json({error:"Practitioner not found."},{status:404});
   const name = snap.data()?.name as string;
-  await ref.delete();
+  // Starters are recreated by seedPractitioners() whenever their document is missing, so deleting
+  // one also has to record that it was deleted on purpose.
+  if(isStarterPractitioner(id))await db.collection(DELETED_STARTER_COLLECTION).doc(id).set({name,deletedBy:admin.id,deletedAt:FieldValue.serverTimestamp()});
+  // recursiveDelete, not delete: availability rules and time off are subcollections, and a plain
+  // delete leaves them behind for any practitioner later created at the same id.
+  await db.recursiveDelete(ref);
   await recordAudit(admin,"practitioner.deleted","practitioner",id,{name});
   return Response.json({ok:true,id});
 }
