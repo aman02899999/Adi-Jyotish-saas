@@ -4,8 +4,11 @@ import { unstable_cache } from "next/cache";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { isSyntheticReview } from "@/lib/review-provenance";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getFeaturedTestimonialsInSupabase, getHomepageStatsInSupabase, getOnlineNowCountInSupabase } from "@/lib/cms-supabase";
 
 async function fetchHomepageStats() {
+  if (isSupabaseCutoverActive()) return getHomepageStatsInSupabase();
   // Demo accounts (isDemoAccount:true, seeded for internal testing only) are filtered out in JS
   // rather than via a Firestore `!=` query, which would wrongly exclude every real practitioner
   // that never has the field set at all — see getPractitionerDirectory in scheduling.ts.
@@ -56,6 +59,7 @@ export const getHomepageStats = unstable_cache(
 export const getOnlineNowCount = unstable_cache(
   async () => {
     try {
+      if (isSupabaseCutoverActive()) return await getOnlineNowCountInSupabase();
       const snap = await db.collection("practitioners").where("active", "==", true).where("online", "==", true).select("isDemoAccount").get();
       return snap.docs.filter((doc) => !doc.data().isDemoAccount).length;
     } catch (error) {
@@ -97,6 +101,7 @@ export const getFeaturedTestimonials = unstable_cache(
     const PAGE_SIZE = Math.max(limit * 4, 50);
     const MAX_PAGES = 20;
     try {
+      if (isSupabaseCutoverActive()) return await getFeaturedTestimonialsInSupabase(limit);
       // Pages until it has enough genuine testimonials. A single top-N query is not enough while
       // synthetic reviews are still in the table: they are overwhelmingly 5-star, so the highest
       // rated dozen can all be synthetic and filtering them would leave the homepage with nothing
