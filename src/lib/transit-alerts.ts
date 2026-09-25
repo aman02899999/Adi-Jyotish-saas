@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { swapTransitHousesInSupabase } from "@/lib/content-cache-supabase";
 import { computeGrahaPositions, RASHIS } from "@/lib/astro-engine";
 import { buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
 import { HOUSE_THEMES } from "@/lib/horoscopes";
@@ -118,27 +120,33 @@ export async function getCosmicWeather(member: { name: string; birthDate: string
   let jupiterIsNew = false;
   let saturnIsNew = false;
   try {
-    const ref = weatherDoc(memberId);
-    // A plain get-then-set here would let two concurrent dashboard loads (two tabs, a prefetch
-    // racing a navigation) both read the same pre-change state and both fire a duplicate
-    // notification. A transaction serializes them: Firestore automatically retries whichever
-    // request loses the race with a fresh read, so only the request that actually observes the
-    // change computes isNew=true.
-    await db.runTransaction(async (tx) => {
-      const snap = await tx.get(ref);
-      const stored = (snap.data()?.houses as StoredHouses | undefined) ?? {};
-
+    if (isSupabaseCutoverActive()) {
+      const stored = await swapTransitHousesInSupabase(memberId, { moon: moonHouse, jupiter: jupiterHouse, saturn: saturnHouse, rahu: rahuHouse, ketu: ketuHouse });
       jupiterIsNew = stored.jupiter !== undefined && stored.jupiter !== jupiterHouse;
       saturnIsNew = stored.saturn !== undefined && stored.saturn !== saturnHouse;
-      const unchanged = stored.moon === moonHouse && stored.jupiter === jupiterHouse && stored.saturn === saturnHouse && stored.rahu === rahuHouse && stored.ketu === ketuHouse;
+    } else {
+      const ref = weatherDoc(memberId);
+      // A plain get-then-set here would let two concurrent dashboard loads (two tabs, a prefetch
+      // racing a navigation) both read the same pre-change state and both fire a duplicate
+      // notification. A transaction serializes them: Firestore automatically retries whichever
+      // request loses the race with a fresh read, so only the request that actually observes the
+      // change computes isNew=true.
+      await db.runTransaction(async (tx) => {
+        const snap = await tx.get(ref);
+        const stored = (snap.data()?.houses as StoredHouses | undefined) ?? {};
 
-      // Skips the write when nothing has moved since the last visit — most days a member checks
-      // the dashboard more than once, so without this every repeat visit would re-write an
-      // identical document.
-      if (!unchanged) {
-        tx.set(ref, { houses: { moon: moonHouse, jupiter: jupiterHouse, saturn: saturnHouse, rahu: rahuHouse, ketu: ketuHouse }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
-      }
-    });
+        jupiterIsNew = stored.jupiter !== undefined && stored.jupiter !== jupiterHouse;
+        saturnIsNew = stored.saturn !== undefined && stored.saturn !== saturnHouse;
+        const unchanged = stored.moon === moonHouse && stored.jupiter === jupiterHouse && stored.saturn === saturnHouse && stored.rahu === rahuHouse && stored.ketu === ketuHouse;
+
+        // Skips the write when nothing has moved since the last visit — most days a member checks
+        // the dashboard more than once, so without this every repeat visit would re-write an
+        // identical document.
+        if (!unchanged) {
+          tx.set(ref, { houses: { moon: moonHouse, jupiter: jupiterHouse, saturn: saturnHouse, rahu: rahuHouse, ketu: ketuHouse }, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
+        }
+      });
+    }
 
     if (jupiterIsNew || saturnIsNew) {
       const changed = [jupiterIsNew ? "Jupiter" : null, saturnIsNew ? "Saturn" : null].filter(Boolean).join(" and ");

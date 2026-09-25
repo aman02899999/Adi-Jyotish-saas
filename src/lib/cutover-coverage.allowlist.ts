@@ -19,12 +19,5 @@ export const FIRESTORE_ONLY: Record<string, string> = {
   "src/lib/gemstone-wishlist.ts#toggleWishlist": NOT_YET_PORTED,
   "src/lib/gemstones-seed.ts#seedGemstoneCatalog": NOT_YET_PORTED,
   "src/lib/gemstones.ts#getAllProductsAdmin": NOT_YET_PORTED,
-  "src/lib/horoscopes.ts#getDailyHoroscope": NOT_YET_PORTED,
-  "src/lib/horoscopes.ts#getHoroscopeForPeriod": NOT_YET_PORTED,
-  "src/lib/kundli-matching.ts#createKundliMatch": NOT_YET_PORTED,
-  "src/lib/kundli-matching.ts#getKundliMatchById": NOT_YET_PORTED,
-  "src/lib/kundli-matching.ts#getShareableKundliMatch": NOT_YET_PORTED,
-  "src/lib/numerology.ts#createNumerologyReading": NOT_YET_PORTED,
   "src/lib/scheduling.ts#seedPractitioners": "By design: seeds the Firestore roster; getPractitionerDirectory returns before calling it under cutover, where the roster was copied.",
-  "src/lib/transit-alerts.ts#getCosmicWeather": NOT_YET_PORTED,
 };

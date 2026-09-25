@@ -295,6 +295,27 @@ describeCopy("copy script against the real schema", () => {
     await query(`delete from public.gift_card_payment_index where id = $1`, ["pay_itestcopy"]);
   });
 
+  it("copies a numerology reading with its result, not just who it was for", async () => {
+    // Until 0015 the table had no columns for the numbers or narrative, and stripUnknownColumns
+    // dropped them from every copied reading.
+    const spec = TABLES.find((s) => s.table === "numerology_readings");
+    if (!spec) throw new Error("numerology_readings missing from TABLES");
+    const row = buildRow(spec, null, {
+      id: "itest-copy-numerology",
+      data: () => ({ memberId: null, name: "Asha", birthDate: "1990-01-01", lifePathNumber: 11, destinyNumber: 7, narrative: "A reading.", createdAt: new Date() }),
+    });
+
+    await query(`delete from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
+    const allowed = await withClient((client) => knownColumns(client, spec.table));
+    const { rows, dropped } = stripUnknownColumns([row], allowed);
+    expect([...dropped]).toEqual([]);
+    await withClient((client) => upsert(client, spec, rows));
+
+    const stored = await query(`select life_path_number, destiny_number, narrative from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
+    expect(stored.rows[0]).toEqual({ life_path_number: 11, destiny_number: 7, narrative: "A reading." });
+    await query(`delete from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
+  });
+
   it("rejects a row with no value for its primary key", async () => {
     const spec = TABLES.find((s) => s.table === "members");
     if (!spec) throw new Error("members missing from TABLES");
