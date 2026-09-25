@@ -62,8 +62,10 @@ const TABLES = [
   { collection: "wallets", table: "wallets" },
   { collection: "wallets", sub: "entries", table: "wallet_entries", parent: "wallet_id" },
   { collection: "wallets", sub: "holds", table: "wallet_holds", parent: "wallet_id" },
-  { collection: "giftCards", table: "gift_cards" },
-  { collection: "giftCardPaymentIndex", table: "gift_card_payment_index" },
+  // Both are keyed by a value the document body does not repeat (the gift code, the Razorpay
+  // payment id), and both columns are NOT NULL, so the copy fills them from the document id.
+  { collection: "giftCards", table: "gift_cards", docIdColumn: "code" },
+  { collection: "giftCardPaymentIndex", table: "gift_card_payment_index", docIdColumn: "razorpay_payment_id" },
 
   // --- 0003 gemstones / content -------------------------------------------
   { collection: "gemstoneCategories", table: "gemstone_categories" },

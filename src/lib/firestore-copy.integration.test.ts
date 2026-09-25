@@ -266,6 +266,35 @@ describeCopy("copy script against the real schema", () => {
     ]);
   });
 
+  it("copies gift cards and their payment index, whose code lives only in the document id", async () => {
+    // gift-cards.ts keys giftCards by the code and giftCardPaymentIndex by the Razorpay payment id,
+    // and stores neither in the document body. Both columns are NOT NULL, so unless the copy fills
+    // them from the id, every gift card fails to copy at cutover.
+    const cardSpec = TABLES.find((s) => s.table === "gift_cards");
+    const indexSpec = TABLES.find((s) => s.table === "gift_card_payment_index");
+    if (!cardSpec || !indexSpec) throw new Error("gift card tables missing from TABLES");
+
+    const card = buildRow(cardSpec, null, {
+      id: "AJG-ITESTCPY",
+      data: () => ({ buyerId: null, buyerName: "Asha", amount: 1000, currency: "INR", recipientName: "Ravi", message: "", status: "unclaimed", redeemedBy: null, razorpayPaymentId: "pay_itestcopy", expiresAt: new Date() }),
+    });
+    const index = buildRow(indexSpec, null, { id: "pay_itestcopy", data: () => ({ code: "AJG-ITESTCPY", createdAt: new Date() }) });
+
+    await query(`delete from public.gift_cards where id = $1`, ["AJG-ITESTCPY"]);
+    await query(`delete from public.gift_card_payment_index where id = $1`, ["pay_itestcopy"]);
+    for (const [spec, row] of [[cardSpec, card], [indexSpec, index]] as const) {
+      const allowed = await withClient((client) => knownColumns(client, spec.table));
+      expect(await withClient((client) => upsert(client, spec, stripUnknownColumns([row], allowed).rows))).toBe(1);
+    }
+
+    const cardRow = await query(`select code, amount::int as amount from public.gift_cards where id = $1`, ["AJG-ITESTCPY"]);
+    expect(cardRow.rows[0]).toEqual({ code: "AJG-ITESTCPY", amount: 1000 });
+    const indexRow = await query(`select razorpay_payment_id, code from public.gift_card_payment_index where id = $1`, ["pay_itestcopy"]);
+    expect(indexRow.rows[0]).toEqual({ razorpay_payment_id: "pay_itestcopy", code: "AJG-ITESTCPY" });
+    await query(`delete from public.gift_cards where id = $1`, ["AJG-ITESTCPY"]);
+    await query(`delete from public.gift_card_payment_index where id = $1`, ["pay_itestcopy"]);
+  });
+
   it("rejects a row with no value for its primary key", async () => {
     const spec = TABLES.find((s) => s.table === "members");
     if (!spec) throw new Error("members missing from TABLES");
