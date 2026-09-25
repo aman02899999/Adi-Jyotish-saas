@@ -12,7 +12,8 @@ const describeCutover = process.env.SUPABASE_DB_URL && process.env.SUPABASE_CUTO
 
 vi.mock("next/cache", () => ({ unstable_cache: (fn: unknown) => fn, revalidateTag: vi.fn() }));
 
-const { createPractitionerAdmin, deletePractitionerAdmin, updatePractitionerAdmin, PractitionerAdminError } = await import("@/lib/scheduling");
+const { createPractitionerAdmin, deletePractitionerAdmin, getPractitionerById, updatePractitionerAdmin, PractitionerAdminError } = await import("@/lib/scheduling");
+const { getPractitionerPortalProfile } = await import("@/lib/practitioner-portal");
 
 const NAME = "Padmin Itest";
 const SLUG = "padmin-itest";
@@ -72,6 +73,21 @@ describeCutover("practitioner management on Postgres", () => {
     const { rows } = await query(`select 1 from public.availability_rules where practitioner_id = $1`, [SLUG]);
     expect(rows).toHaveLength(0);
     await expect(deletePractitionerAdmin(SLUG)).rejects.toThrow("not found");
+  });
+
+  it("finds a practitioner by id, and nobody for an unknown one", async () => {
+    await createPractitionerAdmin(base);
+    expect(await getPractitionerById(SLUG)).toMatchObject({ id: SLUG, email: base.email });
+    expect(await getPractitionerById("padmin-itest-nobody")).toBeNull();
+  });
+
+  it("tells the profile page whether payout details are on file, never what they are", async () => {
+    await createPractitionerAdmin(base);
+    await query(`update public.practitioners set bank_account_number_enc = 'CIPHERTEXT-ACCOUNT', totp_enabled = true where id = $1`, [SLUG]);
+
+    const profile = await getPractitionerPortalProfile(SLUG);
+    expect(profile).toMatchObject({ hasBankAccount: true, hasUpi: false, totpEnabled: true, bio: base.bio });
+    expect(JSON.stringify(profile)).not.toContain("CIPHERTEXT");
   });
 
   it("refuses to delete a practitioner with bookings", async () => {

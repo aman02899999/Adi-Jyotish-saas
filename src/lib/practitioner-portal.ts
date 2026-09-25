@@ -12,6 +12,8 @@ import {
   transitionPayoutStatusInSupabase,
 } from "@/lib/practitioner-payouts-supabase";
 import {
+  getPortalProfileInSupabase,
+  type PortalProfileRow,
   cacheBookingKundliInSupabase,
   cacheBookingVarshphalInSupabase,
   cacheChatKundliInSupabase,
@@ -345,6 +347,22 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
 /** Lets a practitioner toggle their own live instant-chat availability — previously only an
  * admin could flip this, which made the "self-service portal" unusable for the one status that
  * genuinely needs to change minute-to-minute (going online/offline for chat). */
+export async function getPractitionerPortalProfile(practitionerId: string): Promise<PortalProfileRow | null> {
+  if (isSupabaseCutoverActive()) return getPortalProfileInSupabase(practitionerId);
+  const snap = await db.collection("practitioners").doc(practitionerId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as {
+    bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null; videoUrl?: string | null;
+    bankAccountName?: string | null; bankIfsc?: string | null; bankAccountNumberEnc?: string | null; upiIdEnc?: string | null; totpEnabled?: boolean;
+  };
+  return {
+    bio: data.bio, specialties: data.specialties, languages: data.languages, consultationModes: data.consultationModes,
+    photoUrl: data.photoUrl ?? null, videoUrl: data.videoUrl ?? null, bankAccountName: data.bankAccountName ?? null,
+    bankIfsc: data.bankIfsc ?? null, hasBankAccount: Boolean(data.bankAccountNumberEnc), hasUpi: Boolean(data.upiIdEnc),
+    totpEnabled: data.totpEnabled === true,
+  };
+}
+
 export async function setPractitionerOnline(practitionerId: string, online: boolean) {
   if (isSupabaseCutoverActive()) {
     await setPortalOnlineInSupabase(practitionerId, online);

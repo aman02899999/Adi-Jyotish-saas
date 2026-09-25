@@ -931,7 +931,8 @@ function normalizeProfilePatch(patch: PractitionerProfilePatch) {
   return out;
 }
 
-async function getPractitionerForAdmin(id: string): Promise<Practitioner | null> {
+/** One practitioner by id (their slug) from the live provider, or null. */
+export async function getPractitionerById(id: string): Promise<Practitioner | null> {
   if (isSupabaseCutoverActive()) return getPractitionerByIdInSupabase(id);
   const snap = await db.collection("practitioners").doc(id).get();
   return snap.exists ? practitionerFromDoc(snap) : null;
@@ -987,7 +988,7 @@ export async function createPractitionerAdmin(
 }
 
 export async function updatePractitionerAdmin(id: string, patch: PractitionerProfilePatch): Promise<Practitioner> {
-  const current = await getPractitionerForAdmin(id);
+  const current = await getPractitionerById(id);
   if (!current) throw new PractitionerAdminError("Practitioner not found.");
   const update = normalizeProfilePatch(patch);
   // Nobody can switch an AI persona on, so it cannot be switched off either; seedPractitioners

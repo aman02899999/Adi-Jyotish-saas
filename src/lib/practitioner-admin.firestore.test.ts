@@ -34,6 +34,8 @@ const { db } = await import("@/lib/firestore");
 const { getPractitionerDirectory } = await import("@/lib/scheduling");
 const scheduleRoutes = { list: await import("@/app/api/practitioners/route"), one: await import("@/app/api/practitioners/[id]/route") };
 const adminRoutes = { list: await import("@/app/api/admin/practitioners/route"), one: await import("@/app/api/admin/practitioners/[id]/route") };
+const inviteRoute = await import("@/app/api/admin/practitioners/[id]/invite/route");
+const { getPractitionerPortalProfile } = await import("@/lib/practitioner-portal");
 
 const HUMAN = "jagmohan-shashtri-ji";
 const AI = "anika-sharma";
@@ -118,6 +120,20 @@ describeFirestore("practitioner management on the live Firestore path", () => {
       const response = await adminRoutes.list.POST(json("POST", { name: "Link Test", email: "link@example.test", photoUrl: "javascript:alert(1)" }));
       expect(response.status).toBe(201);
       expect((await response.json()).photoUrl).toBeNull();
+    });
+
+    it("gives a human a portal invite but refuses one for an AI persona", async () => {
+      expect((await inviteRoute.POST(json("POST"), params(HUMAN))).status).toBe(200);
+      const refused = await inviteRoute.POST(json("POST"), params(AI));
+      expect(refused.status).toBe(409);
+      await expect(refused.json()).resolves.toMatchObject({ error: expect.stringContaining("AI astrologer") });
+    });
+
+    it("tells the profile page whether payout details are on file, never what they are", async () => {
+      await db.collection("practitioners").doc(HUMAN).update({ bankAccountNumberEnc: "CIPHERTEXT-ACCOUNT", upiIdEnc: null });
+      const profile = await getPractitionerPortalProfile(HUMAN);
+      expect(profile).toMatchObject({ hasBankAccount: true, hasUpi: false, totpEnabled: false });
+      expect(JSON.stringify(profile)).not.toContain("CIPHERTEXT");
     });
 
     it("keeps an AI persona online whatever the form says", async () => {
