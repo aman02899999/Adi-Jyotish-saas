@@ -25,7 +25,7 @@ const member = { id: "member-ai-itest", name: "Asha Test", email: "asha-ai-itest
 vi.mock("@/lib/member-auth", () => ({ getCurrentMember: async () => member }));
 
 const { db } = await import("@/lib/firestore");
-const { getAvailableSlots, getPractitionerDirectory } = await import("@/lib/scheduling");
+const { findFirstBookableDate, getAvailableSlots, getPractitionerDirectory } = await import("@/lib/scheduling");
 const { getMarketplacePractitioners } = await import("@/lib/marketplace");
 const { getSeniorAstrologers } = await import("@/lib/homepage");
 const { seedServices } = await import("@/lib/services");
@@ -106,6 +106,27 @@ describeFirestore("AI personas on the live Firestore path", () => {
       expect(response.status).toBe(409);
       await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining("is an AI astrologer available by instant chat") });
       expect((await db.collection("bookings").get()).size).toBe(0);
+    });
+  });
+
+  describe("the date the booking page opens on", () => {
+    // A Saturday comfortably ahead, 11:30 IST. Only the human astrologers are bookable, and they
+    // work Monday to Friday, so the page must skip to Monday rather than open on a day where every
+    // astrologer shows "Full" — which is what customers saw on Fridays and Saturdays.
+    function upcomingSaturday(): Date {
+      const date = new Date(Date.now() + 3 * 86_400_000);
+      while (date.getUTCDay() !== 6) date.setUTCDate(date.getUTCDate() + 1);
+      return new Date(`${date.toISOString().slice(0, 10)}T06:00:00.000Z`);
+    }
+
+    it("skips a weekend with nobody to book and opens on the Monday", async () => {
+      const saturday = upcomingSaturday();
+      const monday = new Date(saturday.getTime() + 2 * 86_400_000).toISOString().slice(0, 10);
+      expect(await findFirstBookableDate({ duration: 60, from: saturday })).toBe(monday);
+    });
+
+    it("finds nothing for an AI persona, however far it looks", async () => {
+      expect(await findFirstBookableDate({ duration: 60, practitionerId: AI_PERSONA, maxDays: 10 })).toBeNull();
     });
   });
 

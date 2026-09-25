@@ -1042,6 +1042,24 @@ export async function deletePractitionerAdmin(id: string) {
   await db.recursiveDelete(ref);
 }
 
+/**
+ * The first date, from `from` onwards, with at least one open slot — what the booking page opens
+ * on. It used to open on tomorrow (skipping Sunday), which was fine while AI personas filled every
+ * weekday; with only the human astrologers bookable (Monday to Friday), a customer arriving on a
+ * Friday or Saturday saw every astrologer marked "Full". Null if nothing opens within `maxDays`.
+ */
+export async function findFirstBookableDate({ duration, practitionerId, from = new Date(), maxDays = 21 }: {
+  duration: number; practitionerId?: string; from?: Date; maxDays?: number;
+}): Promise<string | null> {
+  const { timezone } = await getStudioSettings();
+  for (let offset = 0; offset < maxDays; offset += 1) {
+    const date = dateInTimeZone(new Date(from.getTime() + offset * 86_400_000), timezone);
+    const { slots } = await getAvailableSlots({ date, duration, practitionerId });
+    if (slots.length) return date;
+  }
+  return null;
+}
+
 export function dateInTimeZone(date: Date, timeZone: string) {
   const parts = new Intl.DateTimeFormat("en-CA", { timeZone, year: "numeric", month: "2-digit", day: "2-digit" }).formatToParts(date);
   const values = Object.fromEntries(parts.filter((part) => part.type !== "literal").map((part) => [part.type, part.value]));
