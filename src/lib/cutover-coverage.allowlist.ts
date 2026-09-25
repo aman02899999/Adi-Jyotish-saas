@@ -7,13 +7,6 @@
 const NOT_YET_PORTED = "Not yet ported.";
 
 export const FIRESTORE_ONLY: Record<string, string> = {
-  "src/lib/custom-pages.ts#createCustomPage": NOT_YET_PORTED,
-  "src/lib/custom-pages.ts#deleteCustomPage": NOT_YET_PORTED,
-  "src/lib/custom-pages.ts#getAllCustomPagesAdmin": NOT_YET_PORTED,
-  "src/lib/custom-pages.ts#getCustomPageById": NOT_YET_PORTED,
-  "src/lib/custom-pages.ts#getPublishedCustomPageBySlug": NOT_YET_PORTED,
-  "src/lib/custom-pages.ts#getPublishedCustomPages": NOT_YET_PORTED,
-  "src/lib/custom-pages.ts#updateCustomPage": NOT_YET_PORTED,
   "src/lib/gemstone-recommendations.ts#createGemstoneRecommendation": NOT_YET_PORTED,
   "src/lib/gemstone-reviews.ts#createReview": NOT_YET_PORTED,
   "src/lib/gemstone-reviews.ts#deleteReview": NOT_YET_PORTED,
