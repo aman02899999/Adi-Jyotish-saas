@@ -76,6 +76,12 @@ function firestoreOnlySites(): string[] {
     const source = readFileSync(path, "utf8");
     if (!FIRESTORE_CALL.test(source)) continue;
 
+    // Module-level handles (`const reviewsCol = db.collection("gemstoneReviews")`) are created once,
+    // outside any function, so a function using `reviewsCol.doc(id)` contains no `db.` call at all.
+    // Without this, every function in such a module was invisible to the guard.
+    const handles = [...source.matchAll(/^(?:export )?const (\w+) = db\.(?:collection|collectionGroup)\b/gm)].map((match) => match[1]);
+    const usesHandle = handles.length ? new RegExp(`\\b(?:${handles.join("|")})\\.`) : null;
+
     // Every function in the file, exported or not, so a Firestore call reached through a local
     // helper (`familyCollection(id).get()`) counts the same as one made directly.
     const functions = new Map<string, { exported: boolean; body: string }>();
@@ -88,6 +94,20 @@ function firestoreOnlySites(): string[] {
       functions.set(match[2], { exported: Boolean(match[1]), body });
     }
 
+    // `export const getPromoBanner = unstable_cache(fetchPromoBanner, …)` (or an inline arrow) is an
+    // exported function too; its body is what it wraps, with a bare reference read as a call.
+    for (const match of source.matchAll(/(export )?const (\w+) = (?:unstable_cache|cache)\(/g)) {
+      const open = match.index! + match[0].length - 1;
+      let depth = 0;
+      let end = open;
+      for (; end < source.length; end += 1) {
+        if (source[end] === "(") depth += 1;
+        else if (source[end] === ")" && --depth === 0) break;
+      }
+      const wrapped = source.slice(open + 1, end).replace(/^\s*(\w+)\s*,/, "$1(),");
+      functions.set(match[2], { exported: Boolean(match[1]), body: wrapped });
+    }
+
     // A function touches Firestore if it calls it, or calls a local function that does — unless it
     // consults the cutover flag itself, in which case it has chosen its provider.
     const touches = new Set<string>();
@@ -95,7 +115,7 @@ function firestoreOnlySites(): string[] {
       changed = false;
       for (const [name, fn] of functions) {
         if (touches.has(name) || ROUTED.test(fn.body)) continue;
-        const direct = FIRESTORE_CALL.test(fn.body);
+        const direct = FIRESTORE_CALL.test(fn.body) || Boolean(usesHandle?.test(fn.body));
         const viaHelper = [...touches].some((helper) => helper !== name && new RegExp(`\\b${helper}\\(`).test(fn.body));
         if (direct || viaHelper) {
           touches.add(name);
