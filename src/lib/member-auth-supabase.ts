@@ -90,3 +90,18 @@ export async function getActiveMemberInSupabase(memberId: string): Promise<Activ
     [memberId],
   );
 }
+
+/** The member's own birth profile, saved from onboarding or the profile form. False if there is no
+ * such member (the account was deleted mid-session). */
+export async function updateMemberBirthProfileInSupabase(
+  id: string,
+  input: { phone: string | null; birthDate: string; birthTime: string; birthPlace: string },
+): Promise<boolean> {
+  const result = await query(
+    `update public.members
+        set phone = $2, birth_date = $3, birth_time = $4, birth_place = $5, onboarding_complete = true, updated_at = now()
+      where id = $1`,
+    [id, input.phone, input.birthDate, input.birthTime, input.birthPlace],
+  );
+  return (result.rowCount ?? 0) > 0;
+}

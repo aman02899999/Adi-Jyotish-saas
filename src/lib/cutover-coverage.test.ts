@@ -75,9 +75,36 @@ function firestoreOnlySites(): string[] {
   for (const path of walk(join(ROOT, "src", "lib"), (p) => p.endsWith(".ts") && !p.endsWith(".test.ts") && !p.includes("-supabase"))) {
     const source = readFileSync(path, "utf8");
     if (!FIRESTORE_CALL.test(source)) continue;
-    for (const match of source.matchAll(/export (?:async )?function (\w+)/g)) {
-      const body = functionBody(source, match.index! + match[0].length);
-      if (FIRESTORE_CALL.test(body) && !ROUTED.test(body)) sites.push(`${relative(ROOT, path)}#${match[1]}`);
+
+    // Every function in the file, exported or not, so a Firestore call reached through a local
+    // helper (`familyCollection(id).get()`) counts the same as one made directly.
+    const functions = new Map<string, { exported: boolean; body: string }>();
+    for (const match of source.matchAll(/(export )?(?:async )?function (\w+)/g)) {
+      functions.set(match[2], { exported: Boolean(match[1]), body: functionBody(source, match.index! + match[0].length) });
+    }
+    for (const match of source.matchAll(/(export )?const (\w+) = (?:async )?\([^)]*\)\s*(?::[^=]+)?=>/g)) {
+      const start = match.index! + match[0].length;
+      const body = source[source.slice(start).search(/\S/) + start] === "{" ? bodyFrom(source, start) : source.slice(start, source.indexOf("\n", start));
+      functions.set(match[2], { exported: Boolean(match[1]), body });
+    }
+
+    // A function touches Firestore if it calls it, or calls a local function that does — unless it
+    // consults the cutover flag itself, in which case it has chosen its provider.
+    const touches = new Set<string>();
+    for (let changed = true; changed;) {
+      changed = false;
+      for (const [name, fn] of functions) {
+        if (touches.has(name) || ROUTED.test(fn.body)) continue;
+        const direct = FIRESTORE_CALL.test(fn.body);
+        const viaHelper = [...touches].some((helper) => helper !== name && new RegExp(`\\b${helper}\\(`).test(fn.body));
+        if (direct || viaHelper) {
+          touches.add(name);
+          changed = true;
+        }
+      }
+    }
+    for (const name of touches) {
+      if (functions.get(name)!.exported) sites.push(`${relative(ROOT, path)}#${name}`);
     }
   }
   return sites.sort();

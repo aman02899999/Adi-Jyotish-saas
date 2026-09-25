@@ -244,6 +244,18 @@ export async function getBookingsByEmailInSupabase(email: string): Promise<Booki
   );
 }
 
+/** The member's next booking that is not cancelled, or null. */
+export async function getNextBookingByEmailInSupabase(email: string, now: Date): Promise<BookingRow | null> {
+  const rows = await queryModels<BookingRow>(
+    `select ${BOOKING_COLUMNS} from public.bookings
+      where client_email = $1 and scheduled_at > $2 and status <> 'cancelled'
+      order by scheduled_at asc limit 1`,
+    [email, now],
+    BOOKING_NUMERIC,
+  );
+  return rows[0] ?? null;
+}
+
 /**
  * Bookings created on or after `from`, newest first, for the CSV export.
  *

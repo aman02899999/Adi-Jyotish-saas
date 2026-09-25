@@ -4,6 +4,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { buildKundliChart, KundliEngineError, type KundliChart } from "@/lib/kundli-engine";
 import { RASHIS, NAKSHATRAS } from "@/lib/astro-engine";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { addFamilyMemberInSupabase, deleteFamilyMemberInSupabase, listFamilyMembersInSupabase } from "@/lib/family-members-supabase";
 
 /** No competitor requires a separate login per family member just to see their chart. This lets a
  * member store a household's birth details under their own account and view each person's natal
@@ -51,6 +53,7 @@ function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestor
 }
 
 export async function listFamilyMembers(memberId: string): Promise<FamilyMember[]> {
+  if (isSupabaseCutoverActive()) return listFamilyMembersInSupabase(memberId);
   const snap = await familyCollection(memberId).orderBy("createdAt", "asc").get();
   return snap.docs.map(fromDoc);
 }
@@ -78,6 +81,20 @@ export async function addFamilyMember({ memberId, name, relationship, birthDate,
     throw error;
   }
 
+  const record = {
+    memberId,
+    name: name.trim().slice(0, 120),
+    relationship: relationship.trim().slice(0, 60),
+    birthDate,
+    birthTime,
+    birthPlace: birthPlace.trim().slice(0, 160),
+  };
+  if (isSupabaseCutoverActive()) {
+    const added = await addFamilyMemberInSupabase(record, MAX_FAMILY_MEMBERS);
+    if (!added) throw new FamilyMemberError(`You can link up to ${MAX_FAMILY_MEMBERS} family members.`);
+    return added;
+  }
+
   // A plain count-then-add here would let two concurrent requests both read a count under the cap
   // and both add, letting a member exceed MAX_FAMILY_MEMBERS. A transaction serializes the
   // check and the write against the same collection.
@@ -87,21 +104,14 @@ export async function addFamilyMember({ memberId, name, relationship, birthDate,
     if (existing.data().count >= MAX_FAMILY_MEMBERS) {
       throw new FamilyMemberError(`You can link up to ${MAX_FAMILY_MEMBERS} family members.`);
     }
-    tx.set(ref, {
-      memberId,
-      name: name.trim().slice(0, 120),
-      relationship: relationship.trim().slice(0, 60),
-      birthDate,
-      birthTime,
-      birthPlace: birthPlace.trim().slice(0, 160),
-      createdAt: FieldValue.serverTimestamp(),
-    });
+    tx.set(ref, { ...record, createdAt: FieldValue.serverTimestamp() });
   });
   const saved = await ref.get();
   return fromDoc(saved);
 }
 
 export async function deleteFamilyMember(memberId: string, familyMemberId: string): Promise<void> {
+  if (isSupabaseCutoverActive()) return deleteFamilyMemberInSupabase(memberId, familyMemberId);
   await familyCollection(memberId).doc(familyMemberId).delete();
 }
 

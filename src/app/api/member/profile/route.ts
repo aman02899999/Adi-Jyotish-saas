@@ -3,6 +3,8 @@ import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getVariant, recordExperimentConversion } from "@/lib/experiments";
 import { buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { updateMemberBirthProfileInSupabase } from "@/lib/member-auth-supabase";
 
 export const dynamic = "force-dynamic";
 
@@ -40,14 +42,19 @@ export async function PUT(request: Request) {
     throw error;
   }
 
-  await db.collection("members").doc(member.id).update({
-    phone: phone || null,
-    birthDate,
-    birthTime,
-    birthPlace,
-    onboardingComplete: true,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  if (isSupabaseCutoverActive()) {
+    const saved = await updateMemberBirthProfileInSupabase(member.id, { phone: phone || null, birthDate, birthTime, birthPlace });
+    if (!saved) return Response.json({ error: "Member sign-in required." }, { status: 401 });
+  } else {
+    await db.collection("members").doc(member.id).update({
+      phone: phone || null,
+      birthDate,
+      birthTime,
+      birthPlace,
+      onboardingComplete: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   // Only the transition into onboardingComplete counts as a conversion — a later edit to an
   // already-complete profile isn't a new "completed onboarding" event.
