@@ -7,10 +7,6 @@
 const NOT_YET_PORTED = "Not yet ported.";
 
 export const FIRESTORE_ONLY: Record<string, string> = {
-  "src/lib/analytics.ts#getAnalytics": NOT_YET_PORTED,
-  "src/lib/experiments.ts#getExperimentReport": NOT_YET_PORTED,
-  "src/lib/experiments.ts#recordExperimentConversion": NOT_YET_PORTED,
-  "src/lib/experiments.ts#recordExperimentImpression": NOT_YET_PORTED,
   "src/lib/gemstone-recommendations.ts#createGemstoneRecommendation": NOT_YET_PORTED,
   "src/lib/gemstone-reviews.ts#getAllReviewsAdmin": NOT_YET_PORTED,
   "src/lib/gemstone-wishlist.ts#getWishlistProductIds": NOT_YET_PORTED,

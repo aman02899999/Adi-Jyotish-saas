@@ -29,6 +29,8 @@ export type TableSpec = {
   rename?: Record<string, string>;
   /** Firestore fields to serialise into a jsonb column rather than map field by field. */
   jsonb?: string[];
+  /** Also copy documents that exist only as the parent of a subcollection, as id-only rows. */
+  includeMissingDocs?: boolean;
 };
 
 /** Anything shaped enough like a Firestore DocumentSnapshot for buildRow. */
@@ -50,6 +52,18 @@ export declare function camelToSnake(field: string): string;
 export declare function buildRow(spec: TableSpec, parentId: string | null, doc: DocLike): Record<string, unknown>;
 
 /** The set of columns `public.<table>` actually has. Throws if the table is absent. */
+/** Anything shaped enough like a Firestore Firestore instance for readDocs. */
+export type FirestoreLike = {
+  collection(name: string): {
+    get(): Promise<{ docs: DocLike[] }>;
+    listDocuments(): Promise<Array<{ id: string; collection(name: string): { get(): Promise<{ docs: DocLike[] }> } }>>;
+  };
+  getAll(...refs: Array<{ id: string }>): Promise<Array<DocLike & { exists: boolean }>>;
+};
+
+/** Reads every document a spec copies, with its parent id for flattened subcollections. */
+export declare function readDocs(db: FirestoreLike, spec: TableSpec): Promise<Array<{ parentId: string | null; doc: DocLike }>>;
+
 export declare function knownColumns(client: ClientLike, table: string): Promise<Set<string>>;
 
 /** Removes keys with no column, reporting which field names were dropped. */

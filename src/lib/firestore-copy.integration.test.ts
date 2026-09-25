@@ -5,6 +5,7 @@ import {
   camelToSnake as scriptCamelToSnake,
   dedupeByPk,
   knownColumns,
+  readDocs,
   SKIP_FIELDS,
   stripUnknownColumns,
   TABLES,
@@ -314,6 +315,38 @@ describeCopy("copy script against the real schema", () => {
     const stored = await query(`select life_path_number, destiny_number, narrative from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
     expect(stored.rows[0]).toEqual({ life_path_number: 11, destiny_number: 7, narrative: "A reading." });
     await query(`delete from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
+  });
+
+  it("copies experiment results, whose parent document never exists in Firestore", async () => {
+    // experiments.ts writes only experiments/{key}/variants/{variant}. Firestore's get() does not
+    // return a parent that exists only through its subcollection, so without includeMissingDocs no
+    // experiments row is copied and every variant fails experiment_variants' foreign key.
+    const parentSpec = TABLES.find((s) => s.table === "experiments");
+    const variantSpec = TABLES.find((s) => s.table === "experiment_variants");
+    if (!parentSpec || !variantSpec) throw new Error("experiment tables missing from TABLES");
+    const KEY = "itest-copy-experiment";
+    const variant = { id: "control", data: () => ({ impressions: 40, conversions: 6 }) };
+    const firestore = {
+      collection: () => ({
+        get: async () => ({ docs: [] }),
+        listDocuments: async () => [{ id: KEY, collection: () => ({ get: async () => ({ docs: [variant] }) }) }],
+      }),
+      getAll: async (...refs: Array<{ id: string }>) => refs.map((ref) => ({ id: ref.id, exists: false, data: () => ({}) })),
+    };
+
+    await query(`delete from public.experiments where id = $1`, [KEY]);
+    for (const spec of [parentSpec, variantSpec]) {
+      const docs = await readDocs(firestore, spec);
+      const rows = docs.map(({ parentId, doc }) => buildRow(spec, parentId, doc));
+      const allowed = await withClient((client) => knownColumns(client, spec.table));
+      expect(await withClient((client) => upsert(client, spec, stripUnknownColumns(rows, allowed).rows))).toBe(1);
+    }
+    // Copying again is harmless, including for the id-only parent row.
+    expect(await withClient((client) => upsert(client, parentSpec, [{ id: KEY }]))).toBe(0);
+
+    const { rows } = await query(`select experiment_key, variant, impressions, conversions from public.experiment_variants where experiment_key = $1`, [KEY]);
+    expect(rows).toEqual([{ experiment_key: KEY, variant: "control", impressions: 40, conversions: 6 }]);
+    await query(`delete from public.experiments where id = $1`, [KEY]);
   });
 
   it("rejects a row with no value for its primary key", async () => {

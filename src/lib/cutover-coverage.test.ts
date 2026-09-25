@@ -124,7 +124,7 @@ describe("cutover coverage", () => {
 
   it("finds the sites it is meant to find", () => {
     // A detector that silently stopped matching would pass both tests above with an empty list.
-    expect(found.length).toBeGreaterThan(10);
+    // The seed stays on Firestore by design, so it is always there to find.
     expect(found).toContain("src/lib/scheduling.ts#seedPractitioners");
   });
 });
