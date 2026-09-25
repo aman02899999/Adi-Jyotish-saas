@@ -15,6 +15,7 @@ Target Supabase project: `qgaklmvkvyljqivvryfs` (Postgres + Auth + Storage).
 | `supabase/migrations/0005_gemstone_order_refund_claim.sql` | `gemstone_orders.refund_claimed_at`; relaxes two coupon-usage columns Firestore never populated | applied clean |
 | `supabase/migrations/0010_write_site_columns.sql` | seven columns the documents carry but the type-derived schema did not: `admin_users.active` (the sign-in gate), `token_hash` on both invite tables, `referrals.referrer_id`/`code`/`status`, `cosmic_weather.houses`/`updated_at`; also drops two NOT NULLs on `referrals` that no code path ever writes | applied clean, twice |
 | `supabase/migrations/0011_align_erasure_with_retention_policy.sql` | realigns six `members` foreign keys that inverted the account-deletion policy | applied clean; erasure behaviour verified row-by-row before and after |
+| `supabase/migrations/0013_studio_milestones.sql` | makes `milestones.member_id` nullable: milestones are studio-wide ("500 consultations delivered"), so the per-member NOT NULL made every Firestore milestone uncopyable and unwritable | applied clean, twice; `engagement-supabase.integration.test.ts` fails without it |
 | `scripts/migrate-firestore-to-supabase.mjs` | copies all 62 collections into those tables | syntax-checked; **not** run against live data |
 | `scripts/migrate-auth-users.mjs` | Firebase Auth → GoTrue, passwords preserved | syntax-checked; **not** run against live data |
 | `scripts/rewrite-auth-uids.sql` | the one id remap | executed end-to-end on a seeded database; 20 column assertions passed |

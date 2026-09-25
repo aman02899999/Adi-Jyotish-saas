@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getStreakInSupabase, saveStreakInSupabase } from "@/lib/engagement-supabase";
 
 /** Consecutive-day dashboard engagement, tracked purely off calendar dates (not session count) —
  * one visit or twenty on the same day both count once, only the first visit of a new day can
@@ -49,9 +51,11 @@ type StreakDoc = { currentStreak: number; longestStreak: number; lastActiveDate:
 /** Called once per dashboard load. Cheap no-op if the member already visited today. */
 export async function recordDailyVisit(memberId: string): Promise<StreakStatus> {
   const today = todayIso();
+  const cutover = isSupabaseCutoverActive();
   const ref = db.collection("memberStreaks").doc(memberId);
-  const snap = await ref.get();
-  const stored = snap.data() as StreakDoc | undefined;
+  const stored = cutover
+    ? ((await getStreakInSupabase(memberId)) as StreakDoc | null) ?? undefined
+    : (await ref.get()).data() as StreakDoc | undefined;
 
   if (stored?.lastActiveDate === today) {
     return { currentStreak: stored.currentStreak, longestStreak: stored.longestStreak, badges: stored.badges ?? [], justEarned: null };
@@ -63,6 +67,7 @@ export async function recordDailyVisit(memberId: string): Promise<StreakStatus> 
   const badges = badgesForStreak(currentStreak);
   const justEarned = badges.find((badge) => !(stored?.badges ?? []).includes(badge)) ?? null;
 
-  await ref.set({ currentStreak, longestStreak, lastActiveDate: today, badges, updatedAt: FieldValue.serverTimestamp() });
+  if (cutover) await saveStreakInSupabase(memberId, { currentStreak, longestStreak, lastActiveDate: today, badges });
+  else await ref.set({ currentStreak, longestStreak, lastActiveDate: today, badges, updatedAt: FieldValue.serverTimestamp() });
   return { currentStreak, longestStreak, badges, justEarned };
 }

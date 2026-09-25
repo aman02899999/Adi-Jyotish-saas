@@ -8,10 +8,6 @@ const NOT_YET_PORTED = "Not yet ported.";
 
 export const FIRESTORE_ONLY: Record<string, string> = {
   "src/lib/analytics.ts#getAnalytics": NOT_YET_PORTED,
-  "src/lib/astro-journal.ts#listJournalEntries": NOT_YET_PORTED,
-  "src/lib/astro-journal.ts#logJournalEntry": NOT_YET_PORTED,
-  "src/lib/cosmic-profile-card.ts#getCosmicProfileCard": NOT_YET_PORTED,
-  "src/lib/cosmic-profile-card.ts#upsertCosmicProfileCard": NOT_YET_PORTED,
   "src/lib/experiments.ts#getExperimentReport": NOT_YET_PORTED,
   "src/lib/experiments.ts#recordExperimentConversion": NOT_YET_PORTED,
   "src/lib/experiments.ts#recordExperimentImpression": NOT_YET_PORTED,
@@ -28,10 +24,7 @@ export const FIRESTORE_ONLY: Record<string, string> = {
   "src/lib/kundli-matching.ts#createKundliMatch": NOT_YET_PORTED,
   "src/lib/kundli-matching.ts#getKundliMatchById": NOT_YET_PORTED,
   "src/lib/kundli-matching.ts#getShareableKundliMatch": NOT_YET_PORTED,
-  "src/lib/milestones.ts#checkBookingCompletionMilestone": NOT_YET_PORTED,
-  "src/lib/milestones.ts#getMilestone": NOT_YET_PORTED,
   "src/lib/numerology.ts#createNumerologyReading": NOT_YET_PORTED,
   "src/lib/scheduling.ts#seedPractitioners": "By design: seeds the Firestore roster; getPractitionerDirectory returns before calling it under cutover, where the roster was copied.",
-  "src/lib/streaks.ts#recordDailyVisit": NOT_YET_PORTED,
   "src/lib/transit-alerts.ts#getCosmicWeather": NOT_YET_PORTED,
 };
