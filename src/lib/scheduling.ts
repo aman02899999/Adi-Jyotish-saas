@@ -3,7 +3,15 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, isIndexBuildingError } from "@/lib/firestore";
 import { getBookingsInWindowInSupabase } from "@/lib/bookings-supabase";
-import { getPractitionerDirectoryInSupabase } from "@/lib/practitioners-supabase";
+import {
+  deleteUnusedPractitionerInSupabase,
+  getPractitionerByIdInSupabase,
+  getPractitionerDirectoryInSupabase,
+  insertPractitionerInSupabase,
+  PractitionerEmailTakenError,
+  updatePractitionerInSupabase,
+  type PractitionerInsert,
+} from "@/lib/practitioners-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getStudioSettings } from "@/lib/studio-settings";
 
@@ -886,111 +894,151 @@ function toPractitionerSlug(name: string) {
     .slice(0, 100);
 }
 
+export type PractitionerProfilePatch = Partial<{
+  name: string; email: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
+  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null;
+  verified: boolean; verificationLevel: string; online: boolean; featured: boolean; active: boolean;
+}>;
+
+/** One set of rules for every admin surface that edits a practitioner (the Practitioners page and
+ * the Schedule page used to carry two, with different limits and different delete behaviour). */
+function normalizeProfilePatch(patch: PractitionerProfilePatch) {
+  const out: Record<string, unknown> = {};
+  if (patch.name !== undefined) {
+    const name = patch.name.trim().slice(0, 120);
+    if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
+    out.name = name;
+  }
+  if (patch.email !== undefined) {
+    const email = patch.email.trim().toLowerCase().slice(0, 180);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PractitionerAdminError("Enter a valid email address.");
+    out.email = email;
+  }
+  if (patch.title !== undefined) out.title = patch.title.trim().slice(0, 160);
+  if (patch.bio !== undefined) out.bio = patch.bio.trim().slice(0, 2000);
+  if (patch.specialties !== undefined) out.specialties = patch.specialties.trim().slice(0, 300);
+  if (patch.languages !== undefined) out.languages = patch.languages.trim().slice(0, 200);
+  if (patch.consultationModes !== undefined) out.consultationModes = patch.consultationModes.trim().slice(0, 200);
+  if (patch.experienceYears !== undefined) out.experienceYears = Math.max(0, Math.min(60, Number(patch.experienceYears) || 0));
+  if (patch.chatRatePerMinute !== undefined) out.chatRatePerMinute = Math.max(0, Number(patch.chatRatePerMinute) || 0);
+  if (patch.photoUrl !== undefined) out.photoUrl = sanitizeMediaUrl(patch.photoUrl ?? undefined);
+  if (patch.videoUrl !== undefined) out.videoUrl = sanitizeMediaUrl(patch.videoUrl ?? undefined);
+  if (patch.verified !== undefined) out.verified = Boolean(patch.verified);
+  if (patch.verificationLevel !== undefined) out.verificationLevel = patch.verificationLevel.trim().slice(0, 40) || "reviewed";
+  if (patch.online !== undefined) out.online = Boolean(patch.online);
+  if (patch.featured !== undefined) out.featured = Boolean(patch.featured);
+  if (patch.active !== undefined) out.active = Boolean(patch.active);
+  return out;
+}
+
+async function getPractitionerForAdmin(id: string): Promise<Practitioner | null> {
+  if (isSupabaseCutoverActive()) return getPractitionerByIdInSupabase(id);
+  const snap = await db.collection("practitioners").doc(id).get();
+  return snap.exists ? practitionerFromDoc(snap) : null;
+}
+
 /** Practitioners previously could only be onboarded by inviting an email to an *existing*
- * Firestore doc — there was no way to create that doc from the admin UI at all, so a new
- * practitioner had to be added by hand (a seed script) before an invite could even be sent.
- * This creates the base record; the practitioner still needs a portal invite (see
- * practitioner-invites.ts) before they can sign in and self-manage their profile. */
-export async function createPractitionerAdmin(input: {
-  name: string; email: string; title: string; bio: string; specialties: string; languages: string;
-  consultationModes: string; experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null;
-  featured: boolean; active: boolean;
-}) {
-  const name = input.name.trim().slice(0, 120);
-  const email = input.email.trim().toLowerCase().slice(0, 180);
-  if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PractitionerAdminError("Enter a valid email address.");
+ * record — there was no way to create one from the admin UI at all. This creates the base
+ * record; the practitioner still needs a portal invite (see practitioner-invites.ts) before they
+ * can sign in and self-manage their profile. `starterHours` adds weekday 09:30-17:30 availability,
+ * which the Schedule page promises; the Practitioners page leaves hours to be set explicitly. */
+export async function createPractitionerAdmin(
+  input: { name: string; email: string } & PractitionerProfilePatch,
+  options: { starterHours?: boolean } = {},
+): Promise<Practitioner> {
+  const fields = normalizeProfilePatch({ ...input, name: input.name, email: input.email });
+  const record = {
+    title: "", bio: "", specialties: "", languages: "", consultationModes: "", experienceYears: 0,
+    chatRatePerMinute: 0, photoUrl: null, videoUrl: null, verified: false, verificationLevel: "unverified",
+    online: false, featured: false, active: false,
+    ...fields,
+    isAiPowered: false,
+  } as Omit<PractitionerInsert, "slug"> & { name: string; email: string };
+  const base = toPractitionerSlug(record.name) || "practitioner";
+  const weekdays = options.starterHours ? [1, 2, 3, 4, 5] : [];
+
+  if (isSupabaseCutoverActive()) {
+    try {
+      const id = await insertPractitionerInSupabase({ ...record, slug: base }, weekdays);
+      return (await getPractitionerByIdInSupabase(id))!;
+    } catch (error) {
+      if (error instanceof PractitionerEmailTakenError) throw new PractitionerAdminError(error.message);
+      throw error;
+    }
+  }
 
   const collection = db.collection("practitioners");
-  const emailTaken = await collection.where("email", "==", email).limit(1).get();
+  const emailTaken = await collection.where("email", "==", record.email).limit(1).get();
   if (!emailTaken.empty) throw new PractitionerAdminError("A practitioner with that email already exists.");
 
-  const base = toPractitionerSlug(name) || "practitioner";
   let slug = base;
   for (let attempt = 0; (await collection.doc(slug).get()).exists; attempt += 1) {
     slug = `${base}-${attempt + 2}`;
     if (attempt > 20) throw new PractitionerAdminError("Could not generate a unique profile URL — try a different name.");
   }
-
-  const doc = {
-    name,
-    slug,
-    email,
-    title: input.title.trim().slice(0, 160),
-    bio: input.bio.trim().slice(0, 2000),
-    specialties: input.specialties.trim().slice(0, 300),
-    languages: input.languages.trim().slice(0, 200),
-    consultationModes: input.consultationModes.trim().slice(0, 200),
-    experienceYears: Math.max(0, Math.min(60, Number(input.experienceYears) || 0)),
-    verified: false,
-    verificationLevel: "unverified",
-    photoUrl: input.photoUrl?.trim() || null,
-    videoUrl: input.videoUrl?.trim() || null,
-    online: false,
-    isAiPowered: false,
-    chatRatePerMinute: Math.max(0, Number(input.chatRatePerMinute) || 0),
-    active: input.active,
-    featured: input.featured,
-    firebaseUid: null,
-  };
   const ref = collection.doc(slug);
-  await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  const batch = db.batch();
+  batch.create(ref, { ...record, slug, firebaseUid: null, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  for (const weekday of weekdays) {
+    batch.set(ref.collection("availabilityRules").doc(`starter-${weekday}`), { weekday, startTime: "09:30", endTime: "17:30", active: true });
+  }
+  await batch.commit();
   return practitionerFromDoc(await ref.get());
 }
 
-export async function updatePractitionerAdmin(id: string, patch: Partial<{
-  name: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
-  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
-}>) {
-  const ref = db.collection("practitioners").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) throw new PractitionerAdminError("Practitioner not found.");
+export async function updatePractitionerAdmin(id: string, patch: PractitionerProfilePatch): Promise<Practitioner> {
+  const current = await getPractitionerForAdmin(id);
+  if (!current) throw new PractitionerAdminError("Practitioner not found.");
+  const update = normalizeProfilePatch(patch);
+  // Nobody can switch an AI persona on, so it cannot be switched off either; seedPractitioners
+  // would only switch it back.
+  if (current.isAiPowered) delete update.online;
 
-  const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
-  if (patch.name !== undefined) {
-    const name = patch.name.trim().slice(0, 120);
-    if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
-    update.name = name;
+  if (isSupabaseCutoverActive()) {
+    try {
+      await updatePractitionerInSupabase(id, update as Partial<PractitionerInsert>);
+    } catch (error) {
+      if (error instanceof PractitionerEmailTakenError) throw new PractitionerAdminError(error.message);
+      throw error;
+    }
+    return (await getPractitionerByIdInSupabase(id))!;
   }
-  if (patch.title !== undefined) update.title = patch.title.trim().slice(0, 160);
-  if (patch.bio !== undefined) update.bio = patch.bio.trim().slice(0, 2000);
-  if (patch.specialties !== undefined) update.specialties = patch.specialties.trim().slice(0, 300);
-  if (patch.languages !== undefined) update.languages = patch.languages.trim().slice(0, 200);
-  if (patch.consultationModes !== undefined) update.consultationModes = patch.consultationModes.trim().slice(0, 200);
-  if (patch.experienceYears !== undefined) update.experienceYears = Math.max(0, Math.min(60, Number(patch.experienceYears) || 0));
-  if (patch.chatRatePerMinute !== undefined) update.chatRatePerMinute = Math.max(0, Number(patch.chatRatePerMinute) || 0);
-  if (patch.photoUrl !== undefined) update.photoUrl = patch.photoUrl?.trim() || null;
-  if (patch.videoUrl !== undefined) update.videoUrl = patch.videoUrl?.trim() || null;
-  if (patch.verified !== undefined) update.verified = patch.verified;
-  if (patch.featured !== undefined) update.featured = patch.featured;
-  if (patch.active !== undefined) update.active = patch.active;
 
-  await ref.update(update);
+  if (typeof update.email === "string" && update.email !== current.email) {
+    const owner = await db.collection("practitioners").where("email", "==", update.email).limit(1).get();
+    if (!owner.empty && owner.docs[0].id !== id) throw new PractitionerAdminError("That email belongs to another practitioner.");
+  }
+  const ref = db.collection("practitioners").doc(id);
+  await ref.update({ ...update, updatedAt: FieldValue.serverTimestamp() });
   return practitionerFromDoc(await ref.get());
 }
 
 /** Hard-deletes a practitioner that never received any real activity (no bookings, no reviews) —
- * once real bookings/reviews/payouts point at this id, deleting the doc would orphan that
- * history, so those should be deactivated (active: false) instead via updatePractitionerAdmin. */
+ * once real bookings/reviews/payouts point at this id, deleting would orphan that history (or, on
+ * Postgres, cascade the reviews away), so those should be deactivated (active: false) instead. */
 export async function deletePractitionerAdmin(id: string) {
+  const inUse = "This practitioner has bookings or reviews on record — deactivate instead of deleting.";
+  if (isSupabaseCutoverActive()) {
+    const outcome = await deleteUnusedPractitionerInSupabase(id);
+    if (outcome === "not_found") throw new PractitionerAdminError("Practitioner not found.");
+    if (outcome === "has_history") throw new PractitionerAdminError(inUse);
+    return;
+  }
+
   const ref = db.collection("practitioners").doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new PractitionerAdminError("Practitioner not found.");
-
   const [bookings, reviews] = await Promise.all([
     db.collection("bookings").where("practitionerId", "==", id).limit(1).get(),
     db.collection("practitionerReviews").where("practitionerId", "==", id).limit(1).get(),
   ]);
-  if (!bookings.empty || !reviews.empty) {
-    throw new PractitionerAdminError("This practitioner has bookings or reviews on record — deactivate instead of deleting.");
-  }
+  if (!bookings.empty || !reviews.empty) throw new PractitionerAdminError(inUse);
 
-  const [rulesSnap, timeOffSnap] = await Promise.all([ref.collection("availabilityRules").get(), ref.collection("timeOff").get()]);
-  const batch = db.batch();
-  for (const doc of rulesSnap.docs) batch.delete(doc.ref);
-  for (const doc of timeOffSnap.docs) batch.delete(doc.ref);
-  batch.delete(ref);
-  await batch.commit();
+  // seedPractitioners() recreates a missing starter, so a starter's deletion is recorded.
+  if (isStarterPractitioner(id)) {
+    await db.collection(DELETED_STARTER_COLLECTION).doc(id).set({ name: snap.data()?.name ?? id, deletedAt: FieldValue.serverTimestamp() });
+  }
+  await db.recursiveDelete(ref);
 }
 
 export function dateInTimeZone(date: Date, timeZone: string) {

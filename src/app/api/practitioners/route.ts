@@ -1,8 +1,5 @@
-import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
-import { getPractitionerDirectory, sanitizeMediaUrl } from "@/lib/scheduling";
-import { toSlug } from "@/lib/services";
+import { createPractitionerAdmin, getPractitionerDirectory, PractitionerAdminError } from "@/lib/scheduling";
 
 export const dynamic = "force-dynamic";
 
@@ -26,50 +23,39 @@ type PractitionerPayload = {
 
 export async function GET(){const admin=await getCurrentAdmin();if(!admin)return Response.json({error:"Administrator access required."},{status:401});if(!hasAdminPermission(admin,"schedule"))return Response.json({error:"Scheduling permission required."},{status:403});return Response.json(await getPractitionerDirectory(false,true));}
 
+/** The Schedule page's "Add practitioner". Same rules as /api/admin/practitioners — both call
+ * createPractitionerAdmin — and the same permission: creating a practitioner sets their rate and
+ * verification, which is practitioner management, not scheduling. */
 export async function POST(request:Request){
   const admin=await getCurrentAdmin();
   if(!admin)return Response.json({error:"Administrator access required."},{status:401});
-  if(!hasAdminPermission(admin,"schedule"))return Response.json({error:"Scheduling permission required."},{status:403});
+  if(!hasAdminPermission(admin,"practitioners"))return Response.json({error:"Practitioners permission required to add a practitioner."},{status:403});
   const body=await request.json() as PractitionerPayload;
-  const name=body.name?.trim().slice(0,120)??"";
-  const email=body.email?.trim().toLowerCase().slice(0,180)??"";
-  const bio=body.bio?.trim().slice(0,1200)??"";
-  if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||bio.length<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
-  const photoUrl=sanitizeMediaUrl(body.photoUrl);
+  if((body.bio?.trim().length??0)<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
 
-  const existing = await db.collection("practitioners").where("email","==",email).limit(1).get();
-  if(!existing.empty) return Response.json({error:"A practitioner with this email already exists."},{status:409});
-
-  const slug = `${toSlug(name)}-${Date.now().toString(36).slice(-4)}`;
-  const ref = db.collection("practitioners").doc(slug);
-  await ref.set({
-    name,
-    slug,
-    email,
-    title:body.title?.trim().slice(0,120)||"Vedic Astrologer",
-    bio,
-    specialties:body.specialties?.trim().slice(0,500)||"Birth charts",
-    languages:body.languages?.trim().slice(0,240)||"English, Hindi",
-    consultationModes:body.consultationModes?.trim().slice(0,160)||"Video, Audio, Chat",
-    experienceYears:Math.max(0,Number(body.experienceYears)||0),
-    verified:body.verified??false,
-    verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
-    photoUrl,
-    online:body.online??false,
-    chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||15),
-    active:body.active??true,
-    featured:body.featured??false,
-    firebaseUid:null,
-    createdAt:FieldValue.serverTimestamp(),
-    updatedAt:FieldValue.serverTimestamp(),
-  });
-  const batch = db.batch();
-  for (const weekday of [1,2,3,4,5]) {
-    batch.set(ref.collection("availabilityRules").doc(), { weekday, startTime: "09:30", endTime: "17:30", active: true });
+  try {
+    const created = await createPractitionerAdmin({
+      name: body.name ?? "",
+      email: body.email ?? "",
+      title: body.title?.trim() || "Vedic Astrologer",
+      bio: body.bio ?? "",
+      specialties: body.specialties?.trim() || "Birth charts",
+      languages: body.languages?.trim() || "English, Hindi",
+      consultationModes: body.consultationModes?.trim() || "Video, Audio, Chat",
+      experienceYears: body.experienceYears,
+      verified: body.verified ?? false,
+      verificationLevel: body.verificationLevel ?? "reviewed",
+      photoUrl: body.photoUrl ?? null,
+      online: body.online ?? false,
+      chatRatePerMinute: Number(body.chatRatePerMinute) || 15,
+      active: body.active ?? true,
+      featured: body.featured ?? false,
+    }, { starterHours: true });
+    await recordAudit(admin,"practitioner.created","practitioner",created.id,{name:created.name,email:created.email});
+    const all=await getPractitionerDirectory(false,true);
+    return Response.json(all.find(x=>x.id===created.id),{status:201});
+  } catch (error) {
+    if (error instanceof PractitionerAdminError) return Response.json({error:error.message},{status:error.message.includes("already exists")?409:400});
+    throw error;
   }
-  await batch.commit();
-
-  await recordAudit(admin,"practitioner.created","practitioner",slug,{name,email});
-  const all=await getPractitionerDirectory(false,true);
-  return Response.json(all.find(x=>x.id===slug),{status:201});
 }
