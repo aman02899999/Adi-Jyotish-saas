@@ -1,4 +1,4 @@
-import { db } from "@/lib/firestore";
+import { countUpcomingBookingsByPractitioner } from "@/lib/admin-directory";
 import { AdminSchedule } from "@/components/admin-schedule";
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
@@ -8,15 +8,10 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminSchedulePage() {
   await requireAdminPage("schedule");
-  const [people, upcomingSnap] = await Promise.all([
+  const [people, counts] = await Promise.all([
     getPractitionerDirectory(false, true),
-    db.collection("bookings").where("scheduledAt", ">", new Date()).get(),
+    countUpcomingBookingsByPractitioner(),
   ]);
-  const counts: Record<string, number> = {};
-  for (const doc of upcomingSnap.docs) {
-    const data = doc.data() as { practitionerId?: string; status?: string };
-    if (data.practitionerId && data.status !== "cancelled") counts[data.practitionerId] = (counts[data.practitionerId] ?? 0) + 1;
-  }
   return (
     <AdminShell active="Schedule">
       <div className="admin-content">

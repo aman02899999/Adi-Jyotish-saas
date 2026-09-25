@@ -7,12 +7,6 @@
 const NOT_YET_PORTED = "Not yet ported.";
 
 export const FIRESTORE_ONLY: Record<string, string> = {
-  "src/app/[locale]/admin/(protected)/activity/page.tsx": NOT_YET_PORTED,
-  "src/app/[locale]/admin/(protected)/members/page.tsx": NOT_YET_PORTED,
-  "src/app/[locale]/admin/(protected)/messages/page.tsx": NOT_YET_PORTED,
-  "src/app/[locale]/admin/(protected)/schedule/page.tsx": NOT_YET_PORTED,
-  "src/app/[locale]/admin/(protected)/settings/page.tsx": NOT_YET_PORTED,
-  "src/app/api/admin/invites/[id]/route.ts": NOT_YET_PORTED,
   "src/lib/analytics.ts#getAnalytics": NOT_YET_PORTED,
   "src/lib/astro-journal.ts#listJournalEntries": NOT_YET_PORTED,
   "src/lib/astro-journal.ts#logJournalEntry": NOT_YET_PORTED,

@@ -3,23 +3,12 @@ import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
 import { createAdminInvite, listPendingAdminInvites } from "@/lib/admin-invites";
 import { roleSlugExists } from "@/lib/admin-roles";
-import { adminUserExistsWithEmailInSupabase, listAdminUsersInSupabase, type AdminUserRow } from "@/lib/admin-team-supabase";
+import { adminUserExistsWithEmailInSupabase } from "@/lib/admin-team-supabase";
+import { listAdminUsersForAdmin } from "@/lib/admin-directory";
 import { findGoTrueUserByEmail } from "@/lib/gotrue-admin";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
-
-type AdminUserDoc = { name: string; email: string; role: string; active: boolean; lastLoginAt?: FirebaseFirestore.Timestamp | null; createdAt?: FirebaseFirestore.Timestamp };
-
-async function firestoreAdminUsers(): Promise<AdminUserRow[]> {
-  const usersSnap = await db.collection("adminUsers").get();
-  return usersSnap.docs
-    .map((doc) => {
-      const data = doc.data() as AdminUserDoc;
-      return { id: doc.id, name: data.name, email: data.email, role: data.role, active: data.active, lastLoginAt: data.lastLoginAt ? data.lastLoginAt.toDate() : null, createdAt: data.createdAt ? data.createdAt.toDate() : new Date() };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
 
 export async function GET() {
   const admin = await getCurrentAdmin();
@@ -27,7 +16,7 @@ export async function GET() {
   if (!hasAdminPermission(admin, "team")) return Response.json({ error: "Owner access required." }, { status: 403 });
 
   const [users, invites] = await Promise.all([
-    isSupabaseCutoverActive() ? listAdminUsersInSupabase() : firestoreAdminUsers(),
+    listAdminUsersForAdmin(),
     listPendingAdminInvites(),
   ]);
 

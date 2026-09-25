@@ -3,7 +3,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
 import { createGoTrueUser } from "@/lib/gotrue-admin";
-import { createMemberAdminInSupabase, listMembersInSupabase, type MemberAdminRow } from "@/lib/member-admin-supabase";
+import { createMemberAdminInSupabase } from "@/lib/member-admin-supabase";
+import { listMembersForAdmin } from "@/lib/admin-directory";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
@@ -15,41 +16,13 @@ type MemberPayload = {
   birthDate?: string; birthTime?: string; birthPlace?: string; plan?: string; active?: boolean;
 };
 
-function toDate(value: FirebaseFirestore.Timestamp | Date | undefined | null): Date | null {
-  if (!value) return null;
-  return value instanceof Date ? value : value.toDate();
-}
-
-async function firestoreMembers(): Promise<MemberAdminRow[]> {
-  const snap = await db.collection("members").orderBy("name", "asc").get();
-  return snap.docs.map((doc) => {
-    const data = doc.data() as Record<string, unknown>;
-    return {
-      id: doc.id,
-      name: data.name as string,
-      email: data.email as string,
-      phone: (data.phone as string | null) ?? null,
-      birthDate: (data.birthDate as string | null) ?? null,
-      birthTime: (data.birthTime as string | null) ?? null,
-      birthPlace: (data.birthPlace as string | null) ?? null,
-      plan: (data.plan as string) ?? "member",
-      onboardingComplete: Boolean(data.onboardingComplete),
-      // A Firestore document with no `active` field is active; the Postgres column is
-      // not null default true, so reading it directly is the same rule.
-      active: data.active !== false,
-      lastLoginAt: toDate(data.lastLoginAt as FirebaseFirestore.Timestamp | undefined),
-      createdAt: toDate(data.createdAt as FirebaseFirestore.Timestamp | undefined) ?? new Date(),
-      updatedAt: toDate(data.updatedAt as FirebaseFirestore.Timestamp | undefined) ?? new Date(),
-    };
-  });
-}
 
 export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_view")) return Response.json({ error: "Member access required." }, { status: 403 });
 
-  const rows = isSupabaseCutoverActive() ? await listMembersInSupabase() : await firestoreMembers();
+  const rows = await listMembersForAdmin();
   return Response.json(rows);
 }
 
