@@ -68,8 +68,11 @@ describeCutover("insights on Postgres", () => {
 
   it("lists the most recently created bookings first", async () => {
     // Created order is the reverse of appointment order, so sorting by the wrong date shows.
-    await addBooking(`${P}older`, { price: 100, paid: true, status: "confirmed", createdAt: new Date(Date.now() - 60_000).toISOString(), scheduledAt: new Date(Date.now() + 2 * 86_400_000).toISOString() });
-    await addBooking(`${P}newest`, { price: 100, paid: true, status: "confirmed", createdAt: new Date().toISOString(), scheduledAt: new Date(Date.now() + 86_400_000).toISOString() });
+    // Both are created "in the future": the suites share one database, and a booking another
+    // suite made seconds ago must not be able to sort between them.
+    const inAnHour = Date.now() + 3_600_000;
+    await addBooking(`${P}older`, { price: 100, paid: true, status: "confirmed", createdAt: new Date(inAnHour).toISOString(), scheduledAt: new Date(Date.now() + 2 * 86_400_000).toISOString() });
+    await addBooking(`${P}newest`, { price: 100, paid: true, status: "confirmed", createdAt: new Date(inAnHour + 1000).toISOString(), scheduledAt: new Date(Date.now() + 86_400_000).toISOString() });
     expect((await getAnalytics("30d")).recentBookings.slice(0, 2).map((b) => b.id)).toEqual([`${P}newest`, `${P}older`]);
   });
 
