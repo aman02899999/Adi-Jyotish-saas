@@ -3,6 +3,8 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getPromoBannerInSupabase, mergePromoBannerInSupabase } from "@/lib/cms-supabase";
 
 export type PromoBanner = {
   enabled: boolean;
@@ -36,6 +38,11 @@ const defaults: Omit<PromoBanner, "updatedAt"> = {
 const ref = db.collection("promoBanner").doc("main");
 
 async function fetchPromoBanner(): Promise<PromoBanner> {
+  if (isSupabaseCutoverActive()) {
+    const row = await getPromoBannerInSupabase();
+    if (!row) return { ...defaults, updatedAt: new Date(0).toISOString() };
+    return { ...defaults, ...row, updatedAt: row.updatedAt ?? new Date(0).toISOString() };
+  }
   const snap = await ref.get();
   if (!snap.exists) return { ...defaults, updatedAt: new Date(0).toISOString() };
   const data = snap.data() as Partial<Omit<PromoBanner, "updatedAt">> & { updatedAt?: FirebaseFirestore.Timestamp };
@@ -60,6 +67,10 @@ export const getPromoBanner = unstable_cache(
 );
 
 export async function updatePromoBanner(patch: Partial<Omit<PromoBanner, "updatedAt">>) {
+  if (isSupabaseCutoverActive()) {
+    await mergePromoBannerInSupabase(patch);
+    return fetchPromoBanner();
+  }
   await ref.set({ ...patch, updatedAt: FieldValue.serverTimestamp() }, { merge: true });
   return fetchPromoBanner();
 }

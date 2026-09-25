@@ -1,0 +1,12 @@
+-- Milestones are studio-wide, not per member.
+--
+-- src/lib/milestones.ts records "N consultations delivered" (id `bookings-N`) when the count of
+-- completed bookings lands on a round number, and the shareable card at /milestone/[id] shows it.
+-- No member owns one. 0004 modelled the table as per-member (`member_id not null`, a foreign key
+-- to members, unique on member, type and value), so no Firestore milestone could be copied and
+-- the app could never write one after cutover.
+--
+-- The id stays the uniqueness guarantee: `bookings-500` can exist once, which is how
+-- checkBookingCompletionMilestone makes "was this already claimed" atomic. The column and its
+-- foreign key are kept (nullable) so account erasure, which deletes by member_id, is unaffected.
+alter table public.milestones alter column member_id drop not null;

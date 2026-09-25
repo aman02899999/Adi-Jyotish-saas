@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getExperimentCountsInSupabase, incrementExperimentCounterInSupabase } from "@/lib/experiments-supabase";
 
 /** Deliberately small and explicit rather than a generic "register any experiment at runtime"
  * system — every experiment here is a real, specific thing wired into a real page, findable by
@@ -31,14 +33,25 @@ export function getVariant(key: ExperimentKey, bucketingId: string): string {
   return variants[hashToIndex(`${key}:${bucketingId}`, variants.length)];
 }
 
+/** Counting is best-effort: a failed count must never break the page that showed the variant. */
+async function increment(key: ExperimentKey, variant: string, counter: "impressions" | "conversions") {
+  try {
+    if (isSupabaseCutoverActive()) {
+      await incrementExperimentCounterInSupabase(key, EXPERIMENTS[key].description, variant, counter);
+      return;
+    }
+    await db.collection("experiments").doc(key).collection("variants").doc(variant).set({ [counter]: FieldValue.increment(1) }, { merge: true });
+  } catch (error) {
+    console.error(`Experiment ${counter} record failed`, error);
+  }
+}
+
 export async function recordExperimentImpression(key: ExperimentKey, variant: string) {
-  const ref = db.collection("experiments").doc(key).collection("variants").doc(variant);
-  await ref.set({ impressions: FieldValue.increment(1) }, { merge: true }).catch((error) => console.error("Experiment impression record failed", error));
+  await increment(key, variant, "impressions");
 }
 
 export async function recordExperimentConversion(key: ExperimentKey, variant: string) {
-  const ref = db.collection("experiments").doc(key).collection("variants").doc(variant);
-  await ref.set({ conversions: FieldValue.increment(1) }, { merge: true }).catch((error) => console.error("Experiment conversion record failed", error));
+  await increment(key, variant, "conversions");
 }
 
 export type ExperimentReport = {
@@ -55,8 +68,9 @@ const MIN_SAMPLE_FOR_RECOMMENDATION = 200;
  * renders based on results; an admin (or a future deliberate code change) has to act on it. */
 export async function getExperimentReport(key: ExperimentKey): Promise<ExperimentReport> {
   const experiment = EXPERIMENTS[key];
-  const snap = await db.collection("experiments").doc(key).collection("variants").get();
-  const byVariant = new Map(snap.docs.map((doc) => [doc.id, doc.data() as { impressions?: number; conversions?: number }]));
+  const byVariant: Map<string, { impressions?: number; conversions?: number }> = isSupabaseCutoverActive()
+    ? await getExperimentCountsInSupabase(key)
+    : new Map((await db.collection("experiments").doc(key).collection("variants").get()).docs.map((doc) => [doc.id, doc.data() as { impressions?: number; conversions?: number }]));
 
   const variants = experiment.variants.map((variant) => {
     const data = byVariant.get(variant);

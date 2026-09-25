@@ -12,6 +12,8 @@ import {
   transitionPayoutStatusInSupabase,
 } from "@/lib/practitioner-payouts-supabase";
 import {
+  getPortalProfileInSupabase,
+  type PortalProfileRow,
   cacheBookingKundliInSupabase,
   cacheBookingVarshphalInSupabase,
   cacheChatKundliInSupabase,
@@ -32,6 +34,7 @@ import {
 } from "@/lib/practitioner-portal-supabase";
 import { getPublishedReviewsForPractitionerInSupabase } from "@/lib/practitioners-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { isSyntheticReview } from "@/lib/review-provenance";
 import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
 import { buildKundliChart, KundliEngineError, renderKundliReport } from "@/lib/kundli-engine";
 import { buildVarshphalChart, renderVarshphalReport, VarshphalError } from "@/lib/varshphal";
@@ -147,11 +150,11 @@ export async function getPractitionerStats(practitionerId: string) {
     if ((row.status === "pending" || row.status === "confirmed") && row.scheduledAt.getTime() >= now) upcomingCount += 1;
   }
 
-  let ratingSum = 0;
-  for (const doc of reviewsSnap.docs) {
-    ratingSum += (doc.data().rating as number) ?? 0;
-  }
-  const reviewCount = reviewsSnap.size;
+  // A practitioner's own dashboard is where they judge how clients rate them; synthetic reviews
+  // would tell them something no client said. See review-provenance.ts.
+  const genuine = reviewsSnap.docs.filter((doc) => !isSyntheticReview(doc.data()));
+  const ratingSum = genuine.reduce((sum, doc) => sum + ((doc.data().rating as number) ?? 0), 0);
+  const reviewCount = genuine.length;
   const avgRating = reviewCount ? ratingSum / reviewCount : 0;
 
   const availableBalance = Math.max(0, totalEarned - paidOut - pendingOut);
@@ -204,7 +207,7 @@ export async function getPractitionerReviews(practitionerId: string): Promise<Pr
     .where("status", "==", "published")
     .orderBy("createdAt", "desc")
     .get();
-  return snap.docs.map((doc) => {
+  return snap.docs.filter((doc) => !isSyntheticReview(doc.data())).map((doc) => {
     const data = doc.data() as { reviewerName: string; rating: number; clarity: number; empathy: number; usefulness: number; body: string; createdAt: FirebaseFirestore.Timestamp };
     return { id: doc.id, reviewerName: data.reviewerName, rating: data.rating, clarity: data.clarity, empathy: data.empathy, usefulness: data.usefulness, body: data.body, createdAt: data.createdAt?.toDate() ?? new Date() };
   });
@@ -344,6 +347,22 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
 /** Lets a practitioner toggle their own live instant-chat availability — previously only an
  * admin could flip this, which made the "self-service portal" unusable for the one status that
  * genuinely needs to change minute-to-minute (going online/offline for chat). */
+export async function getPractitionerPortalProfile(practitionerId: string): Promise<PortalProfileRow | null> {
+  if (isSupabaseCutoverActive()) return getPortalProfileInSupabase(practitionerId);
+  const snap = await db.collection("practitioners").doc(practitionerId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as {
+    bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null; videoUrl?: string | null;
+    bankAccountName?: string | null; bankIfsc?: string | null; bankAccountNumberEnc?: string | null; upiIdEnc?: string | null; totpEnabled?: boolean;
+  };
+  return {
+    bio: data.bio, specialties: data.specialties, languages: data.languages, consultationModes: data.consultationModes,
+    photoUrl: data.photoUrl ?? null, videoUrl: data.videoUrl ?? null, bankAccountName: data.bankAccountName ?? null,
+    bankIfsc: data.bankIfsc ?? null, hasBankAccount: Boolean(data.bankAccountNumberEnc), hasUpi: Boolean(data.upiIdEnc),
+    totpEnabled: data.totpEnabled === true,
+  };
+}
+
 export async function setPractitionerOnline(practitionerId: string, online: boolean) {
   if (isSupabaseCutoverActive()) {
     await setPortalOnlineInSupabase(practitionerId, online);

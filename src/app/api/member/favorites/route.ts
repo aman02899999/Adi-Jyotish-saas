@@ -1,6 +1,9 @@
 import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getFavoritePractitionerIds } from "@/lib/marketplace";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
+import { toggleFavoriteInSupabase } from "@/lib/member-favorites-supabase";
 
 export async function GET(){const member=await getCurrentMember();if(!member)return Response.json({error:"Member sign-in required."},{status:401});return Response.json({practitionerIds:await getFavoritePractitionerIds(member.id)});}
 
@@ -10,6 +13,12 @@ export async function POST(request:Request){
   const body=await request.json() as {practitionerId?:string};
   const practitionerId=body.practitionerId?.trim();
   if(!practitionerId)return Response.json({error:"Invalid practitioner."},{status:400});
+
+  if (isSupabaseCutoverActive()) {
+    const practitioner = await getPractitionerAvailabilityInSupabase(practitionerId);
+    if (!practitioner || !practitioner.active) return Response.json({error:"Practitioner not found."},{status:404});
+    return Response.json({ favorited: await toggleFavoriteInSupabase(member.id, practitionerId) });
+  }
 
   const practitionerSnap = await db.collection("practitioners").doc(practitionerId).get();
   if(!practitionerSnap.exists || practitionerSnap.data()?.active !== true) return Response.json({error:"Practitioner not found."},{status:404});

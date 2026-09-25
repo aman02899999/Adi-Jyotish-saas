@@ -2,6 +2,8 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { claimGeminiCallInSupabase, getGeminiUsageInSupabase, releaseGeminiCallInSupabase } from "@/lib/gemini-usage-supabase";
 
 /**
  * The only AI calls left in the platform. Every other tool (horoscope, Kundli report,
@@ -32,6 +34,10 @@ class GeminiBudgetError extends Error {}
 
 async function claimGeminiBudget() {
   const today = new Date().toISOString().slice(0, 10);
+  if (isSupabaseCutoverActive()) {
+    if (!(await claimGeminiCallInSupabase(today, DAILY_CALL_LIMIT))) throw new GeminiBudgetError("Live readings have reached today's usage limit. Please try again tomorrow, or contact support.");
+    return;
+  }
   const ref = db.collection("geminiUsage").doc(today);
   const withinBudget = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -49,6 +55,7 @@ async function claimGeminiBudget() {
  * members get budget-exhausted errors for the rest of the UTC day. */
 async function releaseGeminiBudget() {
   const today = new Date().toISOString().slice(0, 10);
+  if (isSupabaseCutoverActive()) return releaseGeminiCallInSupabase(today);
   const ref = db.collection("geminiUsage").doc(today);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -347,12 +354,14 @@ export async function checkGeminiHealth(): Promise<GeminiHealth> {
     }
 
     const today = new Date().toISOString().slice(0, 10);
-    const usage = await db.collection("geminiUsage").doc(today).get().catch(() => null);
+    const usageToday = isSupabaseCutoverActive()
+      ? await getGeminiUsageInSupabase(today).catch(() => 0)
+      : ((await db.collection("geminiUsage").doc(today).get().catch(() => null))?.data() as { count?: number } | undefined)?.count ?? 0;
     return {
       status: "ok",
       model: MODEL,
       latencyMs: Date.now() - startedAt,
-      usageToday: (usage?.data() as { count?: number } | undefined)?.count ?? 0,
+      usageToday,
       dailyLimit: DAILY_CALL_LIMIT,
     };
   } catch (error) {

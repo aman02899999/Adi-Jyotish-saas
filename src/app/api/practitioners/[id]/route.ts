@@ -1,7 +1,5 @@
-import { FieldValue } from "firebase-admin/firestore";
-import { db } from "@/lib/firestore";
-import { getCurrentAdmin,hasAdminPermission,recordAudit } from "@/lib/admin-auth";
-import { getPractitionerDirectory, sanitizeMediaUrl } from "@/lib/scheduling";
+import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
+import { deletePractitionerAdmin, getPractitionerDirectory, PractitionerAdminError, updatePractitionerAdmin, type PractitionerProfilePatch } from "@/lib/scheduling";
 
 type PractitionerPayload = {
   name?: string;
@@ -21,49 +19,44 @@ type PractitionerPayload = {
   featured?: boolean;
 };
 
+const PROFILE_FIELDS = ["name","email","title","bio","specialties","languages","consultationModes","experienceYears","verified","verificationLevel","photoUrl","chatRatePerMinute","active","featured"] as const;
+
+/**
+ * The Schedule page's edit form and its online toggle. Both send the whole profile, so what the
+ * admin is allowed to do is decided by what actually changes: going online or offline is
+ * scheduling; anything else — rate, verification, email, bio — needs the practitioners permission,
+ * the same as /api/admin/practitioners/[id]. Before, the schedule permission alone could do all of it.
+ */
 export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}){
   const admin=await getCurrentAdmin();
   if(!admin)return Response.json({error:"Administrator access required."},{status:401});
-  if(!hasAdminPermission(admin,"schedule"))return Response.json({error:"Scheduling permission required."},{status:403});
+  if(!hasAdminPermission(admin,"schedule")&&!hasAdminPermission(admin,"practitioners"))return Response.json({error:"Scheduling permission required."},{status:403});
   const{id}=await params;
   const body=await request.json() as PractitionerPayload;
-  const name=body.name?.trim().slice(0,120)??"";
-  const email=body.email?.trim().toLowerCase().slice(0,180)??"";
-  const bio=body.bio?.trim().slice(0,1200)??"";
-  if(name.length<2||!/^\S+@\S+\.\S+$/.test(email)||bio.length<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
-  const photoUrl=sanitizeMediaUrl(body.photoUrl);
 
-  const ref = db.collection("practitioners").doc(id);
-  const snap = await ref.get();
-  if(!snap.exists)return Response.json({error:"Practitioner not found."},{status:404});
-  const isAiPowered = Boolean((snap.data() as { isAiPowered?: boolean }).isAiPowered);
+  const current=(await getPractitionerDirectory(false,true)).find(x=>x.id===id);
+  if(!current)return Response.json({error:"Practitioner not found."},{status:404});
 
-  const emailOwner = await db.collection("practitioners").where("email","==",email).limit(1).get();
-  if(!emailOwner.empty && emailOwner.docs[0].id !== id) return Response.json({error:"This email is already in use."},{status:409});
+  const patch:PractitionerProfilePatch={};
+  for(const field of PROFILE_FIELDS){
+    const value=body[field];
+    if(value===undefined)continue;
+    const stored=(current as Record<string,unknown>)[field]??(field==="photoUrl"?"":undefined);
+    if(value!==stored)(patch as Record<string,unknown>)[field]=value;
+  }
+  if(Object.keys(patch).length&&!hasAdminPermission(admin,"practitioners")){
+    return Response.json({error:"Practitioners permission required to edit a practitioner's profile, rate or verification."},{status:403});
+  }
+  if(typeof body.online==="boolean"&&body.online!==current.online)patch.online=body.online;
+  if(patch.bio!==undefined&&patch.bio.trim().length<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
 
-  const patch = {
-    name,
-    email,
-    title:body.title?.trim().slice(0,120)||"Vedic Astrologer",
-    bio,
-    specialties:body.specialties?.trim().slice(0,500)||"Birth charts",
-    languages:body.languages?.trim().slice(0,240)||"English, Hindi",
-    consultationModes:body.consultationModes?.trim().slice(0,160)||"Video, Audio, Chat",
-    experienceYears:Math.max(0,Number(body.experienceYears)||0),
-    verified:body.verified??false,
-    verificationLevel:body.verificationLevel?.trim().slice(0,40)||"reviewed",
-    photoUrl,
-    // AI-powered practitioners have no human on the other end to toggle online status — scheduling.ts's
-    // seedPractitioners() force-corrects them back to true on every directory read regardless of what's
-    // submitted here, so accepting body.online for them would silently discard the admin's own change
-    // (and even undo it before this very request returns, since getPractitionerDirectory below re-seeds).
-    online:isAiPowered?true:(body.online??false),
-    chatRatePerMinute:Math.max(1,Number(body.chatRatePerMinute)||15),
-    active:body.active??true,
-    featured:body.featured??false,
-  };
-  await ref.update({...patch, updatedAt: FieldValue.serverTimestamp()});
-  await recordAudit(admin,"practitioner.updated","practitioner",id,{name,active:patch.active,verified:patch.verified});
+  try {
+    const updated=await updatePractitionerAdmin(id,patch);
+    await recordAudit(admin,"practitioner.updated","practitioner",id,{name:updated.name,active:updated.active,verified:updated.verified,fields:Object.keys(patch)});
+  } catch (error) {
+    if (error instanceof PractitionerAdminError) return Response.json({error:error.message},{status:error.message.includes("another practitioner")?409:400});
+    throw error;
+  }
   const all=await getPractitionerDirectory(false,true);
   return Response.json(all.find(x=>x.id===id));
 }
@@ -71,13 +64,14 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
 export async function DELETE(_:Request,{params}:{params:Promise<{id:string}>}){
   const admin=await getCurrentAdmin();
   if(!admin)return Response.json({error:"Administrator access required."},{status:401});
-  if(!hasAdminPermission(admin,"schedule"))return Response.json({error:"Scheduling permission required."},{status:403});
+  if(!hasAdminPermission(admin,"practitioners"))return Response.json({error:"Practitioners permission required to remove a practitioner."},{status:403});
   const{id}=await params;
-  const ref = db.collection("practitioners").doc(id);
-  const snap = await ref.get();
-  if(!snap.exists)return Response.json({error:"Practitioner not found."},{status:404});
-  const name = snap.data()?.name as string;
-  await ref.delete();
-  await recordAudit(admin,"practitioner.deleted","practitioner",id,{name});
+  try {
+    await deletePractitionerAdmin(id);
+  } catch (error) {
+    if (error instanceof PractitionerAdminError) return Response.json({error:error.message},{status:error.message==="Practitioner not found."?404:409});
+    throw error;
+  }
+  await recordAudit(admin,"practitioner.deleted","practitioner",id,{});
   return Response.json({ok:true,id});
 }

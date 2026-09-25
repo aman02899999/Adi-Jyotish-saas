@@ -33,6 +33,7 @@ import {
 import { AvatarImage } from "@/components/avatar-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { AiPersonaBadge } from "@/components/ai-persona-badge";
 import { JsonLd } from "@/components/json-ld";
 import { getSiteUrl } from "@/lib/site-url";
 import { getFeaturedTestimonials, getHomepageStats, getLivePractitioners, getOnlineNowCount, getSeniorAstrologers } from "@/lib/homepage";
@@ -122,7 +123,10 @@ export default async function HomePage() {
         url: getSiteUrl().toString(),
         logo: new URL("/images/vedic-hero.jpg", getSiteUrl()).toString(),
         description: "Authentic Vedic astrology readings, cosmic insights, and auspicious timing.",
-        aggregateRating: stats.averageRating ? { "@type": "AggregateRating", ratingValue: stats.averageRating, reviewCount: Math.max(1, stats.consultationsDelivered) } : undefined,
+        // reviewCount is the number of genuine reviews behind ratingValue — not consultations,
+        // and never rounded up to 1. Structured data that overstates reviews is what search
+        // engines' review-snippet policies penalise.
+        aggregateRating: stats.averageRating && stats.reviewCount ? { "@type": "AggregateRating", ratingValue: stats.averageRating, reviewCount: stats.reviewCount } : undefined,
       }} />
       <StartHerePicker />
       <SiteHeader />
@@ -143,7 +147,13 @@ export default async function HomePage() {
               <div className="avatar-stack" aria-hidden="true">
                 {liveExperts.slice(0, 3).map((expert) => <span key={expert.id}>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>)}
               </div>
-              <div><strong>{stats.averageRating || "—"}</strong> <span className="stars">★★★★★</span><small>{stats.consultationsDelivered >= 100 ? t("hero.trustedByCount", { count: stats.consultationsDelivered }) : t("hero.trustedByGrowing")}</small></div>
+              <div><strong>{stats.averageRating || "—"}</strong> {stats.averageRating > 0 && (
+                // Filled to the actual average rather than five fixed stars, which showed a
+                // perfect score beside any number at all.
+                <span className="stars" role="img" aria-label={`${stats.averageRating} out of 5`}>
+                  {"★".repeat(Math.round(stats.averageRating))}<span className="stars__empty">{"★".repeat(5 - Math.round(stats.averageRating))}</span>
+                </span>
+              )}<small>{stats.consultationsDelivered >= 100 ? t("hero.trustedByCount", { count: stats.consultationsDelivered }) : t("hero.trustedByGrowing")}</small></div>
             </div>
           </div>
 
@@ -260,7 +270,8 @@ export default async function HomePage() {
                     <span>{expert.online ? t("live.isOnline") : t("live.isOffline")}</span>
                   </div>
                 </div>
-                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating?.toFixed(1) ?? "New"}</strong><small>{t("live.reviews", { count: expert.reviewCount })} · {t("seniors.yrsShort", { years: expert.experienceYears })}</small></div>
+                <div className="live-card__rating"><Star size={13} fill="currentColor" /><strong>{expert.rating?.toFixed(1) ?? "New"}</strong><small>{t("live.reviews", { count: expert.reviewCount })}{!expert.isAiPowered && <> · {t("seniors.yrsShort", { years: expert.experienceYears })}</>}</small></div>
+                {expert.isAiPowered && <AiPersonaBadge compact />}
                 <div className="live-card__tags">{expert.specialties.split(",").slice(0, 3).map((tag, tagIndex) => <span key={tag} className={tagIndex === 0 ? "primary-specialty" : undefined}>{tag.trim()}</span>)}</div>
                 <div className="live-card__foot">
                   <div className="live-card__price">{expert.sessionPrice != null ? (

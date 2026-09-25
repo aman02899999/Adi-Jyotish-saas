@@ -1,9 +1,9 @@
-import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { PayoutError, updatePayoutStatus } from "@/lib/practitioner-portal";
 import { createNotification } from "@/lib/notifications";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
+import { getPractitionerById } from "@/lib/scheduling";
 
 export const dynamic = "force-dynamic";
 
@@ -32,8 +32,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       link: "/practitioner/earnings",
     }).catch(() => {});
 
-    const practitionerSnap = await db.collection("practitioners").doc(updated.practitionerId).get();
-    const practitioner = practitionerSnap.exists ? (practitionerSnap.data() as { name: string; email: string }) : null;
+    const practitioner = await getPractitionerById(updated.practitionerId);
     if (practitioner) {
       const statusCopy = body.status === "paid" ? `has been paid${updated.transactionRef ? ` (ref: ${updated.transactionRef})` : ""}.` : body.status === "approved" ? "was approved and will be paid soon." : "was rejected.";
       await sendEmail({

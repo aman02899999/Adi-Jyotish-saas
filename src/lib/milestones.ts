@@ -4,6 +4,8 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { claimMilestoneInSupabase, countCompletedBookingsInSupabase, getMilestoneInSupabase } from "@/lib/engagement-supabase";
 
 const BOOKING_MILESTONES = [100, 250, 500, 1000, 2500, 5000, 10000];
 
@@ -21,17 +23,22 @@ export type Milestone = { id: string; type: "bookings"; value: number; achievedA
  * "was this already claimed" check atomic — two bookings completing in the same instant can't
  * both create the same milestone. */
 export async function checkBookingCompletionMilestone() {
-  const countSnap = await db.collection("bookings").where("status", "==", "completed").count().get();
-  const total = countSnap.data().count;
+  const cutover = isSupabaseCutoverActive();
+  const total = cutover
+    ? await countCompletedBookingsInSupabase()
+    : (await db.collection("bookings").where("status", "==", "completed").count().get()).data().count;
   if (!BOOKING_MILESTONES.includes(total)) return null;
 
   const id = `bookings-${total}`;
-  const ref = db.collection("milestones").doc(id);
-  try {
-    await ref.create({ type: "bookings", value: total, achievedAt: FieldValue.serverTimestamp() });
-  } catch (error) {
-    if (isAlreadyExists(error)) return null;
-    throw error;
+  if (cutover) {
+    if (!(await claimMilestoneInSupabase(id, total))) return null;
+  } else {
+    try {
+      await db.collection("milestones").doc(id).create({ type: "bookings", value: total, achievedAt: FieldValue.serverTimestamp() });
+    } catch (error) {
+      if (isAlreadyExists(error)) return null;
+      throw error;
+    }
   }
 
   const adminIds = await getAdminIdsWithPermission("settings");
@@ -47,6 +54,10 @@ export async function checkBookingCompletionMilestone() {
 }
 
 export async function getMilestone(id: string): Promise<Milestone | null> {
+  if (isSupabaseCutoverActive()) {
+    const row = await getMilestoneInSupabase(id);
+    return row ? { id, ...row } : null;
+  }
   const snap = await db.collection("milestones").doc(id).get();
   if (!snap.exists) return null;
   const data = snap.data() as { type: "bookings"; value: number; achievedAt?: FirebaseFirestore.Timestamp };

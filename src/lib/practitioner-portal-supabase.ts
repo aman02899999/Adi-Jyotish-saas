@@ -2,6 +2,7 @@ import "server-only";
 
 import { randomUUID } from "node:crypto";
 
+import { GENUINE_REVIEW_SQL } from "@/lib/review-provenance";
 import { query, queryModel, queryModels, withTransaction } from "@/lib/postgres";
 import type { BookingRow } from "@/lib/bookings-supabase";
 
@@ -68,7 +69,7 @@ async function reviewStatsFor(practitionerId: string): Promise<{ reviewCount: nu
   const row = await queryModel<{ reviewCount: number; avgRating: number }>(
     `select count(*)::int as review_count, coalesce(avg(rating), 0) as avg_rating
        from public.practitioner_reviews
-      where practitioner_id = $1 and status = 'published'`,
+      where practitioner_id = $1 and status = 'published' and ${GENUINE_REVIEW_SQL}`,
     [practitionerId],
     ["reviewCount", "avgRating"],
   );
@@ -452,6 +453,22 @@ export type PortalPayoutFieldSource = {
 
 /** Demo accounts are excluded in SQL because their fixture payout details would
  * otherwise collide with each other and flag real practitioners by association. */
+export type PortalProfileRow = {
+  bio: string; specialties: string; languages: string; consultationModes: string; photoUrl: string | null; videoUrl: string | null;
+  bankAccountName: string | null; bankIfsc: string | null; hasBankAccount: boolean; hasUpi: boolean; totpEnabled: boolean;
+};
+
+/** What the practitioner's own profile page shows. Only whether payout numbers are on file is
+ * read, never the encrypted values themselves. */
+export async function getPortalProfileInSupabase(practitionerId: string): Promise<PortalProfileRow | null> {
+  return queryModel<PortalProfileRow>(
+    `select bio, specialties, languages, consultation_modes, photo_url, video_url, bank_account_name, bank_ifsc,
+            bank_account_number_enc is not null as has_bank_account, upi_id_enc is not null as has_upi, totp_enabled
+       from public.practitioners where id = $1`,
+    [practitionerId],
+  );
+}
+
 export async function getPayoutFieldSourcesInSupabase(): Promise<PortalPayoutFieldSource[]> {
   return queryModels<PortalPayoutFieldSource>(
     `select id, bank_account_number_enc, upi_id_enc

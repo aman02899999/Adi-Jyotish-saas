@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db, withFirebaseFallback } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { readOrCreateHoroscopeInSupabase } from "@/lib/content-cache-supabase";
 import { tropicalLongitudeOf } from "@/lib/astro-engine";
 import { dateInTimeZone } from "@/lib/scheduling";
 import { getStudioSettings } from "@/lib/studio-settings";
@@ -168,6 +170,10 @@ export async function getDailyHoroscope(sign: ZodiacSignKey): Promise<DailyHoros
   const fallbackContent = generateHoroscopeText(signIndex);
 
   return withFirebaseFallback(async () => {
+    if (isSupabaseCutoverActive()) {
+      const cached = await readOrCreateHoroscopeInSupabase(docId, sign, date, fallbackContent);
+      return { id: docId, sign, date, content: cached.content, createdAt: cached.createdAt };
+    }
     const ref = db.collection("dailyHoroscopes").doc(docId);
 
     const existing = await ref.get();
@@ -233,6 +239,7 @@ export async function getHoroscopeForPeriod(sign: ZodiacSignKey, period: Horosco
 
 async function readOrCreateHoroscope(docId: string, sign: string, date: string, generate: () => string): Promise<string> {
   return withFirebaseFallback(async () => {
+    if (isSupabaseCutoverActive()) return (await readOrCreateHoroscopeInSupabase(docId, sign, date, generate())).content;
     const ref = db.collection("dailyHoroscopes").doc(docId);
     const existing = await ref.get();
     if (existing.exists) return (existing.data() as { content: string }).content;

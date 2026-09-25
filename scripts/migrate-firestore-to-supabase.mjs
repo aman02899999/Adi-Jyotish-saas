@@ -62,8 +62,10 @@ const TABLES = [
   { collection: "wallets", table: "wallets" },
   { collection: "wallets", sub: "entries", table: "wallet_entries", parent: "wallet_id" },
   { collection: "wallets", sub: "holds", table: "wallet_holds", parent: "wallet_id" },
-  { collection: "giftCards", table: "gift_cards" },
-  { collection: "giftCardPaymentIndex", table: "gift_card_payment_index" },
+  // Both are keyed by a value the document body does not repeat (the gift code, the Razorpay
+  // payment id), and both columns are NOT NULL, so the copy fills them from the document id.
+  { collection: "giftCards", table: "gift_cards", docIdColumn: "code" },
+  { collection: "giftCardPaymentIndex", table: "gift_card_payment_index", docIdColumn: "razorpay_payment_id" },
 
   // --- 0003 gemstones / content -------------------------------------------
   { collection: "gemstoneCategories", table: "gemstone_categories" },
@@ -117,7 +119,9 @@ const TABLES = [
   { collection: "auditLogs", table: "audit_logs", jsonb: ["before", "after"] },
   // gemini_usage is keyed by the YYYY-MM-DD doc id, in a column called `day`.
   { collection: "geminiUsage", table: "gemini_usage", pkColumn: "day", pkFromDocId: true },
-  { collection: "experiments", table: "experiments" },
+  // experiments.ts writes only experiments/{key}/variants/{variant}; the parent document never
+  // exists, so a plain get() finds no experiments and every variant fails its foreign key.
+  { collection: "experiments", table: "experiments", includeMissingDocs: true },
   // experiments/{key}/variants/{variant}: the doc id is the variant name, unique
   // only within its parent. Composite id keeps it unique once flattened.
   { collection: "experiments", sub: "variants", table: "experiment_variants", parent: "experiment_key", idFrom: (parentId, docId) => `${parentId}/${docId}`, docIdColumn: "variant" },
@@ -191,6 +195,12 @@ async function readDocs(db, spec) {
       const kids = await parentRef.collection(spec.sub).get();
       for (const doc of kids.docs) out.push({ parentId: parentRef.id, doc });
     }
+  } else if (spec.includeMissingDocs) {
+    // listDocuments() also returns documents that exist only as the parent of a subcollection;
+    // those become a row carrying just their id.
+    const refs = await db.collection(spec.collection).listDocuments();
+    const snaps = refs.length ? await db.getAll(...refs) : [];
+    for (const snap of snaps) out.push({ parentId: null, doc: snap.exists ? snap : { id: snap.id, data: () => ({}) } });
   } else {
     const snap = await db.collection(spec.collection).get();
     for (const doc of snap.docs) out.push({ parentId: null, doc });
@@ -318,9 +328,13 @@ async function upsert(client, spec, rows) {
     values.push(`(${tuple.join(", ")})`);
   }
   const updates = columns.filter((c) => c !== pk);
+  // A row carrying only its key (a phantom parent) has nothing to update.
+  const onConflict = updates.length
+    ? `do update set ${updates.map((c) => `"${c}" = excluded."${c}"`).join(", ")}`
+    : "do nothing";
   const sql =
     `insert into public.${spec.table} (${columns.map((c) => `"${c}"`).join(", ")}) values ${values.join(", ")} ` +
-    `on conflict ("${pk}") do update set ${updates.map((c) => `"${c}" = excluded."${c}"`).join(", ")}`;
+    `on conflict ("${pk}") ${onConflict}`;
   const res = await client.query(sql, params);
   return res.rowCount ?? 0;
 }
@@ -424,4 +438,4 @@ if (invokedDirectly) {
   });
 }
 
-export { TABLES, camelToSnake, buildRow, dedupeByPk, knownColumns, stripUnknownColumns, upsert, SKIP_FIELDS };
+export { TABLES, camelToSnake, buildRow, dedupeByPk, knownColumns, readDocs, stripUnknownColumns, upsert, SKIP_FIELDS };

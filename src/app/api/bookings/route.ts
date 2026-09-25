@@ -130,7 +130,7 @@ export async function POST(request: Request) {
 
   await seedServices();
   let service: { id: string; title: string; price: number; duration: number; active: boolean } | null;
-  let practitioner: { id: string; name: string; active: boolean } | null;
+  let practitioner: { id: string; name: string; active: boolean; isAiPowered?: boolean } | null;
   if (isSupabaseCutoverActive()) {
     const [serviceRow, practitionerRow] = await Promise.all([
       getServiceByIdInSupabase(serviceId),
@@ -146,10 +146,15 @@ export async function POST(request: Request) {
       db.collection("practitioners").doc(practitionerId).get(),
     ]);
     service = serviceSnap.exists ? { id: serviceSnap.id, ...(serviceSnap.data() as { title: string; price: number; duration: number; active: boolean }) } : null;
-    practitioner = practitionerSnap.exists ? { id: practitionerSnap.id, ...(practitionerSnap.data() as { name: string; active: boolean }) } : null;
+    practitioner = practitionerSnap.exists ? { id: practitionerSnap.id, ...(practitionerSnap.data() as { name: string; active: boolean; isAiPowered?: boolean }) } : null;
   }
   if (!service || !service.active) return Response.json({ error: "This reading is not currently available." }, { status: 404 });
   if (!practitioner || !practitioner.active) return Response.json({ error: "This astrologer is not currently available." }, { status: 404 });
+  // Checked explicitly as well as by the slot lookup below, so the reason is stated rather than
+  // surfacing as "this time is no longer available". See getAvailableSlots.
+  if (practitioner.isAiPowered) {
+    return Response.json({ error: `${practitioner.name} is an AI astrologer available by instant chat, not for scheduled consultations. Choose a human astrologer to book a time.` }, { status: 409 });
+  }
   const available = await validateAvailableSlot({ date: bookingDate, duration: service.duration, practitionerId, startsAt: scheduledAt });
   if (!available) return Response.json({ error: "This time is no longer available. Choose another open slot." }, { status: 409 });
 

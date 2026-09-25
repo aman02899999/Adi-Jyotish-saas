@@ -2,6 +2,10 @@ import "server-only";
 
 import { db } from "@/lib/firestore";
 import { bookingFromDoc, type BookingRecord } from "@/app/api/bookings/route";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { listBookingsInSupabase } from "@/lib/bookings-supabase";
+import { listMembersInSupabase } from "@/lib/member-admin-supabase";
+import { getAllServicesFromSupabase } from "@/lib/services-supabase";
 
 export type ReportRange = "30d" | "90d" | "365d" | "all";
 
@@ -23,8 +27,16 @@ export function parseReportRange(value?: string) {
 type MemberRow = { id: string; plan: string; active: boolean; onboardingComplete: boolean; createdAt: Date };
 type ServiceRow = { id: string; title: string; active: boolean };
 
-export async function getAnalytics(requestedRange: ReportRange = "30d") {
-  const range = clampRange(requestedRange);
+/** Every booking (newest first), member and service, from whichever provider is live. */
+async function loadRows(): Promise<{ bookingRows: BookingRecord[]; memberRows: MemberRow[]; serviceRows: ServiceRow[] }> {
+  if (isSupabaseCutoverActive()) {
+    const [bookings, members, services] = await Promise.all([listBookingsInSupabase(), listMembersInSupabase(), getAllServicesFromSupabase()]);
+    return {
+      bookingRows: [...bookings].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime()),
+      memberRows: members.map(({ id, plan, active, onboardingComplete, createdAt }) => ({ id, plan, active, onboardingComplete, createdAt })),
+      serviceRows: services.map(({ id, title, active }) => ({ id, title, active })),
+    };
+  }
   const [bookingsSnap, membersSnap, servicesSnap] = await Promise.all([
     db.collection("bookings").orderBy("createdAt", "desc").get(),
     db.collection("members").orderBy("createdAt", "asc").get(),
@@ -43,6 +55,12 @@ export async function getAnalytics(requestedRange: ReportRange = "30d") {
     };
   });
   const serviceRows: ServiceRow[] = servicesSnap.docs.map((doc) => ({ id: doc.id, title: doc.data().title, active: doc.data().active }));
+  return { bookingRows, memberRows, serviceRows };
+}
+
+export async function getAnalytics(requestedRange: ReportRange = "30d") {
+  const range = clampRange(requestedRange);
+  const { bookingRows, memberRows, serviceRows } = await loadRows();
 
   const now = new Date();
   const allDates = [...bookingRows.map((row) => row.createdAt), ...memberRows.map((row) => row.createdAt)];

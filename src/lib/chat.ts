@@ -1,6 +1,6 @@
 import "server-only";
 
-import { AggregateField, FieldValue } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { publishChatEvent } from "@/lib/ably";
 import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
@@ -9,11 +9,12 @@ import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
 import { getPractitionerChatReply, isGeminiConfigured } from "@/lib/gemini";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { countGenuinePublishedReviews } from "@/lib/synthetic-reviews";
+import { buildPractitionerSystemPrompt, chatStartMessage } from "@/lib/ai-persona-prompt";
 import {
   addChatMessageInSupabase,
   type ChatSessionRow,
   claimChatLockInSupabase,
-  countPublishedPractitionerReviewsFromSupabase,
   createChatSessionInSupabase,
   endChatSessionInSupabase,
   findActiveChatSessionForMemberFromSupabase,
@@ -184,7 +185,7 @@ function elapsedMinutesSince(date: Date) {
  * cannot drift into charging different amounts — which is the failure mode that
  * matters most when a cutover flag decides which one runs.
  */
-type ChatPricing = {
+export type ChatPricing = {
   pricingModel: "metered" | "fixed";
   ratePerMinute: number;
   fixedPrice: number | null;
@@ -244,11 +245,6 @@ function computeChatPricing({
   return { pricingModel: "metered", ratePerMinute: rate, fixedPrice: null, holdAmount: rate * holdMinutes, holdMinutes };
 }
 
-function chatStartMessage(pricing: ChatPricing, practitionerName: string, currency: string) {
-  return pricing.pricingModel === "fixed"
-    ? `Chat started with ${practitionerName}. Flat price ${currency} ${pricing.fixedPrice} for this session, however long it runs.`
-    : `Chat started with ${practitionerName}. Up to ${pricing.holdMinutes} minutes available at ${currency} ${pricing.ratePerMinute}/min.`;
-}
 
 // --- Wallet integration -----------------------------------------------------------------------
 // Delegates the actual balance debit/credit to wallet.ts's transactional hold functions, which
@@ -370,12 +366,10 @@ export async function startChatSession(memberId: string, practitionerId: string)
     const discountPercent = await getMemberDiscountPercent(memberId);
 
     // Each of these is only needed by one pricing model, so only fetch the one in play.
-    const reviewCount = practitioner.isAiPowered
-      ? 0
-      : cutover
-        ? await countPublishedPractitionerReviewsFromSupabase(practitionerId)
-        : (await db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published")
-            .aggregate({ count: AggregateField.count() }).get()).data().count;
+    // Sets the new-practitioner discount, so it counts genuine reviews only — a synthetic batch of
+    // 30 used to clear the 25-review threshold on its own and bill members the full rate for
+    // someone with no real track record. See review-provenance.ts.
+    const reviewCount = practitioner.isAiPowered ? 0 : await countGenuinePublishedReviews(practitionerId);
     const marketplaceSessionPrice = practitioner.isAiPowered
       ? ((await getMarketplacePractitioners()).find((person) => person.id === practitionerId)?.sessionPrice ?? null)
       : null;
@@ -392,7 +386,7 @@ export async function startChatSession(memberId: string, practitionerId: string)
 
     hold = await createWalletHold({ memberId, amount: pricing.holdAmount, referenceType: "chat_session" });
 
-    const startBody = chatStartMessage(pricing, practitioner.name, wallet.currency);
+    const startBody = chatStartMessage(pricing, practitioner.name, wallet.currency, practitioner.isAiPowered);
     let session: ChatSession;
 
     if (cutover) {
@@ -495,18 +489,6 @@ export async function sendMessage({ sessionId, senderType, senderName, body }: {
   }
 
   return message;
-}
-
-/** Builds the persona this practitioner's Gemini replies stay in character as, reusing their own
- * marketplace profile fields (name/title/bio/specialties) instead of a hand-written prompt per
- * practitioner — there are 30+ AI-powered profiles (see REAL_PRACTITIONER_SLUGS in scheduling.ts),
- * too many to maintain individually the way the 6 named reading personas in gemini.ts are. */
-function buildPractitionerSystemPrompt(practitioner: { name: string; title: string; bio: string; specialties: string }) {
-  return `Aap ${practitioner.name} hain — ${practitioner.title}, ek premium Jyotish studio ke liye kaam karte hain. Aapki specialties: ${practitioner.specialties}. Aapke baare mein: ${practitioner.bio}
-
-Aap is samay ek client ke saath instant live chat mein hain (paid Vedic astrology consultation, ek flat session price par). Aapka jawaab HINGLISH mein hona chahiye (Hindi-English mila hua, Roman script mein, jaise log WhatsApp par likhte hain) — garmjoshi aur ek asli anubhavi jyotishi ki tarah baat karein. Chhote, natural chat messages mein jawaab dein (1-4 vaakya har baar) — poora likhit report ya lambा essay kabhi na dein, yeh ek live baatcheet hai. Client ke sawaal ka seedha jawaab dein; agar unhone abhi tak apni janm tithi, samay, ya sthan nahi bataya aur woh zaroori ho to unse poochh lein.
-
-Kabhi bhi medical, legal, ya financial guarantee na dein, aur kabhi yeh dawa na karein ki yeh vigyanik roop se saabit hai — yeh ek paramparik Jyotish vidya hai, ise usi imaandaari se present karein. Hamesha client ke message ka ek grounded, sahayak jawaab dein — kabhi khaali ya "main nahi jaanta" jaisa jawaab na dein.`;
 }
 
 const AI_CHAT_REPLY_HISTORY_LIMIT = 12;

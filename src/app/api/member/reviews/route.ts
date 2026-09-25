@@ -6,6 +6,11 @@ import { bookingFromDoc } from "@/app/api/bookings/route";
 import { scanForContactInfo } from "@/lib/content-moderation";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
+import { MEMBER_REVIEW_SOURCE } from "@/lib/review-provenance";
+import { expireReviewDerivedCaches } from "@/lib/synthetic-reviews";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getBookingByIdInSupabase } from "@/lib/bookings-supabase";
+import { insertMemberReviewInSupabase } from "@/lib/practitioners-supabase";
 
 export async function POST(request:Request){
   const member=await getCurrentMember();
@@ -18,10 +23,17 @@ export async function POST(request:Request){
   const text=body.body?.trim().slice(0,1200)??"";
   if(!bookingId||scores.some(score=>!Number.isInteger(score)||score<1||score>5)||text.length<20)return Response.json({error:"Choose all ratings and write at least 20 characters."},{status:400});
 
-  const bookingSnap = await db.collection("bookings").doc(bookingId).get();
-  if(!bookingSnap.exists) return Response.json({error:"Only completed practitioner consultations can be reviewed."},{status:403});
-  const booking = bookingFromDoc(bookingSnap);
-  if(booking.clientEmail!==member.email||booking.status!=="completed"||!booking.practitionerId){
+  const cutover = isSupabaseCutoverActive();
+  let booking;
+  if (cutover) {
+    booking = await getBookingByIdInSupabase(bookingId);
+  } else {
+    const bookingSnap = await db.collection("bookings").doc(bookingId).get();
+    booking = bookingSnap.exists ? bookingFromDoc(bookingSnap) : null;
+  }
+  if(!booking) return Response.json({error:"Only completed practitioner consultations can be reviewed."},{status:403});
+  // Emails are case-insensitive (citext on Postgres); compare them that way on both providers.
+  if(booking.clientEmail.toLowerCase()!==member.email.toLowerCase()||booking.status!=="completed"||!booking.practitionerId){
     return Response.json({error:"Only completed practitioner consultations can be reviewed."},{status:403});
   }
 
@@ -36,16 +48,23 @@ export async function POST(request:Request){
     usefulness:scores[3],
     body:text,
     status:"published",
+    // Explicit provenance from here on; see review-provenance.ts.
+    source:MEMBER_REVIEW_SOURCE,
   };
   // Doc id = bookingId (one review per booking), so create() is an atomic fail-if-exists check —
   // a plain query-then-add here would let two concurrent submits for the same booking both pass
   // the "not yet reviewed" check and create duplicate reviews.
-  const ref = db.collection("practitionerReviews").doc(bookingId);
-  try {
-    await ref.create({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
-  } catch {
-    return Response.json({error:"This consultation has already been reviewed."},{status:409});
+  if (cutover) {
+    const created = await insertMemberReviewInSupabase({ ...doc, practitionerId: booking.practitionerId, bookingId: booking.id });
+    if (!created) return Response.json({error:"This consultation has already been reviewed."},{status:409});
+  } else {
+    try {
+      await db.collection("practitionerReviews").doc(bookingId).create({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+    } catch {
+      return Response.json({error:"This consultation has already been reviewed."},{status:409});
+    }
   }
+  expireReviewDerivedCaches();
 
   const contactFlag = scanForContactInfo(text);
   if (contactFlag) {
@@ -60,5 +79,5 @@ export async function POST(request:Request){
     }).catch((error) => console.error("Review contact-leak flag failed", error));
   }
 
-  return Response.json({ id: ref.id, ...doc, createdAt: new Date(), updatedAt: new Date() },{status:201});
+  return Response.json({ id: bookingId, ...doc, createdAt: new Date(), updatedAt: new Date() },{status:201});
 }

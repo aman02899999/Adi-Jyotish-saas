@@ -40,8 +40,8 @@ function toCharmPrice(value: number): number {
  * formula: the brief ("60% of 32 practitioners between ₹49-149, 20% between ₹151-249, …") is a
  * statement about the distribution across the cohort, not a rule that could be evaluated for one
  * practitioner in isolation — a rating-threshold formula would put far more than 60% of the roster
- * in the cheap band the moment ratings cluster tightly around 4-4.5 stars, which they do in
- * practice (see review-seed-data.ts's rollRating, biased toward 4-5 stars). Ranking by position
+ * in the cheap band the moment ratings cluster tightly around 4-4.5 stars, which marketplace
+ * ratings commonly do. Ranking by position
  * within the cohort instead of by absolute rating value is the only way to actually hit the
  * requested percentages regardless of how the underlying ratings are distributed.
  *

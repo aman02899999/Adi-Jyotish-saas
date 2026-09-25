@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { insertNumerologyReadingInSupabase } from "@/lib/readings-supabase";
 
 export class NumerologyError extends Error {}
 
@@ -110,6 +112,8 @@ export async function createNumerologyReading({ memberId, name, birthDate }: { m
 
   const narrative = buildNarrative({ name, lifePathNumber, destinyNumber });
 
-  const ref = await db.collection("numerologyReadings").add({ memberId, name, birthDate, lifePathNumber, destinyNumber, narrative, createdAt: FieldValue.serverTimestamp() });
-  return { id: ref.id, memberId, name, birthDate, lifePathNumber, destinyNumber, narrative };
+  const id = isSupabaseCutoverActive()
+    ? await insertNumerologyReadingInSupabase({ memberId, name, birthDate, lifePathNumber, destinyNumber, narrative })
+    : (await db.collection("numerologyReadings").add({ memberId, name, birthDate, lifePathNumber, destinyNumber, narrative, createdAt: FieldValue.serverTimestamp() })).id;
+  return { id, memberId, name, birthDate, lifePathNumber, destinyNumber, narrative };
 }

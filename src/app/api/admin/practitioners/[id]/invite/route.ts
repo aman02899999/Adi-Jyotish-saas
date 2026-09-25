@@ -1,6 +1,6 @@
-import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { createPractitionerInvite } from "@/lib/practitioner-invites";
+import { getPractitionerById } from "@/lib/scheduling";
 
 export const dynamic = "force-dynamic";
 
@@ -16,9 +16,12 @@ export async function POST(_request: Request, { params }: { params: Promise<{ id
   const { id: slug } = await params;
   if (!slug) return Response.json({ error: "Invalid practitioner id." }, { status: 400 });
 
-  const snap = await db.collection("practitioners").doc(slug).get();
-  if (!snap.exists) return Response.json({ error: "Practitioner not found." }, { status: 404 });
-  const email = (snap.data() as { email: string }).email;
+  const practitioner = await getPractitionerById(slug);
+  if (!practitioner) return Response.json({ error: "Practitioner not found." }, { status: 404 });
+  // An AI persona has no person behind it; a portal login would let whoever holds it answer as the
+  // persona and switch it offline, while the AI keeps replying in the same chats.
+  if (practitioner.isAiPowered) return Response.json({ error: `${practitioner.name} is an AI astrologer and cannot be given a portal login.` }, { status: 409 });
+  const email = practitioner.email;
 
   const token = await createPractitionerInvite(slug, admin.id);
   await recordAudit(admin, "practitioner.portal_invited", "practitioner", slug, { email });
