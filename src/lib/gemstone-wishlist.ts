@@ -6,6 +6,8 @@ import { getProductsByIds } from "@/lib/gemstones";
 import { createNotification } from "@/lib/notifications";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getMembersWishlistingInSupabase, getWishlistProductIdsInSupabase, toggleWishlistInSupabase } from "@/lib/gemstone-store-supabase";
 
 /** Stored as members/{memberId}/wishlist/{productId} — doc ID = productId, so add/remove/exists-check
  * is a single doc read/write instead of a separate uniqueness index. */
@@ -14,6 +16,7 @@ function wishlistCol(memberId: string) {
 }
 
 export async function getWishlistProductIds(memberId: string): Promise<string[]> {
+  if (isSupabaseCutoverActive()) return getWishlistProductIdsInSupabase(memberId);
   const snap = await wishlistCol(memberId).get();
   return snap.docs.map((doc) => doc.id);
 }
@@ -24,6 +27,7 @@ export async function getWishlistWithProducts(memberId: string) {
 }
 
 export async function toggleWishlist(memberId: string, productId: string): Promise<{ added: boolean }> {
+  if (isSupabaseCutoverActive()) return toggleWishlistInSupabase(memberId, productId);
   const ref = wishlistCol(memberId).doc(productId);
   const existing = await ref.get();
   if (existing.exists) {
@@ -34,6 +38,17 @@ export async function toggleWishlist(memberId: string, productId: string): Promi
   return { added: true };
 }
 
+/** Everyone with this product on their wishlist, with the address to email them at. */
+async function wishlistingMembers(productId: string): Promise<Array<{ memberId: string; email: string | null; name: string | null }>> {
+  if (isSupabaseCutoverActive()) return getMembersWishlistingInSupabase(productId);
+  const snap = await db.collectionGroup("wishlist").where("productId", "==", productId).get();
+  const memberIds = snap.docs.map((doc) => doc.ref.parent.parent?.id).filter((id): id is string => Boolean(id));
+  return Promise.all(memberIds.map(async (memberId) => {
+    const member = (await db.collection("members").doc(memberId).get()).data() as { email?: string; name?: string } | undefined;
+    return { memberId, email: member?.email ?? null, name: member?.name ?? null };
+  }));
+}
+
 /** Event-driven (called right after an admin saves a product price/stock change, not on a
  * schedule): a wishlist entry is worth nothing to a member if the whole reason they saved it —
  * "I'll buy it once it's cheaper / back in stock" — happens silently. collectionGroup query works
@@ -42,8 +57,8 @@ export async function toggleWishlist(memberId: string, productId: string): Promi
 export async function notifyWishlistedMembers(productId: string, productName: string, productSlug: string, trigger: { priceDropped: boolean; backInStock: boolean }) {
   if (!trigger.priceDropped && !trigger.backInStock) return { notified: 0 };
 
-  const snap = await db.collectionGroup("wishlist").where("productId", "==", productId).get();
-  if (snap.empty) return { notified: 0 };
+  const members = await wishlistingMembers(productId);
+  if (!members.length) return { notified: 0 };
 
   const title = trigger.priceDropped && trigger.backInStock
     ? `${productName} is back in stock at a lower price`
@@ -53,9 +68,8 @@ export async function notifyWishlistedMembers(productId: string, productName: st
   const productUrl = new URL(`/gemstones/${productSlug}`, getSiteUrl()).toString();
 
   let notified = 0;
-  for (const doc of snap.docs) {
-    const memberId = doc.ref.parent.parent?.id;
-    if (!memberId) continue;
+  for (const member of members) {
+    const { memberId } = member;
 
     await createNotification({
       recipientType: "member",
@@ -66,9 +80,7 @@ export async function notifyWishlistedMembers(productId: string, productName: st
       link: `/gemstones/${productSlug}`,
     }).catch((error) => console.error("Wishlist notification failed", error));
 
-    const memberSnap = await db.collection("members").doc(memberId).get();
-    const member = memberSnap.data() as { email?: string; name?: string } | undefined;
-    if (member?.email) {
+    if (member.email) {
       await sendEmail({
         to: member.email,
         subject: title,

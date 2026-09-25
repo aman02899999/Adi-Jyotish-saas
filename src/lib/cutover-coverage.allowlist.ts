@@ -7,18 +7,6 @@
 const NOT_YET_PORTED = "Not yet ported.";
 
 export const FIRESTORE_ONLY: Record<string, string> = {
-  "src/lib/gemstone-recommendations.ts#createGemstoneRecommendation": NOT_YET_PORTED,
-  "src/lib/gemstone-reviews.ts#createReview": NOT_YET_PORTED,
-  "src/lib/gemstone-reviews.ts#deleteReview": NOT_YET_PORTED,
-  "src/lib/gemstone-reviews.ts#getAllReviewsAdmin": NOT_YET_PORTED,
-  "src/lib/gemstone-reviews.ts#getPublishedReviews": NOT_YET_PORTED,
-  "src/lib/gemstone-reviews.ts#markReviewHelpful": NOT_YET_PORTED,
-  "src/lib/gemstone-reviews.ts#moderateReview": NOT_YET_PORTED,
-  "src/lib/gemstone-wishlist.ts#getWishlistProductIds": NOT_YET_PORTED,
-  "src/lib/gemstone-wishlist.ts#getWishlistWithProducts": NOT_YET_PORTED,
-  "src/lib/gemstone-wishlist.ts#notifyWishlistedMembers": NOT_YET_PORTED,
-  "src/lib/gemstone-wishlist.ts#toggleWishlist": NOT_YET_PORTED,
-  "src/lib/gemstones-seed.ts#seedGemstoneCatalog": NOT_YET_PORTED,
-  "src/lib/gemstones.ts#getAllProductsAdmin": NOT_YET_PORTED,
+  "src/lib/gemstones-seed.ts#seedGemstoneCatalog": "By design: seeds the Firestore demo catalogue; every caller in gemstones.ts calls it only on the Firestore path, since under cutover the catalogue was copied.",
   "src/lib/scheduling.ts#seedPractitioners": "By design: seeds the Firestore roster; getPractitionerDirectory returns before calling it under cutover, where the roster was copied.",
 };

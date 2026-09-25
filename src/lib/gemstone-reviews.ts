@@ -4,6 +4,16 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import {
+  deleteGemstoneReviewInSupabase,
+  getPublishedGemstoneReviewsInSupabase,
+  incrementGemstoneReviewHelpfulInSupabase,
+  insertGemstoneReviewInSupabase,
+  isVerifiedGemstonePurchaseInSupabase,
+  listGemstoneReviewsForAdminInSupabase,
+  setGemstoneReviewStatusInSupabase,
+} from "@/lib/gemstone-store-supabase";
 
 export class ReviewError extends Error {}
 
@@ -38,12 +48,14 @@ function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestor
 }
 
 export async function getPublishedReviews(productId: string): Promise<GemstoneReview[]> {
+  if (isSupabaseCutoverActive()) return getPublishedGemstoneReviewsInSupabase(productId);
   // Requires a composite index: gemstoneReviews (productId ASC, status ASC, createdAt DESC) — see firestore.indexes.json.
   const snap = await reviewsCol.where("productId", "==", productId).where("status", "==", "published").orderBy("createdAt", "desc").get();
   return snap.docs.map(fromDoc);
 }
 
 export async function getAllReviewsAdmin(status?: string) {
+  if (isSupabaseCutoverActive()) return listGemstoneReviewsForAdminInSupabase(status);
   const snap = await reviewsCol.orderBy("createdAt", "desc").get();
   const reviews = snap.docs.map(fromDoc);
   const filtered = status && status !== "all" ? reviews.filter((review) => review.status === status) : reviews;
@@ -71,7 +83,9 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
   if (!body.trim() || body.trim().length < 8) throw new ReviewError("Please write a fuller review (at least a sentence).");
 
   let verifiedOrderId: string | null = null;
-  if (memberId && orderId) {
+  if (memberId && orderId && isSupabaseCutoverActive()) {
+    if (await isVerifiedGemstonePurchaseInSupabase(memberId, orderId, productId)) verifiedOrderId = orderId;
+  } else if (memberId && orderId) {
     const orderSnap = await ordersCol.doc(orderId).get();
     const order = orderSnap.data() as { memberId?: string | null; paymentStatus?: string } | undefined;
     if (orderSnap.exists && order?.memberId === memberId && order.paymentStatus === "paid") {
@@ -95,6 +109,28 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
     updatedAt: FieldValue.serverTimestamp(),
   };
 
+  let created: GemstoneReview;
+  if (isSupabaseCutoverActive()) {
+    const { createdAt: _createdAt, updatedAt: _updatedAt, status: _status, helpfulVotes: _helpfulVotes, ...fields } = reviewData;
+    const inserted = await insertGemstoneReviewInSupabase(fields);
+    if (!inserted) throw new ReviewError("You've already reviewed this product for this order.");
+    created = inserted;
+  } else {
+    created = await createReviewInFirestore(reviewData, verifiedOrderId, productId);
+  }
+
+  const adminIds = await getAdminIdsWithPermission("gemstones");
+  await notifyAdmins(adminIds, {
+    type: "gemstone_review.pending",
+    title: "New review awaiting moderation",
+    body: `${created.reviewerName} rated a product ${created.rating}/5.`,
+    link: "/admin/gemstones/reviews",
+  }).catch(() => {});
+
+  return created;
+}
+
+async function createReviewInFirestore(reviewData: Record<string, unknown>, verifiedOrderId: string | null, productId: string): Promise<GemstoneReview> {
   let ref: FirebaseFirestore.DocumentReference;
   if (verifiedOrderId) {
     // Doc id = orderId_productId for verified-purchase reviews, so create() enforces one review
@@ -112,20 +148,15 @@ export async function createReview({ productId, memberId, orderId, reviewerName,
     ref = reviewsCol.doc();
     await ref.set(reviewData);
   }
-  const created = fromDoc(await ref.get());
-
-  const adminIds = await getAdminIdsWithPermission("gemstones");
-  await notifyAdmins(adminIds, {
-    type: "gemstone_review.pending",
-    title: "New review awaiting moderation",
-    body: `${created.reviewerName} rated a product ${created.rating}/5.`,
-    link: "/admin/gemstones/reviews",
-  }).catch(() => {});
-
-  return created;
+  return fromDoc(await ref.get());
 }
 
 export async function moderateReview(id: string, status: "published" | "hidden") {
+  if (isSupabaseCutoverActive()) {
+    const updated = await setGemstoneReviewStatusInSupabase(id, status);
+    if (!updated) throw new ReviewError("Review not found.");
+    return updated;
+  }
   const ref = reviewsCol.doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new ReviewError("Review not found.");
@@ -134,10 +165,16 @@ export async function moderateReview(id: string, status: "published" | "hidden")
 }
 
 export async function deleteReview(id: string) {
+  if (isSupabaseCutoverActive()) return deleteGemstoneReviewInSupabase(id);
   await reviewsCol.doc(id).delete();
 }
 
 export async function markReviewHelpful(id: string) {
+  if (isSupabaseCutoverActive()) {
+    const updated = await incrementGemstoneReviewHelpfulInSupabase(id);
+    if (!updated) throw new ReviewError("Review not found.");
+    return updated;
+  }
   const ref = reviewsCol.doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new ReviewError("Review not found.");
