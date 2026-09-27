@@ -149,6 +149,25 @@ export function isUniqueViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === "23505";
 }
 
+/**
+ * Runs an `insert ... on conflict (one key) do update` again if it lost a race on the table's
+ * *other* unique key.
+ *
+ * Postgres absorbs a conflict only on the index named in the conflict target. Where a row's id is
+ * derived from another unique key (journal_entries: id and (member_id, entry_date);
+ * member_subscriptions: id and member_id), two concurrent first writes of the same row can collide
+ * on the unnamed index and raise 23505 instead of updating. Once the other writer has committed,
+ * the retry sees its row and takes the update path.
+ */
+export async function retryOnUniqueViolation<T>(write: () => Promise<T>): Promise<T> {
+  try {
+    return await write();
+  } catch (error) {
+    if (!isUniqueViolation(error)) throw error;
+    return write();
+  }
+}
+
 /** Foreign-key violation (23503) — surfaces when a referenced member or product has been deleted. */
 export function isForeignKeyViolation(error: unknown): boolean {
   return typeof error === "object" && error !== null && "code" in error && (error as { code: unknown }).code === "23503";

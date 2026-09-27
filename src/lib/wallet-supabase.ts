@@ -111,15 +111,16 @@ function num(value: number | string | null | undefined, fallback = 0): number {
 /**
  * Returns the member's wallet, creating it on first use.
  *
- * `on conflict do nothing` replaces Firestore's create-and-catch-already-exists:
- * same outcome, but the race between two concurrent first requests is closed by
- * the primary key rather than by catching the right error code.
+ * `on conflict do nothing` replaces Firestore's create-and-catch-already-exists.
+ * It names no conflict target on purpose: the id is the member id and member_id is
+ * unique too, so two concurrent first requests can collide on either index, and
+ * only a target-less clause absorbs both.
  */
 export async function getOrCreateWalletInSupabase(memberId: string, currency: string): Promise<WalletRow> {
   await query(
     `insert into public.wallets (id, member_id, currency, balance, created_at, updated_at)
      values ($1, $1, $2, 0, now(), now())
-     on conflict (id) do nothing`,
+     on conflict do nothing`,
     [memberId, currency],
   );
   const row = await queryModel<RawWalletRow>(

@@ -1,6 +1,6 @@
 import "server-only";
 
-import { query } from "@/lib/postgres";
+import { query, retryOnUniqueViolation } from "@/lib/postgres";
 
 /**
  * Postgres twins for the member engagement features: daily streaks, the Moon-tagged journal, the
@@ -41,13 +41,14 @@ export type JournalRow = {
 /** One entry per member per day: the id is memberId_entryDate, so a second log that day replaces
  * the first, as the Firestore set() did. */
 export async function saveJournalEntryInSupabase(entry: JournalRow): Promise<void> {
-  await query(
+  // id is derived from (member_id, entry_date), the table's other unique key; see retryOnUniqueViolation.
+  await retryOnUniqueViolation(() => query(
     `insert into public.journal_entries (id, member_id, entry_date, mood, note, moon_house, moon_rashi, updated_at)
      values ($1, $2, $3, $4, $5, $6, $7, $8)
      on conflict (id) do update set mood = excluded.mood, note = excluded.note, moon_house = excluded.moon_house,
        moon_rashi = excluded.moon_rashi, updated_at = excluded.updated_at`,
     [entry.id, entry.memberId, entry.entryDate, entry.mood, entry.note, entry.moonHouse, entry.moonRashi, entry.updatedAt],
-  );
+  ));
 }
 
 export async function listJournalEntriesInSupabase(memberId: string, limit: number): Promise<JournalRow[]> {

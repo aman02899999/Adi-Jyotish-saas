@@ -1,6 +1,6 @@
 import "server-only";
 
-import { query, queryModel, queryModels } from "@/lib/postgres";
+import { query, queryModel, queryModels, retryOnUniqueViolation } from "@/lib/postgres";
 
 /**
  * Supabase data access for admin roles. Data access only: validation, permission
@@ -95,7 +95,7 @@ export async function insertRoleInSupabase(input: {
   const result = await query(
     `insert into public.admin_roles (id, slug, name, is_system, permissions, created_at, updated_at)
      values ($1, $1, $2, false, $3::jsonb, now(), now())
-     on conflict (id) do nothing`,
+     on conflict do nothing`,
     [input.slug, input.name, JSON.stringify(input.permissions)],
   );
   return result.rowCount === 1;
@@ -187,7 +187,8 @@ export async function getAdminIdsWithPermissionInSupabase(permission: string): P
  * editable role list.
  */
 export async function upsertSystemRoleInSupabase(slug: string, name: string, permissions: string[]): Promise<void> {
-  await query(
+  // id is the slug, the table's other unique key; see retryOnUniqueViolation.
+  await retryOnUniqueViolation(() => query(
     `insert into public.admin_roles (id, slug, name, is_system, permissions, created_at, updated_at)
      values ($1, $1, $2, true, $3::jsonb, now(), now())
      on conflict (id) do update
@@ -196,5 +197,5 @@ export async function upsertSystemRoleInSupabase(slug: string, name: string, per
             permissions = excluded.permissions,
             updated_at = now()`,
     [slug, name, JSON.stringify(permissions)],
-  );
+  ));
 }

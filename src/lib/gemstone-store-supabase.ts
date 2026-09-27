@@ -119,7 +119,7 @@ export async function toggleWishlistInSupabase(memberId: string, productId: stri
   const removed = await query(`delete from public.gemstone_wishlist where member_id = $1 and product_id = $2`, [memberId, productId]);
   if ((removed.rowCount ?? 0) > 0) return { added: false };
   await query(
-    `insert into public.gemstone_wishlist (id, member_id, product_id) values ($1, $2, $3) on conflict (member_id, product_id) do nothing`,
+    `insert into public.gemstone_wishlist (id, member_id, product_id) values ($1, $2, $3) on conflict do nothing`,
     [`${memberId}_${productId}`, memberId, productId],
   );
   return { added: true };

@@ -68,7 +68,7 @@ export async function createGiftCardInSupabase(
         // transaction, then finds its row and returns the same code.
         const claimed = await client.query(
           `insert into public.gift_card_payment_index (id, razorpay_payment_id, code, recipient_name, message)
-           values ($1, $1, $2, $3, $4) on conflict (id) do nothing`,
+           values ($1, $1, $2, $3, $4) on conflict do nothing`,
           [input.razorpayPaymentId, code, input.recipientName, input.message],
         );
         if (!claimed.rowCount) {

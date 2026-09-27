@@ -26,7 +26,7 @@ export async function toggleFavoriteInSupabase(memberId: string, practitionerId:
     if (removed.rowCount) return false;
     await client.query(
       `insert into public.member_favorites (id, member_id, practitioner_id) values ($3, $1, $2)
-       on conflict (member_id, practitioner_id) do nothing`,
+       on conflict do nothing`,
       [memberId, practitionerId, `${memberId}_${practitionerId}`],
     );
     return true;
