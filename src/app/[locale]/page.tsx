@@ -147,7 +147,8 @@ export default async function HomePage() {
               <div className="avatar-stack" aria-hidden="true">
                 {liveExperts.slice(0, 3).map((expert) => <span key={expert.id}>{expert.name.split(" ").map((part) => part[0]).slice(0, 2).join("")}</span>)}
               </div>
-              <div><strong>{stats.averageRating || "—"}</strong> {stats.averageRating > 0 && (
+              {/* No rating yet shows no number at all; a bare dash here read as a broken stat. */}
+              <div>{stats.averageRating > 0 && <strong>{stats.averageRating}</strong>} {stats.averageRating > 0 && (
                 // Filled to the actual average rather than five fixed stars, which showed a
                 // perfect score beside any number at all.
                 <span className="stars" role="img" aria-label={`${stats.averageRating} out of 5`}>
@@ -253,7 +254,7 @@ export default async function HomePage() {
           <div className="live-strip__head reveal">
             <div>
               <p className="live-pulse"><i /> {t("live.onlineNow", { count: onlineCount })}</p>
-              <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.04em" }}>{t("live.headline")}<br /><em style={{ color: "var(--copper)" }}>{t("live.headlineEm")}</em></h2>
+              <h2 style={{ margin: 0, font: "400 clamp(34px,3.8vw,50px)/1.02 var(--serif)", letterSpacing: "-.014em" }}>{t("live.headline")}<br /><em style={{ color: "var(--copper)" }}>{t("live.headlineEm")}</em></h2>
             </div>
             <p style={{ maxWidth: 360, color: "var(--muted)", fontSize: 13, lineHeight: 1.75 }}>{t("live.subhead")}</p>
           </div>

@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Fraunces, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -11,6 +12,14 @@ import { RouteProgress } from "@/components/route-progress";
 import { routing, type AppLocale } from "@/i18n/routing";
 import { getSiteUrl } from "@/lib/site-url";
 import "../globals.css";
+
+// Self-hosted at build time by next/font: no request to Google from the visitor's browser, and a
+// size-matched fallback means text does not jump when the font arrives. Fraunces carries the
+// headings (its optical-size axis keeps large display type crisp and small labels sturdy); Inter
+// is the text face. Both replace the Georgia/Arial system stack, which made the site read as a
+// template. globals.css keeps those as the fallbacks behind these variables.
+const serifFont = Fraunces({ subsets: ["latin", "latin-ext"], variable: "--font-serif", display: "swap", axes: ["opsz"] });
+const sansFont = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-sans", display: "swap" });
 
 const siteUrl = getSiteUrl();
 const websiteJsonLd = {
@@ -69,7 +78,7 @@ export default async function RootLayout({ children, params }: { children: React
   setRequestLocale(locale as AppLocale);
 
   return (
-    <html lang={locale}>
+    <html lang={locale} className={`${serifFont.variable} ${sansFont.variable}`}>
       <body>
         <NextIntlClientProvider>
           <RouteProgress />
