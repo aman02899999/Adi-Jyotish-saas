@@ -8,6 +8,7 @@ import {
   updateServiceInSupabase,
 } from "@/lib/services-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -28,10 +29,10 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!hasAdminPermission(admin, "services")) return Response.json({ error: "Catalogue permission required." }, { status: 403 });
 
   const { id } = await params;
-  const body = (await request.json()) as ServicePayload;
-  const title = body.title?.trim();
-  const category = body.category?.trim();
-  const description = body.description?.trim();
+  const body = (await readJsonBody(request)) as ServicePayload;
+  const title = asText(body.title)?.trim();
+  const category = asText(body.category)?.trim();
+  const description = asText(body.description)?.trim();
   if (!title || !category || !description) {
     return Response.json({ error: "Title, category, and description are required." }, { status: 400 });
   }

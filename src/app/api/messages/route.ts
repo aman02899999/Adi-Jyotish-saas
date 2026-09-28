@@ -15,6 +15,7 @@ import {
   setThreadStatusInSupabase,
 } from "@/lib/messaging-supabase";
 import { getMemberForEditInSupabase } from "@/lib/member-admin-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -31,10 +32,10 @@ export async function POST(request: Request) {
   if (!hasAdminPermission(admin, "messages")) return Response.json({ error: "Message permission required." }, { status: 403 });
   const throttle = await checkRateLimit("admin-message-thread", `admin:${admin.id}`, 60, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
-  const body = await request.json() as { memberId?: string; subject?: string; message?: string; category?: string };
-  const memberId = body.memberId?.trim();
-  const subject = body.subject?.trim().slice(0, 160) ?? "";
-  const messageBody = body.message?.trim().slice(0, 3000) ?? "";
+  const body = await readJsonBody(request) as { memberId?: string; subject?: string; message?: string; category?: string };
+  const memberId = asText(body.memberId)?.trim();
+  const subject = asText(body.subject)?.trim().slice(0, 160) ?? "";
+  const messageBody = asText(body.message)?.trim().slice(0, 3000) ?? "";
   const category = ["support", "booking", "billing", "general"].includes(body.category ?? "") ? body.category! : "general";
   if (!memberId || !subject || !messageBody) return Response.json({ error: "Member, subject, and message are required." }, { status: 400 });
   let member: { name: string; email: string } | null;

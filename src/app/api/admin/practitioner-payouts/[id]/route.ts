@@ -4,6 +4,7 @@ import { createNotification } from "@/lib/notifications";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
 import { getPractitionerById } from "@/lib/scheduling";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const id = (await params).id;
   if (!id) return Response.json({ error: "Invalid payout id." }, { status: 400 });
 
-  const body = (await request.json()) as { status?: "approved" | "paid" | "rejected"; adminNotes?: string; transactionRef?: string };
+  const body = (await readJsonBody(request)) as { status?: "approved" | "paid" | "rejected"; adminNotes?: string; transactionRef?: string };
   if (!body.status || !["approved", "paid", "rejected"].includes(body.status)) {
     return Response.json({ error: "Invalid status." }, { status: 400 });
   }

@@ -2,6 +2,7 @@ import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkTwoFactorGate } from "@/lib/two-factor";
 import { verifyAuthToken } from "@/lib/auth-verify";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("member-google-login", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = await request.json() as { idToken?: string; ref?: string };
+  const body = await readJsonBody(request) as { idToken?: string; ref?: string };
   if (!body.idToken) return Response.json({ error: "Google sign-in could not be verified. Please try again." }, { status: 401 });
 
   let uid: string;
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   if (challengeToken) return Response.json({ requiresTotp: true, challengeToken });
 
   try {
-    await createMemberSession(body.idToken, undefined, body.ref?.trim().slice(0, 20));
+    await createMemberSession(body.idToken, undefined, asText(body.ref)?.trim().slice(0, 20));
   } catch {
     return Response.json({ error: "Google sign-in could not be verified. Please try again." }, { status: 401 });
   }

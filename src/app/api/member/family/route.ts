@@ -1,6 +1,7 @@
 import { addFamilyMember, buildFamilyChart, chartSnapshot, FamilyMemberError, listFamilyMembersWithCharts } from "@/lib/family-members";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -18,15 +19,15 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("family-member-create", `member:${member.id}`, 10, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { name?: string; relationship?: string; birthDate?: string; birthTime?: string; birthPlace?: string };
+  const body = (await readJsonBody(request)) as { name?: string; relationship?: string; birthDate?: string; birthTime?: string; birthPlace?: string };
   try {
     const familyMember = await addFamilyMember({
       memberId: member.id,
-      name: body.name?.trim() ?? "",
-      relationship: body.relationship?.trim() ?? "",
-      birthDate: body.birthDate?.trim() ?? "",
-      birthTime: body.birthTime?.trim() ?? "",
-      birthPlace: body.birthPlace?.trim() ?? "",
+      name: asText(body.name)?.trim() ?? "",
+      relationship: asText(body.relationship)?.trim() ?? "",
+      birthDate: asText(body.birthDate)?.trim() ?? "",
+      birthTime: asText(body.birthTime)?.trim() ?? "",
+      birthPlace: asText(body.birthPlace)?.trim() ?? "",
     });
     const chart = { ...familyMember, chart: chartSnapshot(buildFamilyChart(familyMember)) };
     return Response.json(chart, { status: 201 });

@@ -13,6 +13,14 @@ export function proxy(request: NextRequest) {
     return intlMiddleware(request);
   }
 
+  // Route ids go straight into Firestore document paths, and Firestore throws (a 500) rather than
+  // answering "not found" for an id it cannot store: one containing a slash (an encoded %2F), "."
+  // or "..", or a reserved __name__. No real id has that shape, so answer 404 here, once, instead
+  // of in every [id] route.
+  if (request.nextUrl.pathname.split("/").some(isUnaddressableSegment)) {
+    return NextResponse.json({ error: "Not found." }, { status: 404 });
+  }
+
   // The webhook authenticates itself independently of cookies (HMAC signature), so there's no
   // ambient browser credential for CSRF to forge in the first place — the Origin/sec-fetch-site
   // check below only makes sense for routes that trust the session cookie.
@@ -43,6 +51,16 @@ export function proxy(request: NextRequest) {
   }
 
   return NextResponse.next();
+}
+
+function isUnaddressableSegment(raw: string) {
+  let segment: string;
+  try {
+    segment = decodeURIComponent(raw);
+  } catch {
+    return true;
+  }
+  return segment.includes("/") || segment === "." || segment === ".." || /^__.*__$/.test(segment);
 }
 
 export const config = {

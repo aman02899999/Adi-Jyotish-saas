@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { deletePractitionerAdmin, getPractitionerDirectory, PractitionerAdminError, updatePractitionerAdmin, type PractitionerProfilePatch } from "@/lib/scheduling";
+import { readJsonBody } from "@/lib/request-body";
 
 type PractitionerPayload = {
   name?: string;
@@ -32,7 +33,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
   if(!admin)return Response.json({error:"Administrator access required."},{status:401});
   if(!hasAdminPermission(admin,"schedule")&&!hasAdminPermission(admin,"practitioners"))return Response.json({error:"Scheduling permission required."},{status:403});
   const{id}=await params;
-  const body=await request.json() as PractitionerPayload;
+  const body=await readJsonBody(request) as PractitionerPayload;
 
   const current=(await getPractitionerDirectory(false,true)).find(x=>x.id===id);
   if(!current)return Response.json({error:"Practitioner not found."},{status:404});

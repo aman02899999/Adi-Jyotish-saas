@@ -4,6 +4,7 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -22,11 +23,11 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("varshphal-report-create", `member:${member.id}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as CreatePayload;
-  const clientName = body.clientName?.trim() ?? "";
-  const birthDate = body.birthDate?.trim() ?? "";
-  const birthTime = body.birthTime?.trim() ?? "";
-  const birthPlace = body.birthPlace?.trim() ?? "";
+  const body = (await readJsonBody(request)) as CreatePayload;
+  const clientName = asText(body.clientName)?.trim() ?? "";
+  const birthDate = asText(body.birthDate)?.trim() ?? "";
+  const birthTime = asText(body.birthTime)?.trim() ?? "";
+  const birthPlace = asText(body.birthPlace)?.trim() ?? "";
   const year = Math.round(Number(body.year));
 
   if (!clientName || !birthDate || !birthTime || !birthPlace) {

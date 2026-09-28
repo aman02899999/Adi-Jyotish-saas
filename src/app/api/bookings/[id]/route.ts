@@ -17,6 +17,7 @@ import {
 import type { BookingRecord } from "@/lib/booking-creation";
 import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
 import { createNotification } from "@/lib/notifications";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -52,7 +53,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!hasAdminPermission(admin, "bookings")) return Response.json({ error: "Booking permission required." }, { status: 403 });
 
   const { id } = await params;
-  const body = (await request.json()) as BookingUpdate;
+  const body = (await readJsonBody(request)) as BookingUpdate;
   if (body.status && !statuses.includes(body.status as (typeof statuses)[number])) {
     return Response.json({ error: "Invalid booking status." }, { status: 400 });
   }
@@ -75,7 +76,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   // Reassignment exists chiefly for bookings sold with an AI persona before those stopped being
   // bookable: the member paid for a person, and moving them to one keeps the payment and invoice.
-  const requestedPractitionerId = body.practitionerId?.trim();
+  const requestedPractitionerId = asText(body.practitionerId)?.trim();
   let reassignTo: { id: string; name: string } | undefined;
   if (requestedPractitionerId && requestedPractitionerId !== existing.practitionerId) {
     const target = await reassignableTarget(requestedPractitionerId);

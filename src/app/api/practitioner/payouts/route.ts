@@ -3,6 +3,7 @@ import { getPractitionerPayouts, PayoutError, requestPayout } from "@/lib/practi
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("payout-request", `practitioner:${practitioner.id}`, 5, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { amount?: number; notes?: string };
+  const body = (await readJsonBody(request)) as { amount?: number; notes?: string };
   try {
     const payout = await requestPayout(practitioner.id, Math.round(Number(body.amount)), body.notes);
     const adminIds = await getAdminIdsWithPermission("billing");

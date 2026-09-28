@@ -1,13 +1,14 @@
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { checkSignInCode, getTwoFactorState, peekTwoFactorChallenge, resolveTwoFactorAccount } from "@/lib/two-factor";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as { challengeToken?: string; code?: string };
+  const body = (await readJsonBody(request)) as { challengeToken?: string; code?: string };
   const challengeToken = body.challengeToken ?? "";
-  const code = (body.code ?? "").trim();
+  const code = (asText(body.code) ?? "").trim();
   if (!challengeToken || !code) return Response.json({ error: "Enter your 6-digit code." }, { status: 400 });
 
   const pending = peekTwoFactorChallenge("member", challengeToken);

@@ -2,6 +2,7 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { getOrCreateWallet } from "@/lib/wallet";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 const MIN_RECHARGE = 50;
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("wallet-recharge", `member:${member.id}`, 10, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { amount?: number };
+  const body = (await readJsonBody(request)) as { amount?: number };
   const amount = Math.round(Number(body.amount));
   if (!Number.isInteger(amount) || amount < MIN_RECHARGE || amount > MAX_RECHARGE) {
     return Response.json({ error: `Choose an amount between ${MIN_RECHARGE} and ${MAX_RECHARGE}.` }, { status: 400 });

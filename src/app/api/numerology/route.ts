@@ -2,6 +2,7 @@ import { createNumerologyReading, NumerologyError } from "@/lib/numerology";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,12 +15,12 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("numerology-create", `ip:${ip}`, 5, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as Payload;
+  const body = (await readJsonBody(request)) as Payload;
   if (!(await verifyTurnstileToken(body.turnstileToken, ip))) {
     return Response.json({ error: "Verification failed. Please try again." }, { status: 403 });
   }
-  const name = body.name?.trim().slice(0, 120) ?? "";
-  const birthDate = body.birthDate?.trim() ?? "";
+  const name = asText(body.name)?.trim().slice(0, 120) ?? "";
+  const birthDate = asText(body.birthDate)?.trim() ?? "";
 
   if (!name) return Response.json({ error: "Please share your name." }, { status: 400 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate)) return Response.json({ error: "Please choose a valid birth date." }, { status: 400 });

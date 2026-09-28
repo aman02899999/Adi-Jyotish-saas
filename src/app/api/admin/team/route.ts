@@ -7,6 +7,7 @@ import { adminUserExistsWithEmailInSupabase } from "@/lib/admin-team-supabase";
 import { listAdminUsersForAdmin } from "@/lib/admin-directory";
 import { findGoTrueUserByEmail } from "@/lib/gotrue-admin";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -33,11 +34,11 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "team")) return Response.json({ error: "Owner access required." }, { status: 403 });
 
-  const body = await request.json() as { email?: string; role?: string };
-  const email = normalizeEmail(body.email ?? "");
-  const requestedRole = body.role ?? "";
-  const role = requestedRole !== "owner" && await roleSlugExists(requestedRole) ? requestedRole : "support";
+  const body = await readJsonBody(request) as { email?: unknown; role?: unknown };
+  const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
   if (!/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "Enter a valid team email." }, { status: 400 });
+  const requestedRole = typeof body.role === "string" ? body.role : "";
+  const role = requestedRole !== "owner" && await roleSlugExists(requestedRole) ? requestedRole : "support";
 
   const alreadyAnAdmin = isSupabaseCutoverActive()
     ? await adminUserExistsWithEmailInSupabase(email)

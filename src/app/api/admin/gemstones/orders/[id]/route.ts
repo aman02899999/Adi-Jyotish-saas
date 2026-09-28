@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { CartValidationError, getOrderById, getOrderItems, OrderNotFoundError, updateOrderStatus } from "@/lib/gemstone-orders";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!id) return Response.json({ error: "Invalid order id." }, { status: 400 });
 
-  const body = (await request.json()) as { status?: string };
+  const body = (await readJsonBody(request)) as { status?: string };
   const status = body.status;
   const allowed = ["pending", "processing", "packed", "shipped", "delivered", "cancelled", "refunded"];
   if (!status || !allowed.includes(status)) return Response.json({ error: "Invalid status." }, { status: 400 });

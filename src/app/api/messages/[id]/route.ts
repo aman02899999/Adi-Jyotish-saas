@@ -13,6 +13,7 @@ import {
   replyToThreadInSupabase,
   setThreadStatusInSupabase,
 } from "@/lib/messaging-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function POST(request: Request,{params}:{params:Promise<{id:string}
   if (isSupabaseCutoverActive()) {
     const thread=await getThreadForAdminInSupabase(id);
     if(!thread)return Response.json({error:"Thread not found."},{status:404});
-    const body=await request.json() as {message?:string};const text=body.message?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
+    const body=await readJsonBody(request) as {message?:string};const text=asText(body.message)?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
     // An admin reply reopens a closed thread, matching the Firestore update below.
     const message=await replyToThreadInSupabase({threadId:id,senderType:"admin",senderName:admin.name,body:text,reopen:true});
     if(!message)return Response.json({error:"Thread not found."},{status:404});
@@ -33,7 +34,7 @@ export async function POST(request: Request,{params}:{params:Promise<{id:string}
   }
   const threadRef=db.collection("messageThreads").doc(id);
   const threadSnap=await threadRef.get();if(!threadSnap.exists)return Response.json({error:"Thread not found."},{status:404});
-  const body=await request.json() as {message?:string};const text=body.message?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
+  const body=await readJsonBody(request) as {message?:string};const text=asText(body.message)?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
   const now=FieldValue.serverTimestamp();
   const messageRef=threadRef.collection("messages").doc();
   await messageRef.set({senderType:"admin",senderName:admin.name,body:text,readByAdmin:true,readByMember:false,createdAt:now});
@@ -50,7 +51,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
   if (isSupabaseCutoverActive()) {
     const existing=await getThreadForAdminInSupabase(id);
     if(!existing)return Response.json({error:"Thread not found."},{status:404});
-    const body=await request.json() as {status?:string;markRead?:boolean};
+    const body=await readJsonBody(request) as {status?:string;markRead?:boolean};
     let status=existing.status;
     if(body.markRead)await markThreadReadByAdminInSupabase(id);
     if(body.status){
@@ -64,7 +65,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
   const threadRef=db.collection("messageThreads").doc(id);
   const threadSnap=await threadRef.get();if(!threadSnap.exists)return Response.json({error:"Thread not found."},{status:404});
   const thread=threadSnap.data() as {status:string};
-  const body=await request.json() as {status?:string;markRead?:boolean};
+  const body=await readJsonBody(request) as {status?:string;markRead?:boolean};
   if(body.markRead){
     const unreadSnap=await threadRef.collection("messages").where("senderType","==","member").where("readByAdmin","==",false).get();
     const batch=db.batch();

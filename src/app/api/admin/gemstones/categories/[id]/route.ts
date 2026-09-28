@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { deleteCategory, GemstoneError, updateCategory, type CategoryPayload } from "@/lib/gemstones";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!id) return Response.json({ error: "Invalid category id." }, { status: 400 });
 
-  const body = (await request.json()) as CategoryPayload;
+  const body = (await readJsonBody(request)) as CategoryPayload;
   try {
     const updated = await updateCategory(id, body);
     await recordAudit(admin, "gemstone_category.updated", "gemstone_category", updated.id, { name: updated.name, active: updated.active });

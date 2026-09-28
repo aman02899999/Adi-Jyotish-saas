@@ -4,6 +4,7 @@ import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-au
 import { expireReviewDerivedCaches } from "@/lib/synthetic-reviews";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { deleteReviewInSupabase, setReviewStatusInSupabase } from "@/lib/practitioners-supabase";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 const allowedStatuses = new Set(["published", "hidden"]);
@@ -14,7 +15,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!hasAdminPermission(admin, "reviews")) return Response.json({ error: "Reviews permission required." }, { status: 403 });
   const { id } = await params;
 
-  const body = (await request.json()) as { status?: string };
+  const body = (await readJsonBody(request)) as { status?: string };
   if (!body.status || !allowedStatuses.has(body.status)) return Response.json({ error: "Status must be published or hidden." }, { status: 400 });
 
   let updated: { id: string; practitionerId: string; status: string };

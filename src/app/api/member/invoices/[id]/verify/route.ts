@@ -2,6 +2,7 @@ import { sendBookingNotification } from "@/lib/messaging";
 import { getCurrentMember } from "@/lib/member-auth";
 import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 import { confirmInvoicePayment, getBookingForInvoice, getInvoiceById, getPaymentForOrder } from "@/lib/invoice-actions";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -16,7 +17,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
   const { id } = await params;
 
-  const body = (await request.json()) as VerifyPayload;
+  const body = (await readJsonBody(request)) as VerifyPayload;
   const orderId = body.razorpay_order_id?.trim();
   const paymentId = body.razorpay_payment_id?.trim();
   const signature = body.razorpay_signature?.trim();

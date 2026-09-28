@@ -1,6 +1,7 @@
 import { generateReadingAnswer, getReadingById, markReadingPaid } from "@/lib/ai-readings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const reading = await getReadingById(id, member.id);
   if (!reading) return Response.json({ error: "Reading not found." }, { status: 404 });
 
-  const body = (await request.json()) as VerifyPayload;
+  const body = (await readJsonBody(request)) as VerifyPayload;
   const orderId = body.razorpay_order_id?.trim();
   const paymentId = body.razorpay_payment_id?.trim();
   const signature = body.razorpay_signature?.trim();

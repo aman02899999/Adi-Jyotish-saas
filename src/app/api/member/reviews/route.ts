@@ -11,16 +11,17 @@ import { expireReviewDerivedCaches } from "@/lib/synthetic-reviews";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getBookingByIdInSupabase } from "@/lib/bookings-supabase";
 import { insertMemberReviewInSupabase } from "@/lib/practitioners-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export async function POST(request:Request){
   const member=await getCurrentMember();
   if(!member)return Response.json({error:"Member sign-in required."},{status:401});
   const throttle = await checkRateLimit("practitioner-review", `member:${member.id}:ip:${requestIp(request)}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
-  const body=await request.json() as {bookingId?:string;rating?:number;clarity?:number;empathy?:number;usefulness?:number;body?:string};
-  const bookingId=body.bookingId?.trim();
+  const body=await readJsonBody(request) as {bookingId?:string;rating?:number;clarity?:number;empathy?:number;usefulness?:number;body?:string};
+  const bookingId=asText(body.bookingId)?.trim();
   const scores=[body.rating,body.clarity,body.empathy,body.usefulness].map(Number);
-  const text=body.body?.trim().slice(0,1200)??"";
+  const text=asText(body.body)?.trim().slice(0,1200)??"";
   if(!bookingId||scores.some(score=>!Number.isInteger(score)||score<1||score>5)||text.length<20)return Response.json({error:"Choose all ratings and write at least 20 characters."},{status:400});
 
   const cutover = isSupabaseCutoverActive();

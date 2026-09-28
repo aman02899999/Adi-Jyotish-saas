@@ -3,6 +3,7 @@ import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { checkTwoFactorGate } from "@/lib/two-factor";
 import { verifyAuthToken } from "@/lib/auth-verify";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("admin-invite-session", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { idToken?: string };
+  const body = (await readJsonBody(request)) as { idToken?: string };
   if (!body.idToken) return Response.json({ error: "Sign-in could not be completed." }, { status: 400 });
 
   let uid: string;

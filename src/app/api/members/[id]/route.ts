@@ -13,6 +13,7 @@ import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { cancelMemberSubscription, getMemberSubscription } from "@/lib/subscriptions";
 import { revokeAllUserSessions } from "@/lib/session-cookie";
 import { getWalletBalanceInSupabase } from "@/lib/wallet-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -36,17 +37,17 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
     existing = existingSnap.data() as { name: string; email: string; plan: string; active: boolean };
   }
 
-  const body = await request.json() as MemberPayload;
-  const name = body.name?.trim().slice(0, 120) ?? "";
+  const body = await readJsonBody(request) as MemberPayload;
+  const name = asText(body.name)?.trim().slice(0, 120) ?? "";
   const email = normalizeEmail(body.email ?? "");
   const plan = plans.includes(body.plan ?? "") ? body.plan! : existing.plan;
   if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "A name and valid email are required." }, { status: 400 });
   if (body.password && (body.password.length < 10 || body.password.length > 128)) return Response.json({ error: "New password must be 10–128 characters." }, { status: 400 });
-  const birthDate = body.birthDate?.trim().slice(0, 10) || null;
-  const birthTime = body.birthTime?.trim().slice(0, 8) || null;
-  const birthPlace = body.birthPlace?.trim().slice(0, 180) || null;
+  const birthDate = asText(body.birthDate)?.trim().slice(0, 10) || null;
+  const birthTime = asText(body.birthTime)?.trim().slice(0, 8) || null;
+  const birthPlace = asText(body.birthPlace)?.trim().slice(0, 180) || null;
   const active = body.active ?? existing.active;
-  const phone = body.phone?.trim().slice(0, 40) || null;
+  const phone = asText(body.phone)?.trim().slice(0, 40) || null;
 
   try {
     const authUpdate: { email?: string; password?: string; disabled?: boolean } = {};

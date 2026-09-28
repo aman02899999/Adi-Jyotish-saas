@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { CustomPageError, deleteCustomPage, type PageBlock, updateCustomPage } from "@/lib/custom-pages";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!hasAdminPermission(admin, "website")) return Response.json({ error: "Website permission required." }, { status: 403 });
 
   const { id } = await params;
-  const body = (await request.json()) as UpdatePayload;
+  const body = (await readJsonBody(request)) as UpdatePayload;
   try {
     const updated = await updateCustomPage(id, body);
     await recordAudit(admin, "custom_page.updated", "custom_page", updated.id, { title: updated.title, published: updated.published });

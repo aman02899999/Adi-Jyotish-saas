@@ -1,5 +1,6 @@
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { getPractitionerSchedule, ScheduleError, updatePractitionerSchedule } from "@/lib/practitioner-portal";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function PUT(request: Request) {
   const practitioner = await getCurrentPractitioner();
   if (!practitioner) return Response.json({ error: "Practitioner sign-in required." }, { status: 401 });
 
-  const body = (await request.json()) as {
+  const body = (await readJsonBody(request)) as {
     rules?: Array<{ weekday: number; startTime: string; endTime: string; active?: boolean }>;
     timeOff?: Array<{ startsAt: string; endsAt: string; reason?: string }>;
   };

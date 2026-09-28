@@ -6,6 +6,7 @@ import { createGoTrueUser } from "@/lib/gotrue-admin";
 import { createMemberAdminInSupabase } from "@/lib/member-admin-supabase";
 import { listMembersForAdmin } from "@/lib/admin-directory";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -30,20 +31,20 @@ export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_manage")) return Response.json({ error: "Member management permission required." }, { status: 403 });
-  const body = await request.json() as MemberPayload;
-  const name = body.name?.trim().slice(0, 120) ?? "";
+  const body = await readJsonBody(request) as MemberPayload;
+  const name = asText(body.name)?.trim().slice(0, 120) ?? "";
   const email = normalizeEmail(body.email ?? "");
-  const password = body.password ?? "";
+  const password = asText(body.password) ?? "";
   const plan = plans.includes(body.plan ?? "") ? body.plan! : "member";
   if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "A name and valid email are required." }, { status: 400 });
   if (password.length < 10 || password.length > 128) return Response.json({ error: "Temporary password must be 10–128 characters." }, { status: 400 });
 
-  const birthDate = body.birthDate?.trim().slice(0, 10) || null;
-  const birthTime = body.birthTime?.trim().slice(0, 8) || null;
-  const birthPlace = body.birthPlace?.trim().slice(0, 180) || null;
+  const birthDate = asText(body.birthDate)?.trim().slice(0, 10) || null;
+  const birthTime = asText(body.birthTime)?.trim().slice(0, 8) || null;
+  const birthPlace = asText(body.birthPlace)?.trim().slice(0, 180) || null;
   const onboardingComplete = Boolean(birthDate && birthTime && birthPlace);
-  const active = body.active ?? true;
-  const phone = body.phone?.trim().slice(0, 40) || null;
+  const active = typeof body.active === "boolean" ? body.active : true;
+  const phone = asText(body.phone)?.trim().slice(0, 40) || null;
 
   let uid: string;
   try {

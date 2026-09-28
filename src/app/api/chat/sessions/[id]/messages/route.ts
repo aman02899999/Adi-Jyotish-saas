@@ -6,14 +6,15 @@ import { getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getPractitionerAttributionInSupabase } from "@/lib/practitioners-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request, { params }: { params: Promise<{ id: string }> }) {
   const { id } = await params;
 
-  const body = (await request.json()) as { body?: string };
-  const text = body.body?.trim();
+  const body = (await readJsonBody(request)) as { body?: string };
+  const text = asText(body.body)?.trim();
   if (!text || text.length > 2000) return Response.json({ error: "Enter a message up to 2000 characters." }, { status: 400 });
 
   const [member, admin, practitioner] = await Promise.all([getCurrentMember(), getCurrentAdmin(), getCurrentPractitioner()]);

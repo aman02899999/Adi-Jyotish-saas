@@ -5,6 +5,7 @@ import { verifyAuthToken } from "@/lib/auth-verify";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { createAdminInSupabase } from "@/lib/admin-auth-supabase";
 import { upsertSystemRoleInSupabase } from "@/lib/admin-roles-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Administrator setup is already complete." }, { status: 403 });
   }
 
-  const body = await request.json() as { idToken?: string; name?: string };
-  const name = body.name?.trim().slice(0, 120) ?? "";
+  const body = await readJsonBody(request) as { idToken?: string; name?: string };
+  const name = asText(body.name)?.trim().slice(0, 120) ?? "";
   if (name.length < 2) return Response.json({ error: "Enter your name." }, { status: 400 });
   if (!body.idToken) return Response.json({ error: "Sign-in could not be completed." }, { status: 400 });
 

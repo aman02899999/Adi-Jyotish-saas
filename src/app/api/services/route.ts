@@ -4,6 +4,7 @@ import { getAllServices, getPublishedServices, toSlug } from "@/lib/services";
 import { createServiceInSupabase } from "@/lib/services-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -30,10 +31,10 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "services")) return Response.json({ error: "Catalogue permission required." }, { status: 403 });
 
-  const body = (await request.json()) as ServicePayload;
-  const title = body.title?.trim();
-  const category = body.category?.trim();
-  const description = body.description?.trim();
+  const body = (await readJsonBody(request)) as ServicePayload;
+  const title = asText(body.title)?.trim();
+  const category = asText(body.category)?.trim();
+  const description = asText(body.description)?.trim();
 
   if (!title || !category || !description) {
     return Response.json({ error: "Title, category, and description are required." }, { status: 400 });

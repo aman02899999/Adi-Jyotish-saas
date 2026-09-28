@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { createPractitionerAdmin, getPractitionerDirectory, PractitionerAdminError } from "@/lib/scheduling";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -30,18 +31,18 @@ export async function POST(request:Request){
   const admin=await getCurrentAdmin();
   if(!admin)return Response.json({error:"Administrator access required."},{status:401});
   if(!hasAdminPermission(admin,"practitioners"))return Response.json({error:"Practitioners permission required to add a practitioner."},{status:403});
-  const body=await request.json() as PractitionerPayload;
-  if((body.bio?.trim().length??0)<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
+  const body=await readJsonBody(request) as PractitionerPayload;
+  if((asText(body.bio)?.trim().length??0)<10)return Response.json({error:"Name, valid email, and biography are required."},{status:400});
 
   try {
     const created = await createPractitionerAdmin({
       name: body.name ?? "",
       email: body.email ?? "",
-      title: body.title?.trim() || "Vedic Astrologer",
+      title: asText(body.title)?.trim() || "Vedic Astrologer",
       bio: body.bio ?? "",
-      specialties: body.specialties?.trim() || "Birth charts",
-      languages: body.languages?.trim() || "English, Hindi",
-      consultationModes: body.consultationModes?.trim() || "Video, Audio, Chat",
+      specialties: asText(body.specialties)?.trim() || "Birth charts",
+      languages: asText(body.languages)?.trim() || "English, Hindi",
+      consultationModes: asText(body.consultationModes)?.trim() || "Video, Audio, Chat",
       experienceYears: body.experienceYears,
       verified: body.verified ?? false,
       verificationLevel: body.verificationLevel ?? "reviewed",

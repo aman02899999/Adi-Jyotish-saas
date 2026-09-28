@@ -7,6 +7,7 @@ import { createGoTrueUser, findGoTrueUserByEmail, updateGoTrueUserPassword } fro
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { revokeAllUserSessions } from "@/lib/session-cookie";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("practitioner-invite-accept", requestIp(request), 10, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { token?: string; password?: string };
+  const body = (await readJsonBody(request)) as { token?: string; password?: string };
   const token = body.token ?? "";
   const password = body.password ?? "";
   if (!token || password.length < 10 || password.length > 128) {

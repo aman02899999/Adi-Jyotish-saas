@@ -4,14 +4,15 @@ import { getFavoritePractitionerIds } from "@/lib/marketplace";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
 import { toggleFavoriteInSupabase } from "@/lib/member-favorites-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export async function GET(){const member=await getCurrentMember();if(!member)return Response.json({error:"Member sign-in required."},{status:401});return Response.json({practitionerIds:await getFavoritePractitionerIds(member.id)});}
 
 export async function POST(request:Request){
   const member=await getCurrentMember();
   if(!member)return Response.json({error:"Member sign-in required."},{status:401});
-  const body=await request.json() as {practitionerId?:string};
-  const practitionerId=body.practitionerId?.trim();
+  const body=await readJsonBody(request) as {practitionerId?:string};
+  const practitionerId=asText(body.practitionerId)?.trim();
   if(!practitionerId)return Response.json({error:"Invalid practitioner."},{status:400});
 
   if (isSupabaseCutoverActive()) {

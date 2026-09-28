@@ -17,6 +17,7 @@ import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { listBookingsInSupabase } from "@/lib/bookings-supabase";
 import { getServiceByIdInSupabase } from "@/lib/services-supabase";
 import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -89,15 +90,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as BookingPayload;
+  const body = (await readJsonBody(request)) as BookingPayload;
   const [member, settings] = await Promise.all([getCurrentMember(), getStudioSettings()]);
   if (!member) return Response.json({ error: "Sign in to book a consultation." }, { status: 401 });
 
   const throttle = await checkRateLimit("booking-create", `member:${member.id}`, 8, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
-  const serviceId = body.serviceId?.trim() ?? "";
-  const practitionerId = body.practitionerId?.trim() ?? "";
-  const bookingDate = body.bookingDate?.trim() ?? "";
+  const serviceId = asText(body.serviceId)?.trim() ?? "";
+  const practitionerId = asText(body.practitionerId)?.trim() ?? "";
+  const bookingDate = asText(body.bookingDate)?.trim() ?? "";
   // The booking-for-family-member picker (booking-flow.tsx) submits the family member's name here
   // — falling back to the account owner's name keeps this backward compatible for the "myself"
   // case and any older client that never sends the field. The account's own email is always used

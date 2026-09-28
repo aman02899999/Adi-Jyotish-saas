@@ -7,6 +7,7 @@ import { findAdminInviteByToken, markAdminInviteAccepted } from "@/lib/admin-inv
 import { createGoTrueUser } from "@/lib/gotrue-admin";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -18,9 +19,9 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("admin-invite-accept", requestIp(request), 10, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { token?: string; name?: string; password?: string };
+  const body = (await readJsonBody(request)) as { token?: string; name?: string; password?: string };
   const token = body.token ?? "";
-  const name = body.name?.trim().slice(0, 120) ?? "";
+  const name = asText(body.name)?.trim().slice(0, 120) ?? "";
   const password = body.password ?? "";
   if (!token || name.length < 2 || password.length < 10 || password.length > 128) {
     return Response.json({ error: "Complete your name and use a password of at least 10 characters." }, { status: 400 });

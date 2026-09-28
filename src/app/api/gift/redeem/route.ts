@@ -1,6 +1,7 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { GiftCardError, redeemGiftCard } from "@/lib/gift-cards";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -12,8 +13,8 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("gift-redeem", `ip:${ip}`, 20, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { code?: string };
-  const code = body.code?.trim();
+  const body = (await readJsonBody(request)) as { code?: string };
+  const code = asText(body.code)?.trim();
   if (!code) return Response.json({ error: "Please enter a gift code." }, { status: 400 });
 
   try {

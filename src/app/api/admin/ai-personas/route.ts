@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { AiPersonaError, createPersona, getAllPersonasAdmin } from "@/lib/ai-personas";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -20,7 +21,7 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "ai_personas")) return Response.json({ error: "AI personas permission required." }, { status: 403 });
 
-  const body = (await request.json()) as CreatePayload;
+  const body = (await readJsonBody(request)) as CreatePayload;
   try {
     const created = await createPersona({
       name: body.name ?? "",

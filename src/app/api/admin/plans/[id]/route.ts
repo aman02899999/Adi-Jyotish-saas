@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { updatePlan, type PlanPayload } from "@/lib/plans";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -10,7 +11,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
 
   const { id } = await params;
 
-  const body = (await request.json()) as PlanPayload;
+  const body = (await readJsonBody(request)) as PlanPayload;
   try {
     const updated = await updatePlan(id, body);
     await recordAudit(admin, "plan.updated", "membership_plan", updated.id, { name: updated.name, active: updated.active });

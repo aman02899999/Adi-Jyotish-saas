@@ -15,6 +15,7 @@ import {
   replyToThreadInSupabase,
   setThreadStatusInSupabase,
 } from "@/lib/messaging-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -24,7 +25,7 @@ export async function POST(request:Request){
   const member=await getCurrentMember();if(!member)return Response.json({error:"Member sign-in required."},{status:401});
   const throttle=await checkRateLimit("member-message-thread",`member:${member.id}`,5,600);
   if(!throttle.allowed)return rateLimitResponse(throttle.retryAfter);
-  const body=await request.json() as {subject?:string;message?:string;category?:string};const subject=body.subject?.trim().slice(0,160)??"";const text=body.message?.trim().slice(0,3000)??"";const category=["support","booking","billing","general"].includes(body.category??"")?body.category!:"support";
+  const body=await readJsonBody(request) as {subject?:string;message?:string;category?:string};const subject=asText(body.subject)?.trim().slice(0,160)??"";const text=asText(body.message)?.trim().slice(0,3000)??"";const category=["support","booking","billing","general"].includes(body.category??"")?body.category!:"support";
   if(!subject||!text)return Response.json({error:"Subject and message are required."},{status:400});
   if (isSupabaseCutoverActive()) {
     const result = await createThreadWithMessageInSupabase({

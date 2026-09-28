@@ -1,5 +1,6 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { cancelMemberSubscription } from "@/lib/subscriptions";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -7,7 +8,7 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Sign in required." }, { status: 401 });
 
-  const body = (await request.json().catch(() => ({}))) as { immediately?: boolean };
+  const body = (await readJsonBody(request)) as { immediately?: boolean };
   try {
     await cancelMemberSubscription(member.id, Boolean(body.immediately));
     return Response.json({ ok: true });

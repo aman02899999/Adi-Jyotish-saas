@@ -1,6 +1,7 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPlanById } from "@/lib/plans";
 import { startSubscriptionCheckout } from "@/lib/subscriptions";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -10,8 +11,8 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Sign in to choose a membership plan." }, { status: 401 });
 
-  const body = (await request.json()) as CheckoutPayload;
-  const planId = body.planId?.trim();
+  const body = (await readJsonBody(request)) as CheckoutPayload;
+  const planId = asText(body.planId)?.trim();
   const interval = body.interval === "yearly" ? "yearly" : "monthly";
   if (!planId) return Response.json({ error: "Invalid plan." }, { status: 400 });
 

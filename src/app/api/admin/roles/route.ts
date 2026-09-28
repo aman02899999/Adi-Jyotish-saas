@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { createRole, getAllRolesAdmin, RoleError } from "@/lib/admin-roles";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "roles")) return Response.json({ error: "Owner access required." }, { status: 403 });
 
-  const body = (await request.json()) as { name?: string; slug?: string; permissions?: string[] };
+  const body = (await readJsonBody(request)) as { name?: string; slug?: string; permissions?: string[] };
   try {
     const created = await createRole({ name: body.name ?? "", slug: body.slug ?? "", permissions: body.permissions ?? [] }, admin.permissions);
     await recordAudit(admin, "admin_role.created", "admin_role", created.id, { name: created.name, permissions: created.permissions });

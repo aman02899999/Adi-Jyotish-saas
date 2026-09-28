@@ -12,6 +12,7 @@ import {
 import { deleteGoTrueUser } from "@/lib/gotrue-admin";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { revokeAllUserSessions } from "@/lib/session-cookie";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -48,7 +49,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const existing = await loadAdmin(id);
   if (!existing) return Response.json({ error: "Administrator not found." }, { status: 404 });
 
-  const body = await request.json() as { role?: string; active?: boolean };
+  const body = await readJsonBody(request) as { role?: string; active?: boolean };
   const role = body.role && await roleSlugExists(body.role) ? body.role : existing.role;
   const active = body.active ?? existing.active;
 

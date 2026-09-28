@@ -2,6 +2,7 @@ import { createKundliMatch, KundliMatchError } from "@/lib/kundli-matching";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -18,18 +19,18 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("kundli-matching", `ip:${ip}`, 5, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as Payload;
+  const body = (await readJsonBody(request)) as Payload;
   if (!(await verifyTurnstileToken(body.turnstileToken, ip))) {
     return Response.json({ error: "Verification failed. Please try again." }, { status: 403 });
   }
-  const nameA = body.nameA?.trim().slice(0, 120) ?? "";
-  const birthDateA = body.birthDateA?.trim() ?? "";
-  const birthTimeA = body.birthTimeA?.trim() ?? "";
-  const birthPlaceA = body.birthPlaceA?.trim().slice(0, 160) ?? "";
-  const nameB = body.nameB?.trim().slice(0, 120) ?? "";
-  const birthDateB = body.birthDateB?.trim() ?? "";
-  const birthTimeB = body.birthTimeB?.trim() ?? "";
-  const birthPlaceB = body.birthPlaceB?.trim().slice(0, 160) ?? "";
+  const nameA = asText(body.nameA)?.trim().slice(0, 120) ?? "";
+  const birthDateA = asText(body.birthDateA)?.trim() ?? "";
+  const birthTimeA = asText(body.birthTimeA)?.trim() ?? "";
+  const birthPlaceA = asText(body.birthPlaceA)?.trim().slice(0, 160) ?? "";
+  const nameB = asText(body.nameB)?.trim().slice(0, 120) ?? "";
+  const birthDateB = asText(body.birthDateB)?.trim() ?? "";
+  const birthTimeB = asText(body.birthTimeB)?.trim() ?? "";
+  const birthPlaceB = asText(body.birthPlaceB)?.trim().slice(0, 160) ?? "";
 
   if (!nameA || !nameB) return Response.json({ error: "Please share both names." }, { status: 400 });
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDateA) || !/^\d{4}-\d{2}-\d{2}$/.test(birthDateB)) {

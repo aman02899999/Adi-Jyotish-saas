@@ -5,6 +5,7 @@ import { createPrediction, listMemberPredictions, PredictionError } from "@/lib/
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { getBookingByIdInSupabase } from "@/lib/bookings-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -21,8 +22,8 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("prediction-create", `member:${member.id}`, 20, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { bookingId?: string; text?: string; expectedByDate?: string };
-  const bookingId = body.bookingId?.trim();
+  const body = (await readJsonBody(request)) as { bookingId?: string; text?: string; expectedByDate?: string };
+  const bookingId = asText(body.bookingId)?.trim();
   if (!bookingId) return Response.json({ error: "Please choose which consultation this came from." }, { status: 400 });
 
   // The eligibility check has to read the booking from whichever store holds it. Reading

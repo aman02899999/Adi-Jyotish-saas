@@ -14,6 +14,7 @@ import {
   replyToThreadInSupabase,
   setThreadStatusInSupabase,
 } from "@/lib/messaging-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic="force-dynamic";
 
@@ -28,7 +29,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
     const owned=await getThreadForMemberInSupabase(id,member.id);
     if(!owned)return Response.json({error:"Thread not found."},{status:404});
     if(owned.status==="closed")return Response.json({error:"This conversation is closed. Start a new one if you still need help."},{status:409});
-    const body=await request.json() as {message?:string};const text=body.message?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
+    const body=await readJsonBody(request) as {message?:string};const text=asText(body.message)?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
     // A member reply must NOT reopen a thread an admin closed — reopen is false here.
     const message=await replyToThreadInSupabase({threadId:id,senderType:"member",senderName:member.name,body:text,reopen:false});
     if(!message)return Response.json({error:"Thread not found."},{status:404});
@@ -40,7 +41,7 @@ export async function POST(request:Request,{params}:{params:Promise<{id:string}>
   const thread=threadSnap.exists?(threadSnap.data() as {memberId:string;status:string}):null;
   if(!thread||thread.memberId!==member.id)return Response.json({error:"Thread not found."},{status:404});
   if(thread.status==="closed")return Response.json({error:"This conversation is closed. Start a new one if you still need help."},{status:409});
-  const body=await request.json() as {message?:string};const text=body.message?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
+  const body=await readJsonBody(request) as {message?:string};const text=asText(body.message)?.trim().slice(0,3000)??"";if(!text)return Response.json({error:"Write a message before sending."},{status:400});
   const now=FieldValue.serverTimestamp();
   const messageRef=threadRef.collection("messages").doc();
   await messageRef.set({senderType:"member",senderName:member.name,body:text,readByMember:true,readByAdmin:false,createdAt:now});

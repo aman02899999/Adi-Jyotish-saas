@@ -1,6 +1,7 @@
 import { getCurrentPractitioner } from "@/lib/practitioner-auth";
 import { PayoutError, updatePractitionerPayoutDetails } from "@/lib/practitioner-portal";
 import { isPayoutEncryptionConfigured } from "@/lib/payout-crypto";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function POST(request: Request) {
     return Response.json({ error: "Payout details cannot be saved yet — the studio hasn't configured secure storage for bank details." }, { status: 503 });
   }
 
-  const body = (await request.json()) as { bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; upiId?: string };
+  const body = (await readJsonBody(request)) as { bankAccountName?: string; bankAccountNumber?: string; bankIfsc?: string; upiId?: string };
   try {
     await updatePractitionerPayoutDetails(practitioner.id, {
       bankAccountName: body.bankAccountName ?? "",

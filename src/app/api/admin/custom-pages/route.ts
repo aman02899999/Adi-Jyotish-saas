@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { createCustomPage, CustomPageError, getAllCustomPagesAdmin } from "@/lib/custom-pages";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "website")) return Response.json({ error: "Website permission required." }, { status: 403 });
 
-  const body = (await request.json()) as CreatePayload;
+  const body = (await readJsonBody(request)) as CreatePayload;
   try {
     const created = await createCustomPage({ title: body.title ?? "", metaDescription: body.metaDescription ?? "" });
     await recordAudit(admin, "custom_page.created", "custom_page", created.id, { title: created.title, slug: created.slug });

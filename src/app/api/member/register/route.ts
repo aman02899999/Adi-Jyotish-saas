@@ -1,6 +1,7 @@
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -12,16 +13,16 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("member-register", ip, 8, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = await request.json() as { idToken?: string; name?: string; ref?: string; turnstileToken?: string };
+  const body = await readJsonBody(request) as { idToken?: string; name?: string; ref?: string; turnstileToken?: string };
   if (!(await verifyTurnstileToken(body.turnstileToken, ip))) {
     return Response.json({ error: "Verification failed. Please try again." }, { status: 403 });
   }
-  const name = body.name?.trim().slice(0, 120) ?? "";
+  const name = asText(body.name)?.trim().slice(0, 120) ?? "";
   if (name.length < 2) return Response.json({ error: "Enter your name." }, { status: 400 });
   if (!body.idToken) return Response.json({ error: "Your account could not be created." }, { status: 400 });
 
   try {
-    await createMemberSession(body.idToken, name, body.ref?.trim().slice(0, 20));
+    await createMemberSession(body.idToken, name, asText(body.ref)?.trim().slice(0, 20));
   } catch {
     return Response.json({ error: "Your account could not be created." }, { status: 401 });
   }
