@@ -38,10 +38,10 @@ export function liveReadingsUnavailable(): Response | null {
 type GeminiPart = { text: string } | { inline_data: { mime_type: string; data: string } };
 
 // A hard ceiling on Gemini calls per UTC day, configurable via env since the right number depends
-// entirely on the account's actual budget. Defaults generously (2000/day) so this is inert until
-// someone sets it deliberately, rather than silently rate-limiting a fresh deployment. Every AI
-// reading type funnels through this one function, so gating here covers all of them at once.
-const DAILY_CALL_LIMIT = Number(process.env.GEMINI_DAILY_CALL_LIMIT) || 2000;
+// entirely on the account's actual budget. Defaults to 200/day, the owner's chosen launch budget,
+// so a deployment that never sets the env var still has a tight ceiling on the Gemini bill. Every
+// AI reading type funnels through this one function, so gating here covers all of them at once.
+const DAILY_CALL_LIMIT = Number(process.env.GEMINI_DAILY_CALL_LIMIT) || 200;
 
 class GeminiBudgetError extends Error {}
 
