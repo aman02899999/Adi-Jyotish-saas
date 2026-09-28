@@ -1,6 +1,6 @@
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
-import { deleteTwoFactorChallenge, getTwoFactorState, peekTwoFactorChallenge, resolveTwoFactorAccount, verifyTotpOrBackupCode } from "@/lib/two-factor";
+import { getTwoFactorState, peekTwoFactorChallenge, resolveTwoFactorAccount, verifyTotpOrBackupCode } from "@/lib/two-factor";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +17,6 @@ export async function POST(request: Request) {
   const state = account ? await getTwoFactorState(account) : null;
   const secret = state?.totpSecret;
   if (!account || !state || !secret || !state.totpEnabled) {
-    deleteTwoFactorChallenge(challengeToken);
     return Response.json({ error: "Two-factor verification could not be completed." }, { status: 401 });
   }
 
@@ -29,7 +28,6 @@ export async function POST(request: Request) {
     return Response.json({ error: "That code is incorrect." }, { status: 401 });
   }
   await clearAuthFailures(throttle.keyHash);
-  deleteTwoFactorChallenge(challengeToken);
 
   await createMemberSession(pending.idToken);
   const member = await getCurrentMember();

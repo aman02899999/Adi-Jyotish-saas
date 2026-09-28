@@ -7,7 +7,6 @@ import {
   checkTwoFactorGate,
   confirmTwoFactorEnrollment,
   consumeBackupCode,
-  deleteTwoFactorChallenge,
   disableTwoFactor,
   generateBackupCodes,
   generateTotpSecret,
@@ -229,8 +228,6 @@ describeDb("two-factor auth (live database)", () => {
     // The challenge is scoped to the portal that minted it.
     expect(peekTwoFactorChallenge("member", token!)).toMatchObject({ uid: member.id, idToken: "fake-id-token" });
     expect(peekTwoFactorChallenge("admin", token!)).toBeNull();
-    deleteTwoFactorChallenge(token!);
-    expect(peekTwoFactorChallenge("member", token!)).toBeNull();
   });
 
   it("mints a distinct challenge token per call", async () => {
@@ -239,7 +236,5 @@ describeDb("two-factor auth (live database)", () => {
     expect(a).not.toBe(b);
     expect(peekTwoFactorChallenge("member", a!)?.idToken).toBe("t1");
     expect(peekTwoFactorChallenge("member", b!)?.idToken).toBe("t2");
-    deleteTwoFactorChallenge(a!);
-    deleteTwoFactorChallenge(b!);
   });
 });
