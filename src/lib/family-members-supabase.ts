@@ -66,6 +66,7 @@ export async function addFamilyMemberInSupabase(
 }
 
 /** Scoped to the owner: a member can only delete their own family entries. */
-export async function deleteFamilyMemberInSupabase(memberId: string, familyMemberId: string): Promise<void> {
-  await query(`delete from public.family_members where id = $1 and member_id = $2`, [familyMemberId, memberId]);
+export async function deleteFamilyMemberInSupabase(memberId: string, familyMemberId: string): Promise<boolean> {
+  const result = await query(`delete from public.family_members where id = $1 and member_id = $2`, [familyMemberId, memberId]);
+  return (result.rowCount ?? 0) > 0;
 }

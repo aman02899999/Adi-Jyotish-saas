@@ -103,6 +103,37 @@ const INDIA_STATE_NAMES = new Set(Object.values(INDIA_ADMIN1).map((name) => name
 // candidate, which is what previously produced nonsense matches like "Indianapolis" / "Kindia".
 const NON_SETTLEMENT_SEGMENTS = new Set(["india", "bharat", "in", ...INDIA_STATE_NAMES]);
 
+/**
+ * Lowercase with accents removed. The bundled data spells 1,642 of India's 3,502 towns with
+ * diacritics ("Allahābād", "Kanniyākumāri"), which nobody types, so an exact comparison left almost
+ * half of Indian birthplaces unfindable. Stored names and typed text are both folded.
+ */
+function fold(text: string): string {
+  return text.normalize("NFD").replace(/\p{M}/gu, "").toLowerCase();
+}
+
+/**
+ * Names people use for a city the data files under another name: former names (Bombay, Madras),
+ * common short forms (Vizag, Trichy) and recent renames the data predates (Gurugram, Prayagraj).
+ * Folded typed name -> folded name as it appears in the data.
+ */
+const CITY_ALIASES: Record<string, string> = {
+  bombay: "mumbai", calcutta: "kolkata", madras: "chennai", bangalore: "bengaluru",
+  pondicherry: "puducherry", trivandrum: "thiruvananthapuram", baroda: "vadodara",
+  benares: "varanasi", banaras: "varanasi", calicut: "kozhikode", vizag: "visakhapatnam",
+  simla: "shimla", tuticorin: "thoothukudi", trichy: "tiruchirappalli", cawnpore: "kanpur",
+  nasik: "nashik", ahmadabad: "ahmedabad", gurugram: "gurgaon", mysuru: "mysore",
+  mangaluru: "mangalore", belagavi: "belgaum", hubballi: "hubli", kalaburagi: "gulbarga",
+  prayagraj: "allahabad", kanyakumari: "kanniyakumari",
+};
+
+/** The typed name folded, plus the data's name for it when that differs. */
+function needlesFor(term: string): string[] {
+  const needle = fold(term.trim());
+  const alias = CITY_ALIASES[needle];
+  return alias ? [needle, alias] : [needle];
+}
+
 // Common abbreviations for the countries most likely to show up as a disambiguating segment
 // (e.g. "Toledo, USA") — Intl.DisplayNames only ever returns the full name ("United States"), so
 // without this map an abbreviated segment would never narrow anything.
@@ -135,8 +166,8 @@ function loadCities(): CityRecord[] {
       id: `${countryCode}-${name}-${latE5}-${lonE5}`,
       name,
       altName,
-      nameLower: name.toLowerCase(),
-      altNameLower: altName.toLowerCase(),
+      nameLower: fold(name),
+      altNameLower: fold(altName),
       province,
       regionKey: adminCode,
       country: countryNameFor(countryCode),
@@ -208,17 +239,17 @@ function pickBest(rows: CityRecord[], otherSegments: string[], rawPlaceText: str
 
 /** Exact (case-insensitive) match on a city's primary or alternate name. */
 function exactMatches(term: string): CityRecord[] {
-  const needle = term.toLowerCase();
-  return loadCities().filter((row) => row.nameLower === needle || row.altNameLower === needle);
+  const needles = needlesFor(term);
+  return loadCities().filter((row) => needles.includes(row.nameLower) || needles.includes(row.altNameLower));
 }
 
 /** Prefix match on a city's primary or alternate name — used only as a last resort, and only
  * against a segment that isn't itself a country/state name (see NON_SETTLEMENT_SEGMENTS), so a
  * country like "India" in the input can never itself be searched as if it were a city. */
 function prefixMatches(term: string): CityRecord[] {
-  const needle = term.toLowerCase();
-  if (needle.length < 3) return [];
-  return loadCities().filter((row) => row.nameLower.startsWith(needle) || row.altNameLower.startsWith(needle));
+  const needles = needlesFor(term);
+  if (needles[0].length < 3) return [];
+  return loadCities().filter((row) => needles.some((needle) => row.nameLower.startsWith(needle) || row.altNameLower.startsWith(needle)));
 }
 
 /**
@@ -239,13 +270,23 @@ export function resolvePlaceToCoordinates(placeText: string): ResolvedPlace | nu
   // this guard exists to prevent (a country/state name matching an unrelated city as a substring,
   // e.g. "india" prefix-matching "Indianapolis"), so this resolves to "not found" instead.
   const settlementSegments = segments.filter((segment) => !NON_SETTLEMENT_SEGMENTS.has(segment.toLowerCase()));
-  if (!settlementSegments.length) return null;
+  // Delhi, Chandigarh and Puducherry are cities as well as states/union territories, so "Delhi,
+  // India" has no segment left once state names are set aside. They are tried as exact Indian
+  // city names only after every ordinary segment, and never by prefix ("Goa" must not find
+  // "Goalpara").
+  const stateNamedSegments = segments.filter((segment) => INDIA_STATE_NAMES.has(segment.toLowerCase()));
 
   for (const primary of settlementSegments) {
     const otherSegments = segments.filter((segment) => segment !== primary);
     const exact = exactMatches(primary);
     const bestExact = pickBest(exact, otherSegments, placeText);
     if (bestExact) return toResolvedPlace(bestExact);
+  }
+
+  for (const primary of stateNamedSegments) {
+    const indian = exactMatches(primary).filter((row) => row.country === countryNameFor("IN"));
+    const best = pickBest(indian, segments.filter((segment) => segment !== primary), placeText);
+    if (best) return toResolvedPlace(best);
   }
 
   for (const primary of settlementSegments) {
@@ -266,13 +307,13 @@ export function resolvePlaceToCoordinates(placeText: string): ResolvedPlace | nu
  * resolvePlaceToCoordinates() above resolves it via the exact-match path, no ambiguity possible.
  */
 export function searchPlaces(query: string, limit = 8): PlaceSuggestion[] {
-  const needle = query.trim().toLowerCase();
-  if (needle.length < 2) return [];
+  const needles = needlesFor(query);
+  if (needles[0].length < 2) return [];
 
   const scored: { row: CityRecord; score: number }[] = [];
   for (const row of loadCities()) {
-    const nameStarts = row.nameLower.startsWith(needle) || row.altNameLower.startsWith(needle);
-    const nameIncludes = !nameStarts && (row.nameLower.includes(needle) || row.altNameLower.includes(needle));
+    const nameStarts = needles.some((needle) => row.nameLower.startsWith(needle) || row.altNameLower.startsWith(needle));
+    const nameIncludes = !nameStarts && needles.some((needle) => row.nameLower.includes(needle) || row.altNameLower.includes(needle));
     if (!nameStarts && !nameIncludes) continue;
     const indiaBonus = row.country === "India" ? 2_000_000_000 : 0;
     const prefixBonus = nameStarts ? 1_000_000_000 : 0;

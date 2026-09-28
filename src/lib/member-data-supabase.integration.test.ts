@@ -103,13 +103,15 @@ describeCutover("a member's own data on Postgres", () => {
       await addFamilyMember(family("Ravi"));
       expect((await listFamilyMembers(MEMBER)).map((f) => f.name)).toEqual(["Meera", "Ravi"]);
 
-      await deleteFamilyMember(MEMBER, first.id);
+      expect(await deleteFamilyMember(MEMBER, first.id)).toBe(true);
       expect((await listFamilyMembers(MEMBER)).map((f) => f.name)).toEqual(["Ravi"]);
+      // Deleting it again finds nothing, which the route answers with 404.
+      expect(await deleteFamilyMember(MEMBER, first.id)).toBe(false);
     });
 
     it("cannot delete another member's family entry", async () => {
       const theirs = await addFamilyMember(family("Theirs", OTHER));
-      await deleteFamilyMember(MEMBER, theirs.id);
+      expect(await deleteFamilyMember(MEMBER, theirs.id)).toBe(false);
       expect(await listFamilyMembers(OTHER)).toHaveLength(1);
     });
 

@@ -110,9 +110,14 @@ export async function addFamilyMember({ memberId, name, relationship, birthDate,
   return fromDoc(saved);
 }
 
-export async function deleteFamilyMember(memberId: string, familyMemberId: string): Promise<void> {
+/** Deletes one of the member's own family members. False when the id is not theirs or not found,
+ * so the route can say 404 rather than report a delete that did nothing. */
+export async function deleteFamilyMember(memberId: string, familyMemberId: string): Promise<boolean> {
   if (isSupabaseCutoverActive()) return deleteFamilyMemberInSupabase(memberId, familyMemberId);
-  await familyCollection(memberId).doc(familyMemberId).delete();
+  const ref = familyCollection(memberId).doc(familyMemberId);
+  if (!(await ref.get()).exists) return false;
+  await ref.delete();
+  return true;
 }
 
 export function chartSnapshot(chart: KundliChart): FamilyChartSnapshot {
