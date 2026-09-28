@@ -1,6 +1,6 @@
 import "server-only";
 
-import { query, queryModel, queryModels, retryOnUniqueViolation } from "@/lib/postgres";
+import { query, queryModel, queryModels, retryOnInsertRace } from "@/lib/postgres";
 
 /**
  * Supabase data access for admin roles. Data access only: validation, permission
@@ -187,8 +187,8 @@ export async function getAdminIdsWithPermissionInSupabase(permission: string): P
  * editable role list.
  */
 export async function upsertSystemRoleInSupabase(slug: string, name: string, permissions: string[]): Promise<void> {
-  // id is the slug, the table's other unique key; see retryOnUniqueViolation.
-  await retryOnUniqueViolation(() => query(
+  // id is the slug, the table's other unique key; see retryOnInsertRace.
+  await retryOnInsertRace(() => query(
     `insert into public.admin_roles (id, slug, name, is_system, permissions, created_at, updated_at)
      values ($1, $1, $2, true, $3::jsonb, now(), now())
      on conflict (id) do update

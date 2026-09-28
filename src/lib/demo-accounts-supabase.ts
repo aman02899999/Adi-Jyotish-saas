@@ -1,6 +1,6 @@
 import "server-only";
 
-import { query, retryOnUniqueViolation } from "@/lib/postgres";
+import { query, retryOnInsertRace } from "@/lib/postgres";
 
 /**
  * Supabase data access for the demo-account seeder.
@@ -16,7 +16,7 @@ import { query, retryOnUniqueViolation } from "@/lib/postgres";
 
 /** Upserts an Owner-role demo administrator. */
 export async function upsertDemoAdminInSupabase(input: { id: string; name: string; email: string }): Promise<boolean> {
-  const result = await retryOnUniqueViolation(() => query(
+  const result = await retryOnInsertRace(() => query(
     `insert into public.admin_users (id, name, email, role, active, is_demo_account, last_login_at, created_at, updated_at)
      values ($1, $2, $3, 'owner', true, true, null, now(), now())
      on conflict (id) do update
@@ -129,8 +129,8 @@ export async function insertDemoMemberInSupabase(input: {
 
 /** Upserts an active yearly subscription. `member_subscriptions.id` is the member id. */
 export async function upsertDemoSubscriptionInSupabase(memberId: string, planId: string): Promise<boolean> {
-  // id is the member id, the table's other unique key; see retryOnUniqueViolation.
-  const result = await retryOnUniqueViolation(() => query(
+  // id is the member id, the table's other unique key; see retryOnInsertRace.
+  const result = await retryOnInsertRace(() => query(
     `insert into public.member_subscriptions
        (id, member_id, plan_id, billing_interval, status, razorpay_subscription_id, razorpay_customer_id,
         current_period_start, current_period_end, cancel_at_period_end, cancelled_at, created_at, updated_at)
