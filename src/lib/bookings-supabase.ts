@@ -406,3 +406,42 @@ export async function deleteBookingInSupabase(id: string): Promise<string | null
   );
   return rows[0]?.reference ?? null;
 }
+
+/** What a pre-session reminder needs to say. */
+export type BookingReminderRow = {
+  id: string;
+  reference: string;
+  serviceTitle: string;
+  practitionerName: string;
+  clientName: string;
+  clientEmail: string;
+  scheduledAt: Date;
+};
+
+/**
+ * Claims every booking whose reminder is due and returns them.
+ *
+ * Due means: starting within (now, dueBefore], still pending or confirmed, made
+ * no later than `createdBefore` (so a booking made an hour ahead does not get a
+ * "reminder" on the heels of its confirmation), and not yet reminded for this
+ * appointment time. The claim is the UPDATE itself: two overlapping runs both
+ * try to update the same rows, the second waits on the first's row locks and
+ * then re-checks the WHERE against the committed row, which no longer matches.
+ * So each booking is returned to exactly one caller.
+ */
+export async function claimDueBookingRemindersInSupabase(
+  now: Date,
+  dueBefore: Date,
+  createdBefore: Date,
+): Promise<BookingReminderRow[]> {
+  return queryModels<BookingReminderRow>(
+    `update public.bookings set reminder_sent_for = scheduled_at
+      where scheduled_at > $1 and scheduled_at <= $2 and created_at <= $3
+        and status in ('pending', 'confirmed')
+        and reminder_sent_for is distinct from scheduled_at
+      returning id, reference, coalesce(service_title, '') as service_title,
+                coalesce(practitioner_name, '') as practitioner_name, coalesce(client_name, '') as client_name,
+                client_email::text as client_email, scheduled_at`,
+    [now, dueBefore, createdBefore],
+  );
+}
