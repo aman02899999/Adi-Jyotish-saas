@@ -276,11 +276,11 @@ export default async function HomePage() {
                 <div className="live-card__tags">{expert.specialties.split(",").slice(0, 3).map((tag, tagIndex) => <span key={tag} className={tagIndex === 0 ? "primary-specialty" : undefined}>{tag.trim()}</span>)}</div>
                 <div className="live-card__foot">
                   <div className="live-card__price">{expert.sessionPrice != null ? (
-                    <strong><s style={{ opacity: .5, fontSize: 12 }}>₹{expert.sessionOriginalPrice}</s> ₹{expert.sessionPrice}<small style={{ display: "inline", fontSize: 9 }}>·{expert.sessionDiscountPercent}% off</small></strong>
+                    <strong><s style={{ color: "var(--faint)", fontSize: 12 }}>₹{expert.sessionOriginalPrice}</s> ₹{expert.sessionPrice}<small style={{ display: "inline", fontSize: 11 }}>·{expert.sessionDiscountPercent}% off</small></strong>
                   ) : expert.reviewDiscountPercent > 0 ? (
-                    <strong><s style={{ opacity: .5, fontSize: 12 }}>₹{expert.chatRatePerMinute}</s> ₹{expert.discountedRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong>
+                    <strong><s style={{ color: "var(--faint)", fontSize: 12 }}>₹{expert.chatRatePerMinute}</s> ₹{expert.discountedRatePerMinute}<small style={{ display: "inline", fontSize: 11 }}>/min</small></strong>
                   ) : (
-                    <strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 9 }}>/min</small></strong>
+                    <strong>₹{expert.chatRatePerMinute}<small style={{ display: "inline", fontSize: 11 }}>/min</small></strong>
                   )}<small>{t("live.chatNow")}</small></div>
                   <div className="live-card__actions">
                     <Link href={`/astrologers/${expert.slug}`} className="primary" aria-label={`Chat with ${expert.name}`}><MessageCircle size={15} /></Link>

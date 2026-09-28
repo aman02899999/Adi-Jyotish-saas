@@ -10,6 +10,11 @@ import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 export const dynamic = "force-dynamic";
 
+/** Shown when the address already signs in to the site but is not on the team, which usually means
+ * a customer account. Such an account is never turned into an administrator, because sign-up does
+ * not prove the person controls the address; the owner has to invite a different one. */
+const EXISTING_SIGN_IN = "This email already has an account on the site (usually a customer account), so it cannot be invited. Invite a different address, such as a work email.";
+
 export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
@@ -42,13 +47,11 @@ export async function POST(request: Request) {
   // An auth account that exists but has no admin row means the address is already taken
   // by someone else's sign-in; inviting it would hand an existing credential into the team.
   if (isSupabaseCutoverActive()) {
-    if (await findGoTrueUserByEmail(email)) {
-      return Response.json({ error: "This person already has an administrator account." }, { status: 409 });
-    }
+    if (await findGoTrueUserByEmail(email)) return Response.json({ error: EXISTING_SIGN_IN }, { status: 409 });
   } else {
     try {
       await getAuth().getUserByEmail(email);
-      return Response.json({ error: "This person already has an administrator account." }, { status: 409 });
+      return Response.json({ error: EXISTING_SIGN_IN }, { status: 409 });
     } catch {
       // No existing Firebase Auth user for this email — safe to invite.
     }
