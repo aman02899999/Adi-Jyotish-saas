@@ -34,7 +34,10 @@ vi.mock("@/lib/studio-settings", () => ({
 
 // Ably publishes over the network and Gemini needs an API key; neither belongs in a test.
 vi.mock("@/lib/ably", () => ({ publishChatEvent: async () => {}, chatChannelName: (id: string) => `chat:${id}` }));
-vi.mock("@/lib/gemini", () => ({ isGeminiConfigured: () => false, getPractitionerChatReply: async () => "" }));
+// AI replies are not under test here; `configured` stands in for GEMINI_API_KEY being set, which
+// an AI-powered session needs before it may start at all.
+const gemini = vi.hoisted(() => ({ configured: true }));
+vi.mock("@/lib/gemini", () => ({ isGeminiConfigured: () => gemini.configured, getPractitionerChatReply: async () => "" }));
 
 import {
   ChatSessionConflictError,
@@ -253,6 +256,18 @@ describeChat("chat on Postgres", () => {
     const ended = await endChatSession(session.id, "member");
     expect(ended.capturedAmount).toBe(MARKETPLACE_SESSION_PRICE);
     expect(await balance()).toBe(1000 - MARKETPLACE_SESSION_PRICE);
+  });
+
+  it("refuses an AI-powered chat while no Gemini key is set, before taking a lock or a hold", async () => {
+    gemini.configured = false;
+    try {
+      await expect(startChatSession(MEMBER_ID, PRAC_AI)).rejects.toBeInstanceOf(PractitionerUnavailableError);
+      expect(await lockHeld()).toBe(false);
+      const { rowCount } = await query(`select 1 from public.wallet_holds where wallet_id = $1 and status = 'active'`, [MEMBER_ID]);
+      expect(rowCount).toBe(0);
+    } finally {
+      gemini.configured = true;
+    }
   });
 
   it("404s an unknown session", async () => {

@@ -1,4 +1,5 @@
 import { attachRazorpayOrder, AI_READING_CURRENCY, createFreeReading, createPendingPersonaReading, FreeReadingAlreadyUsedError, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
+import { liveReadingsUnavailable } from "@/lib/gemini";
 import { isPersonaOffered } from "@/lib/free-ai";
 import { getPersonaBySlug } from "@/lib/ai-personas";
 import { getCurrentMember } from "@/lib/member-auth";
@@ -18,6 +19,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
+  const unavailable = liveReadingsUnavailable();
+  if (unavailable) return unavailable;
 
   const throttle = await checkRateLimit("ai-persona-reading-create", `member:${member.id}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);

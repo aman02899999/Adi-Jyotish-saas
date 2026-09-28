@@ -22,6 +22,19 @@ export function isGeminiConfigured() {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
+/**
+ * Every AI reading is paid for before it is generated. Without a key the payment would go through
+ * and the reading would fail, leaving the member to chase a refund. Routes that take payment for
+ * an AI reading return this first, so nothing is charged while the key is missing.
+ */
+export function liveReadingsUnavailable(): Response | null {
+  if (isGeminiConfigured()) return null;
+  return Response.json(
+    { error: "Live readings are temporarily unavailable. You have not been charged. Please try again later." },
+    { status: 503 },
+  );
+}
+
 type GeminiPart = { text: string } | { inline_data: { mime_type: string; data: string } };
 
 // A hard ceiling on Gemini calls per UTC day, configurable via env since the right number depends

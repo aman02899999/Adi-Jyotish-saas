@@ -321,6 +321,11 @@ export async function startChatSession(memberId: string, practitionerId: string)
   if (!practitioner || !practitioner.active || !practitioner.online) {
     throw new PractitionerUnavailableError("This practitioner is not available for instant chat right now.");
   }
+  // An AI astrologer's replies come from Gemini. Without a key the flat session price would be
+  // captured for a chat that never answers, so refuse before any lock or wallet hold is taken.
+  if (practitioner.isAiPowered && !isGeminiConfigured()) {
+    throw new PractitionerUnavailableError("This AI astrologer is unavailable right now. You have not been charged.");
+  }
 
   await expireStaleChatSessions().catch((error) => console.error("Stale chat session sweep failed", error));
 
