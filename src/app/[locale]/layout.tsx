@@ -15,10 +15,13 @@ import "../globals.css";
 
 // Self-hosted at build time by next/font: no request to Google from the visitor's browser, and a
 // size-matched fallback means text does not jump when the font arrives. Fraunces carries the
-// headings (its optical-size axis keeps large display type crisp and small labels sturdy); Inter
-// is the text face. Both replace the Georgia/Arial system stack, which made the site read as a
-// template. globals.css keeps those as the fallbacks behind these variables.
-const serifFont = Fraunces({ subsets: ["latin", "latin-ext"], variable: "--font-serif", display: "swap", axes: ["opsz"] });
+// headings and Inter the text; they replace the Georgia/Arial system stack, which globals.css keeps
+// as the fallbacks behind these variables.
+// Headings are set at weight 400 almost everywhere (211 of 214 rules), so Fraunces loads as that
+// one static weight in upright and true italic (the <em> in every headline) rather than the
+// variable font, whose optical-size axis made each file about 80 KB. latin-ext is included and
+// preloaded because prices use the ₹ sign; left out, the browser still fetched it, only later.
+const serifFont = Fraunces({ subsets: ["latin", "latin-ext"], weight: "400", style: ["normal", "italic"], variable: "--font-serif", display: "swap" });
 const sansFont = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-sans", display: "swap" });
 
 const siteUrl = getSiteUrl();

@@ -43,7 +43,11 @@ const nextConfig: NextConfig = {
   // than WebP for photographic content — worth it here since gemstone/blog/practitioner photos
   // make up most of the page weight on this site. Next still falls back to WebP/original per the
   // client's Accept header.
-  images: { formats: ["image/avif", "image/webp"] },
+  // WebP only: AVIF is a few percent smaller but far slower to encode on the first request (the
+  // practitioners hero measured over 15s to paint on a cold server), and each extra format is
+  // another billable transformation on the hosting plan. Optimized images are kept for 31 days
+  // so they are rarely re-encoded.
+  images: { formats: ["image/webp"], minimumCacheTTL: 2678400 },
   async headers() {
     return [
       { source: "/(.*)", headers: securityHeaders },

@@ -17,7 +17,8 @@ module.exports = {
       ],
       numberOfRuns: 1,
       settings: {
-        preset: "desktop",
+        // Lighthouse's default mobile profile (throttled 4G, slower CPU). Most visitors are on
+        // phones, and the desktop preset hid an 11.5s homepage load that only showed on mobile.
         skipAudits: ["uses-http2"],
         // CI runners (and this GitHub Actions job in particular) launch Chrome as root, which
         // Chrome refuses to do under its normal sandbox — without this flag the run hangs
