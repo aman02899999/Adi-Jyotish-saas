@@ -4,6 +4,7 @@ import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
 import { debitWallet, InsufficientBalanceError, quoteWalletPayment } from "@/lib/wallet";
 import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { freeAiReadingsEnabled } from "@/lib/free-ai";
 import { getPersonaById } from "@/lib/ai-personas";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
@@ -175,6 +176,7 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
 
 /** A member's very first question-type reading is free. Checked (and consumed) at creation time, so a second attempt is never free even if the first is still pending. */
 export async function isEligibleForFreeReading(memberId: string) {
+  if (!freeAiReadingsEnabled()) return false;
   if (isSupabaseCutoverActive()) return !(await hasQuestionReadingInSupabase(memberId));
   const snap = await collection.where("memberId", "==", memberId).where("readingType", "==", "question").limit(1).get();
   return snap.empty;
@@ -196,6 +198,9 @@ export async function createFreeReading({ memberId, clientName, birthDate, birth
   question: string;
   persona?: { id: string; slug: string; name: string };
 }) {
+  // Callers check isEligibleForFreeReading first; this keeps the switch authoritative even if one
+  // does not. FreeReadingAlreadyUsedError already means "take the paid flow" to every caller.
+  if (!freeAiReadingsEnabled()) throw new FreeReadingAlreadyUsedError();
   // isEligibleForFreeReading (the caller's check) reads outside any transaction, so two concurrent
   // requests (double submit, duplicate tab) could both see "not yet used" and both land here.
   // create() atomically fails if this doc already exists, so only the first actually gets through.

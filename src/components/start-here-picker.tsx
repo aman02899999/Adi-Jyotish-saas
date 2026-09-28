@@ -8,7 +8,7 @@ const STORAGE_KEY = "adiJyotish:startHereSeen";
 
 const OPTIONS = [
   { icon: Sparkles, title: "Get today’s free horoscope", note: "Pick your sign, see today’s sky", href: "/horoscope" },
-  { icon: MessageCircle, title: "Ask one question, get an answer", note: "Your first reading is free", href: "/ask" },
+  { icon: MessageCircle, title: "Ask one question, get an answer", note: "One focused question, answered in a minute", href: "/ask" },
   { icon: Users, title: "Talk to a live astrologer", note: "Book a call or start a chat session", href: "/astrologers" },
   { icon: ScrollText, title: "Get my full birth chart", note: "A complete Kundli report", href: "/kundli" },
   { icon: Layers, title: "Just show me everything", note: "Browse every reading & tool", href: "/#tools" },

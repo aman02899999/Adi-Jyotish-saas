@@ -1,4 +1,5 @@
 import { attachRazorpayOrder, AI_READING_CURRENCY, createFreeReading, createPendingPersonaReading, FreeReadingAlreadyUsedError, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
+import { isPersonaOffered } from "@/lib/free-ai";
 import { getPersonaBySlug } from "@/lib/ai-personas";
 import { getCurrentMember } from "@/lib/member-auth";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
@@ -22,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const persona = await getPersonaBySlug(slug);
-  if (!persona || !persona.active) return Response.json({ error: "This reading is not available." }, { status: 404 });
+  if (!persona || !isPersonaOffered(persona)) return Response.json({ error: "This reading is not available." }, { status: 404 });
 
   const body = (await request.json()) as CreatePayload;
   const clientName = body.clientName?.trim().slice(0, 120) ?? "";

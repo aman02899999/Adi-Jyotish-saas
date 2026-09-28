@@ -1,9 +1,9 @@
-name: Scheduled checks
+name: Uptime check
 
+# Manual only (Actions tab -> Uptime check -> Run workflow). It used to run every 15 minutes, which
+# is about 96 runs a day: billable GitHub Actions minutes on a private repo, and four live page
+# loads each time on the hosting plan. Run it by hand after a deploy instead.
 on:
-  schedule:
-    # Every 15 minutes.
-    - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
 jobs:
@@ -30,19 +30,3 @@ jobs:
             fi
           done
           exit $failed
-
-  # Pre-session reminders (the FAQ promises one). The route claims each booking before sending,
-  # so a run that overlaps the previous one, or a manual re-run, cannot remind anyone twice.
-  booking-reminders:
-    runs-on: ubuntu-latest
-    steps:
-      - name: Send due booking reminders
-        env:
-          SITE_URL: ${{ secrets.SITE_URL }}
-          CRON_SECRET: ${{ secrets.CRON_SECRET }}
-        run: |
-          if [ -z "$SITE_URL" ] || [ -z "$CRON_SECRET" ]; then
-            echo "SITE_URL or CRON_SECRET repo secret not set — skipping."
-            exit 0
-          fi
-          curl -sS --fail-with-body --max-time 120 -H "Authorization: Bearer $CRON_SECRET" "$SITE_URL/api/cron/booking-reminders"

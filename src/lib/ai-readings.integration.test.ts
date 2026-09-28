@@ -2,6 +2,10 @@ import { afterAll, beforeEach, describe, expect, it, vi } from "vitest";
 
 
 import { closePgPool, query } from "@/lib/postgres";
+
+// Free readings are off unless ALLOW_FREE_AI_READINGS is "true" (see free-ai.ts). Most of this
+// file tests how they behave when a studio turns them on; the last block turns them back off.
+process.env.ALLOW_FREE_AI_READINGS = "true";
 import { rechargeWallet } from "@/lib/wallet";
 
 // A spy rather than a plain stub: the "notify exactly once when the cap is
@@ -202,6 +206,18 @@ describeCutover("isEligibleForFreeReading", () => {
     await query(`insert into public.members (id, name, email) values ($1,$2,$3)`, [OTHER, "Other", `${OTHER}@example.test`]);
     await createPendingReading({ ...BIRTH, memberId: MEMBER, question: "q" });
     expect(await isEligibleForFreeReading(OTHER)).toBe(true);
+  });
+
+  it("gives nothing away while free AI readings are switched off", async () => {
+    vi.stubEnv("ALLOW_FREE_AI_READINGS", "");
+    try {
+      expect(await isEligibleForFreeReading(MEMBER)).toBe(false);
+      await expect(createFreeReading({ ...BIRTH, memberId: MEMBER, question: "q" })).rejects.toThrow(FreeReadingAlreadyUsedError);
+      const rows = await query(`select 1 from public.ai_readings where member_id = $1`, [MEMBER]);
+      expect(rows.rowCount).toBe(0);
+    } finally {
+      vi.stubEnv("ALLOW_FREE_AI_READINGS", "true");
+    }
   });
 });
 
