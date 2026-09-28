@@ -1,6 +1,6 @@
 import { createAdminSession, getCurrentAdmin, recordAudit } from "@/lib/admin-auth";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
-import { getTwoFactorState, peekTwoFactorChallenge, resolveTwoFactorAccount, verifyTotpOrBackupCode } from "@/lib/two-factor";
+import { checkSignInCode, getTwoFactorState, peekTwoFactorChallenge, resolveTwoFactorAccount } from "@/lib/two-factor";
 
 export const dynamic = "force-dynamic";
 
@@ -23,8 +23,12 @@ export async function POST(request: Request) {
   const throttle = await checkAuthThrottle("admin-2fa", pending.uid, request);
   if (!throttle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(throttle.retryAfter) } });
 
-  if (!(await verifyTotpOrBackupCode(account, secret, code))) {
+  const verdict = await checkSignInCode(account, secret, code);
+  if (!verdict.ok) {
     await recordAuthFailure(throttle.keyHash);
+    if (verdict.retryAfter) {
+      return Response.json({ error: "Too many incorrect codes. Try again in 15 minutes." }, { status: 429, headers: { "Retry-After": String(verdict.retryAfter) } });
+    }
     return Response.json({ error: "That code is incorrect." }, { status: 401 });
   }
   await clearAuthFailures(throttle.keyHash);

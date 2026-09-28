@@ -8,11 +8,14 @@ import type { DocumentReference } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import {
+  clearTwoFactorFailuresInSupabase,
   consumeBackupCodeInSupabase,
   disableTotpInSupabase,
   enableTotpInSupabase,
   findTwoFactorIdInSupabase,
   getTotpStateInSupabase,
+  getTwoFactorLockInSupabase,
+  recordTwoFactorFailureInSupabase,
   setTotpPendingSecretInSupabase,
   type TwoFactorRole,
 } from "@/lib/two-factor-supabase";
@@ -166,15 +169,17 @@ export async function consumeBackupCode(account: TwoFactorAccount, code: string)
   const digest = tokenDigest(code.trim().toUpperCase());
   if (isSupabaseCutoverActive()) return consumeBackupCodeInSupabase(account.role, account.id, digest);
 
-  // Read-modify-write, as this always was on Firestore. Two concurrent replays of the same
-  // code can both read it as present; the Supabase branch closes that with a single
-  // statement whose predicate is the removal itself.
+  // In a transaction, so two requests replaying the same code cannot both read it as present:
+  // the second one's read is invalidated by the first one's write and it retries against the
+  // list without the code. The Supabase branch gets the same guarantee from a single UPDATE.
   const ref = firestoreRef(account);
-  const snap = await ref.get();
-  const codes = (snap.data()?.totpBackupCodes as string[] | undefined) ?? [];
-  if (!codes.includes(digest)) return false;
-  await ref.update({ totpBackupCodes: codes.filter((existing) => existing !== digest) });
-  return true;
+  return db.runTransaction(async (tx) => {
+    const snap = await tx.get(ref);
+    const codes = (snap.data()?.totpBackupCodes as string[] | undefined) ?? [];
+    if (!codes.includes(digest)) return false;
+    tx.update(ref, { totpBackupCodes: codes.filter((existing) => existing !== digest) });
+    return true;
+  });
 }
 
 /** Verifies either a live TOTP code or a one-time backup code against the account. */
@@ -182,6 +187,86 @@ export async function verifyTotpOrBackupCode(account: TwoFactorAccount, secret: 
   const trimmed = code.trim();
   if (await verifyTotpCode(secret, trimmed)) return true;
   return trimmed.includes("-") && consumeBackupCode(account, trimmed);
+}
+
+/**
+ * Per-account limit on wrong codes.
+ *
+ * auth-throttle.ts keys on account and client IP, in one instance's memory, so it cannot stop
+ * someone who already has the password from guessing codes across many IPs. This counts wrong
+ * codes per account in the database: 10 inside 15 minutes locks that account's 2FA step for 15
+ * minutes, which caps guessing at about 40 codes an hour against a million possibilities. The
+ * lock can only be triggered by someone who can pass the password step, and the next correct
+ * code after it lifts clears the count.
+ */
+export const TWO_FACTOR_MAX_FAILURES = 10;
+const TWO_FACTOR_FAILURE_WINDOW_SECONDS = 15 * 60;
+const TWO_FACTOR_LOCK_SECONDS = 15 * 60;
+
+function failureKey(account: TwoFactorAccount) {
+  return `${account.role}:${account.id}`;
+}
+
+type FailureDoc = { failures?: number; windowStartedAt?: FirebaseFirestore.Timestamp; blockedUntil?: FirebaseFirestore.Timestamp | null };
+
+/** Seconds until the account's 2FA step unlocks, or 0 when it is not locked. */
+export async function twoFactorLockSeconds(account: TwoFactorAccount): Promise<number> {
+  let blockedUntil: Date | null;
+  if (isSupabaseCutoverActive()) {
+    blockedUntil = await getTwoFactorLockInSupabase(failureKey(account));
+  } else {
+    const data = (await db.collection("twoFactorFailures").doc(failureKey(account)).get()).data() as FailureDoc | undefined;
+    blockedUntil = data?.blockedUntil?.toDate() ?? null;
+  }
+  const remaining = blockedUntil ? blockedUntil.getTime() - Date.now() : 0;
+  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+}
+
+/** Counts one wrong code; returns seconds until unlock if this failure locked the account, else 0. */
+export async function recordTwoFactorFailure(account: TwoFactorAccount): Promise<number> {
+  const key = failureKey(account);
+  let blockedUntil: Date | null;
+  if (isSupabaseCutoverActive()) {
+    blockedUntil = await recordTwoFactorFailureInSupabase(key, TWO_FACTOR_MAX_FAILURES, TWO_FACTOR_FAILURE_WINDOW_SECONDS, TWO_FACTOR_LOCK_SECONDS);
+  } else {
+    const ref = db.collection("twoFactorFailures").doc(key);
+    blockedUntil = await db.runTransaction(async (tx) => {
+      const data = (await tx.get(ref)).data() as FailureDoc | undefined;
+      const now = Date.now();
+      const windowStart = data?.windowStartedAt?.toDate().getTime() ?? 0;
+      const fresh = now - windowStart >= TWO_FACTOR_FAILURE_WINDOW_SECONDS * 1000;
+      const failures = fresh ? 1 : (data?.failures ?? 0) + 1;
+      const until = failures >= TWO_FACTOR_MAX_FAILURES
+        ? new Date(now + TWO_FACTOR_LOCK_SECONDS * 1000)
+        : data?.blockedUntil?.toDate() ?? null;
+      tx.set(ref, { failures, windowStartedAt: fresh ? new Date(now) : new Date(windowStart), blockedUntil: until });
+      return until;
+    });
+  }
+  const remaining = blockedUntil ? blockedUntil.getTime() - Date.now() : 0;
+  return remaining > 0 ? Math.ceil(remaining / 1000) : 0;
+}
+
+export async function clearTwoFactorFailures(account: TwoFactorAccount): Promise<void> {
+  if (isSupabaseCutoverActive()) return clearTwoFactorFailuresInSupabase(failureKey(account));
+  await db.collection("twoFactorFailures").doc(failureKey(account)).delete();
+}
+
+export type SignInCodeVerdict = { ok: true } | { ok: false; retryAfter: number };
+
+/**
+ * The sign-in check every verify-2fa route runs. The lock is checked before the code, so a
+ * correct guess made while locked is still refused; otherwise the lock would only slow the
+ * guesser down, not stop them. `retryAfter` is non-zero while the account is locked.
+ */
+export async function checkSignInCode(account: TwoFactorAccount, secret: string, code: string): Promise<SignInCodeVerdict> {
+  const locked = await twoFactorLockSeconds(account);
+  if (locked) return { ok: false, retryAfter: locked };
+  if (await verifyTotpOrBackupCode(account, secret, code)) {
+    await clearTwoFactorFailures(account);
+    return { ok: true };
+  }
+  return { ok: false, retryAfter: await recordTwoFactorFailure(account) };
 }
 
 type Challenge = { r: TwoFactorRole; u: string; t: string; e: number };
