@@ -37,6 +37,10 @@ describe("resolvePlaceToCoordinates", () => {
     expect(resolved("Kerala")).toBeNull();
   });
 
+  it("narrows a US city by its full state name, which the data stores as a postal code", () => {
+    expect(resolved("Springfield, Illinois")).toBe("Springfield, IL, United States");
+  });
+
   it("keeps resolving ordinary input as before", () => {
     expect(resolved("Noida, Uttar Pradesh, India")).toBe("Noida, Uttar Pradesh, India");
     expect(resolvePlaceToCoordinates("Mumbai")?.timezone).toBe("Asia/Kolkata");

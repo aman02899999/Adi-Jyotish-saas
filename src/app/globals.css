@@ -2412,7 +2412,7 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .pricing-card { position:relative; display:flex; flex-direction:column; gap:18px; padding:28px 26px; border:1px solid var(--line); border-radius:16px; background:rgba(248,244,237,.6); }
 .pricing-card--highlight { border-color:var(--copper); background:var(--ivory); box-shadow:0 20px 46px rgba(130,66,43,.14); }
 .pricing-badge { position:absolute; top:-13px; right:24px; padding:5px 12px; border-radius:999px; background:var(--copper); color:#fffaf4; font-size:13px; font-weight:700; letter-spacing:.08em; text-transform:uppercase; }
-.pricing-card header h3 { margin:0 0 6px; font:400 24px var(--serif); }
+.pricing-card header h2 { margin:0 0 6px; font:400 24px var(--serif); }
 .pricing-card header p { margin:0; color:var(--muted); font-size:14px; line-height:1.6; min-height:34px; }
 .pricing-price { display:flex; align-items:baseline; gap:6px; }
 .pricing-price strong { font:400 38px var(--serif); }

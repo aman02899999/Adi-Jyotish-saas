@@ -6,6 +6,7 @@ import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { getBookingByIdInSupabase } from "@/lib/bookings-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { asText, readJsonBody } from "@/lib/request-body";
+import { sameEmail } from "@/lib/same-email";
 
 export const dynamic = "force-dynamic";
 
@@ -43,7 +44,7 @@ export async function POST(request: Request) {
     { status: 403 },
   );
   if (!booking) return ineligible;
-  if (booking.clientEmail !== member.email || booking.status !== "completed" || !booking.practitionerId) {
+  if (!sameEmail(booking.clientEmail, member.email) || booking.status !== "completed" || !booking.practitionerId) {
     return ineligible;
   }
 

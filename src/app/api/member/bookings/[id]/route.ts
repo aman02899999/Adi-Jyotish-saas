@@ -8,6 +8,7 @@ import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getBookingByIdInSupabase, updateBookingInSupabase } from "@/lib/bookings-supabase";
 import { recordAudit } from "@/lib/admin-auth";
 import type { BookingRecord } from "@/lib/booking-creation";
+import { sameEmail } from "@/lib/same-email";
 
 export const dynamic = "force-dynamic";
 
@@ -25,13 +26,10 @@ export async function PUT(_: Request, { params }: { params: Promise<{ id: string
     booking = snap.exists ? bookingFromDoc(snap) : null;
   }
   if (!booking) return Response.json({ error: "Booking not found." }, { status: 404 });
-  // Case-insensitive under cutover to match getBookingsByEmailInSupabase, which
-  // queries a citext column. Comparing exactly here would let a member see a
-  // booking in their list and then be told it does not exist when they cancel it.
-  const owns = cutover
-    ? booking.clientEmail.toLowerCase() === member.email.toLowerCase()
-    : booking.clientEmail === member.email;
-  if (!owns) return Response.json({ error: "Booking not found." }, { status: 404 });
+  // Case-insensitive, matching the booking list (a citext column under cutover). Comparing exactly
+  // here would let a member see a booking in their list and then be told it does not exist when
+  // they cancel it.
+  if (!sameEmail(booking.clientEmail, member.email)) return Response.json({ error: "Booking not found." }, { status: 404 });
   if (!["pending", "confirmed"].includes(booking.status)) {
     return Response.json({ error: "This consultation can no longer be cancelled." }, { status: 409 });
   }

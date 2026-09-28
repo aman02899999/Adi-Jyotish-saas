@@ -32,9 +32,21 @@ function centroid(points: Point[]) {
   return [x, y] as const;
 }
 
-function occupantsLabel(occupants: KundliHouseOccupant[]) {
-  return occupants.map((occupant) => `${GRAHA_SHORT[occupant.graha]}${occupant.isRetrograde ? "℞" : ""}`).join(" ");
+/**
+ * Planet labels in rows. On one line, three or more planets in a house ran past the edges of the
+ * narrow triangle cells on a phone ("Ma Ke", "Ju℞ Ra℞" overlapping the lines), so the corner
+ * triangles take two per row and the four larger diamond houses take three.
+ */
+function occupantRows(occupants: KundliHouseOccupant[], perRow: number) {
+  const labels = occupants.map((occupant) => `${GRAHA_SHORT[occupant.graha]}${occupant.isRetrograde ? "℞" : ""}`);
+  const rows: string[] = [];
+  for (let index = 0; index < labels.length; index += perRow) rows.push(labels.slice(index, index + perRow).join(" "));
+  return rows;
 }
+
+/** Houses 1, 4, 7 and 10 are the large central diamonds; the rest are corner triangles. */
+const DIAMOND_HOUSES = new Set([0, 3, 6, 9]);
+const ROW_HEIGHT = 15;
 
 export function KundliChartDiagram({ houses }: { houses: KundliHouse[] }) {
   return (
@@ -43,13 +55,20 @@ export function KundliChartDiagram({ houses }: { houses: KundliHouse[] }) {
         const house = houses[index];
         const points = polygon.map(([x, y]) => `${x},${y}`).join(" ");
         const [cx, cy] = centroid(polygon);
-        const occupantsText = occupantsLabel(house.occupants);
+        const rows = occupantRows(house.occupants, DIAMOND_HOUSES.has(index) ? 3 : 2);
+        // The rashi number sits above the planet rows; the whole block stays centred on the cell.
+        const blockTop = cy - ((rows.length - 1) * ROW_HEIGHT) / 2;
+        const lastRowY = blockTop + 10 + (rows.length - 1) * ROW_HEIGHT;
         return (
           <g key={house.house}>
             <polygon points={points} className={house.house === 1 ? "kundli-chart-house kundli-chart-house--lagna" : "kundli-chart-house"} />
-            <text x={cx} y={cy - 12} textAnchor="middle" className="kundli-chart-rashi">{house.rashiIndex + 1}</text>
-            {occupantsText && <text x={cx} y={cy + 12} textAnchor="middle" className="kundli-chart-planets">{occupantsText}</text>}
-            {house.house === 1 && <text x={cx} y={cy + 28} textAnchor="middle" className="kundli-chart-lagna-tag">Lagna</text>}
+            <text x={cx} y={blockTop - 12} textAnchor="middle" className="kundli-chart-rashi">{house.rashiIndex + 1}</text>
+            {rows.length > 0 && (
+              <text textAnchor="middle" className="kundli-chart-planets">
+                {rows.map((row, rowIndex) => <tspan key={rowIndex} x={cx} y={blockTop + 10 + rowIndex * ROW_HEIGHT}>{row}</tspan>)}
+              </text>
+            )}
+            {house.house === 1 && <text x={cx} y={(rows.length ? lastRowY : cy) + 16} textAnchor="middle" className="kundli-chart-lagna-tag">Lagna</text>}
           </g>
         );
       })}

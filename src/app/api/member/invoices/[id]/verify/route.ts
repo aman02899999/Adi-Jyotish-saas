@@ -3,6 +3,7 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 import { confirmInvoicePayment, getBookingForInvoice, getInvoiceById, getPaymentForOrder } from "@/lib/invoice-actions";
 import { readJsonBody } from "@/lib/request-body";
+import { sameEmail } from "@/lib/same-email";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const invoice = await getInvoiceById(id);
   if (!invoice) return Response.json({ error: "Invoice not found." }, { status: 404 });
-  if (invoice.memberId !== member.id && invoice.customerEmail !== member.email) {
+  if (invoice.memberId !== member.id && !sameEmail(invoice.customerEmail, member.email)) {
     return Response.json({ error: "Invoice not found." }, { status: 404 });
   }
 

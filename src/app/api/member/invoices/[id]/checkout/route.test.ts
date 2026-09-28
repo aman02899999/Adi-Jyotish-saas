@@ -98,6 +98,11 @@ describe("access", () => {
     h.invoice = { ...INVOICE, memberId: null, customerEmail: "asha@example.com" };
     expect((await post()).status).toBe(200);
   });
+
+  it("matches that email regardless of case, as an admin may have typed it", async () => {
+    h.invoice = { ...INVOICE, memberId: null, customerEmail: "Asha@Example.COM" };
+    expect((await post()).status).toBe(200);
+  });
 });
 
 describe("invoices that cannot be paid", () => {
