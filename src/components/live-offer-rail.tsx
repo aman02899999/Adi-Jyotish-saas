@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { Link } from "@/i18n/navigation";
+import { trackEvent } from "@/lib/track-event";
 import { ArrowRight, CalendarClock, Gift, MessageCircle, Moon, Sparkles, Star, Users } from "lucide-react";
 
 const ICONS = { chat: MessageCircle, muhurat: CalendarClock, moon: Moon, gift: Gift, invite: Users, chart: Sparkles, rating: Star };
@@ -44,7 +45,7 @@ export function LiveOfferRail({ items }: { items: RailItem[] }) {
     >
       <div className="shell offer-rail__inner">
         <span className="offer-rail__live"><i /> Live</span>
-        <Link href={item.href} className="offer-rail__item" key={index}>
+        <Link href={item.href} className="offer-rail__item" key={index} onClick={() => trackEvent("offer_rail_click", { item: item.icon, position: index % items.length })}>
           <span className="offer-rail__icon"><Icon size={16} /></span>
           <span className="offer-rail__text">{item.text}</span>
           <span className="offer-rail__cta">{item.cta} <ArrowRight size={14} /></span>

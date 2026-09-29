@@ -1,9 +1,10 @@
 "use client";
 
-import { useState } from "react";
+import { useRef, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { ArrowRight, CalendarDays, Clock3, Lock, LoaderCircle, MapPin, Sparkles } from "lucide-react";
 import { PlaceAutocomplete } from "@/components/place-autocomplete";
+import { trackEvent } from "@/lib/track-event";
 
 type Preview = {
   matchedPlace: string;
@@ -37,6 +38,13 @@ function FreeChartBody({ kundliPrice, currency, signedIn }: { kundliPrice: numbe
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState("");
   const [preview, setPreview] = useState<Preview | null>(null);
+  // The funnel, without any birth details: started the form, saw a chart, took a way forward.
+  const started = useRef(false);
+  function markStarted() {
+    if (started.current) return;
+    started.current = true;
+    trackEvent("free_chart_start");
+  }
 
   async function submit(event: React.FormEvent) {
     event.preventDefault();
@@ -46,8 +54,13 @@ function FreeChartBody({ kundliPrice, currency, signedIn }: { kundliPrice: numbe
     try {
       const response = await fetch("/api/free-chart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(details) });
       const data = await response.json().catch(() => ({}));
-      if (!response.ok) { setError(data.error || "Your chart could not be calculated. Please try again."); return; }
+      if (!response.ok) {
+        setError(data.error || "Your chart could not be calculated. Please try again.");
+        trackEvent("free_chart_error", { status: response.status });
+        return;
+      }
       setPreview(data as Preview);
+      trackEvent("generate_lead", { lead_source: "free_chart", time_known: !timeUnknown });
       try { sessionStorage.setItem(FREE_CHART_BIRTH_KEY, JSON.stringify({ ...details, timeUnknown })); } catch { /* private mode: prefill is only a convenience */ }
     } catch {
       setError("Check your connection and try again.");
@@ -80,8 +93,8 @@ function FreeChartBody({ kundliPrice, currency, signedIn }: { kundliPrice: numbe
           {LOCKED.map((item) => <li key={item}><Lock size={13} /> {item}</li>)}
         </ul>
         <div className="free-chart__actions">
-          <Link href="/kundli" className="button">Unlock my full Kundli · {currency === "INR" ? "₹" : `${currency} `}{kundliPrice} <ArrowRight size={16} /></Link>
-          {!signedIn && <Link href="/account?mode=register" className="button button--ghost">Save my chart free</Link>}
+          <Link href="/kundli" className="button" onClick={() => trackEvent("free_chart_unlock", { value: kundliPrice, currency })}>Unlock my full Kundli · {currency === "INR" ? "₹" : `${currency} `}{kundliPrice} <ArrowRight size={16} /></Link>
+          {!signedIn && <Link href="/account?mode=register" className="button button--ghost" onClick={() => trackEvent("free_chart_save")}>Save my chart free</Link>}
         </div>
         <button type="button" className="free-chart__again" onClick={() => setPreview(null)}>Try someone else&rsquo;s birth details</button>
       </div>
@@ -89,7 +102,7 @@ function FreeChartBody({ kundliPrice, currency, signedIn }: { kundliPrice: numbe
   }
 
   return (
-    <form className="free-chart" onSubmit={submit}>
+    <form className="free-chart" onSubmit={submit} onFocus={markStarted}>
       <p className="free-chart__badge"><Sparkles size={13} /> Free · about 10 seconds · no sign-up</p>
       <h2>See your birth chart now</h2>
       <p className="free-chart__lead">Real planetary positions for the moment you were born: your Lagna, Moon sign, nakshatra and the dasha you are in today.</p>

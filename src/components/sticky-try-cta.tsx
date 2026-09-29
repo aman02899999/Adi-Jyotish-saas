@@ -2,6 +2,7 @@
 
 import { useEffect, useState } from "react";
 import { ArrowUp, Sparkles } from "lucide-react";
+import { trackEvent } from "@/lib/track-event";
 
 /**
  * Keeps the homepage's first action one tap away once the visitor has scrolled past it: a slim bar
@@ -33,6 +34,7 @@ export function StickyTryCta({ targetId = "free-chart" }: { targetId?: string })
   function goToForm() {
     const target = document.getElementById(targetId);
     if (!target) return;
+    trackEvent("sticky_cta_click");
     target.scrollIntoView({ behavior: window.matchMedia("(prefers-reduced-motion: reduce)").matches ? "auto" : "smooth", block: "center" });
     target.querySelector<HTMLInputElement>("input")?.focus({ preventScroll: true });
   }
