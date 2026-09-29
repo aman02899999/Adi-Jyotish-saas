@@ -1,9 +1,9 @@
-name: Scheduled checks
+name: Uptime check
 
+# Manual only (Actions tab -> Uptime check -> Run workflow). It used to run every 15 minutes, which
+# is about 96 runs a day: billable GitHub Actions minutes on a private repo, and four live page
+# loads each time on the hosting plan. Run it by hand after a deploy instead.
 on:
-  schedule:
-    # Every 15 minutes.
-    - cron: "*/15 * * * *"
   workflow_dispatch: {}
 
 jobs:

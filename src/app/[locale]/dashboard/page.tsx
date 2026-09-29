@@ -15,8 +15,7 @@ import {
 import { MemberAppShell } from "@/components/member-app-shell";
 import { CosmicProfileShareCard } from "@/components/cosmic-profile-share-card";
 import { KundliChartDiagram, rashiName } from "@/components/kundli-chart-diagram";
-import { db, withIndexFallback } from "@/lib/firestore";
-import { bookingFromDoc } from "@/app/api/bookings/route";
+import { getNextMemberBooking } from "@/lib/member-bookings";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getPublishedServices } from "@/lib/services";
 import { getCosmicWeather } from "@/lib/transit-alerts";
@@ -47,21 +46,15 @@ function buildDashboardKundli(member: { name: string; birthDate: string | null; 
 export default async function DashboardPage() {
   const member = await getCurrentMember();
   if (!member) return null;
-  const [services, upcomingSnap, weather, streak] = await Promise.all([
+  const [services, nextBooking, weather, streak] = await Promise.all([
     getPublishedServices(),
-    // Falls back to no "next session" card (not a page crash) if the (clientEmail, scheduledAt)
-    // composite index isn't built yet.
-    withIndexFallback(
-      () => db.collection("bookings").where("clientEmail", "==", member.email).where("scheduledAt", ">", new Date()).orderBy("scheduledAt", "asc").limit(1).get(),
-      { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
-    ),
+    getNextMemberBooking(member.email),
     getCosmicWeather(member, member.id),
     recordDailyVisit(member.id),
   ]);
   const firstName = member.name.split(" ")[0];
   const location = member.birthPlace?.split(",")[0] || "Your location";
   const today = new Date().toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric" });
-  const nextBooking = upcomingSnap.docs[0] ? bookingFromDoc(upcomingSnap.docs[0]) : undefined;
   const kundli = buildDashboardKundli(member);
   const moon = kundli?.chart.positions.find((position) => position.graha === "moon");
   const sun = kundli?.chart.positions.find((position) => position.graha === "sun");
@@ -98,7 +91,7 @@ export default async function DashboardPage() {
 
       <div className="cosmic-grid">
         <article className="glass-card kundli-card">
-          <div className="card-heading"><div><p>Birth chart <span className="mini-tag">Lahiri</span></p><h2>Kundli</h2></div><button aria-label="More options"><MoreHorizontal size={19} /></button></div>
+          <div className="card-heading"><div><p>Birth chart <span className="mini-tag">Lahiri</span></p><h2>Kundli</h2></div><Link className="card-heading__action" href="/dashboard/kundli" aria-label="Open full Kundli" title="Open full Kundli"><MoreHorizontal size={19} /></Link></div>
           {kundli ? (
             <>
               <div className="kundli-art">

@@ -1,6 +1,7 @@
 import "server-only";
 
 import { generateReadingAnswer, markReadingPaidWithoutCharge, payReadingFromWallet, type AiReading } from "@/lib/ai-readings";
+import { liveReadingsUnavailable } from "@/lib/gemini";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { quoteWalletPayment } from "@/lib/wallet";
@@ -39,6 +40,13 @@ export type WalletShortfall = {
  */
 export async function settleReadingFromWallet(member: MemberIdentity, reading: AiReading): Promise<Response> {
   const memberId = member.id;
+
+  // Kundli and Varshphal are computed locally; every other type needs Gemini, so refuse before the
+  // wallet is debited rather than charging for a reading that cannot be produced.
+  if (reading.readingType !== "kundli" && reading.readingType !== "varshphal") {
+    const unavailable = await liveReadingsUnavailable();
+    if (unavailable) return unavailable;
+  }
 
   // A QA bypass account skips the charge entirely and goes straight to the answer, so the whole
   // product can be walked end to end without a card or a funded wallet.

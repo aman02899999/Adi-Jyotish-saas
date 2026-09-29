@@ -2,6 +2,7 @@ import { attachRazorpayOrder, CartValidationError, createPendingOrder, GEMSTONE_
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -27,7 +28,7 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("gemstone-order", `member:${member.id}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as CheckoutPayload;
+  const body = (await readJsonBody(request)) as CheckoutPayload;
   // Per-line quantity is capped in priceCart, but the number of distinct lines wasn't — an
   // unbounded lines array would still fan out one Firestore read per line inside a per-member
   // 5/10min-throttled request, a cheap resource-exhaustion amplifier. No real cart needs more than

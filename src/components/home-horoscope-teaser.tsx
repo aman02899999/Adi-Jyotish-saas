@@ -59,7 +59,7 @@ export function HomeHoroscopeTeaser({
 
   return (
     <div className="horoscope-teaser">
-      <div className="horoscope-teaser__signs" role="tablist" aria-label="Choose your zodiac sign">
+      <div className="horoscope-teaser__signs" role="group" aria-label="Choose your zodiac sign">
         {signs.map((entry) => (
           <button key={entry.key} type="button" className={entry.key === sign ? "active" : ""} onClick={() => pickSign(entry.key)} aria-pressed={entry.key === sign}>
             <span>{entry.symbol}</span>
@@ -69,7 +69,7 @@ export function HomeHoroscopeTeaser({
       </div>
 
       <div className="horoscope-teaser__panel">
-        <div className="horoscope-teaser__tabs" role="tablist" aria-label="Choose a time period">
+        <div className="horoscope-teaser__tabs" role="group" aria-label="Choose a time period">
           {(Object.keys(PERIOD_LABELS) as Period[]).map((key) => (
             <button key={key} type="button" className={key === period ? "active" : ""} onClick={() => pickPeriod(key)} aria-pressed={key === period}>
               {PERIOD_LABELS[key]}

@@ -1,8 +1,10 @@
 import { AI_READING_CURRENCY, AI_VASTU_READING_PRICE, attachRazorpayOrder, createPendingVastuReading } from "@/lib/ai-readings";
+import { liveReadingsUnavailable } from "@/lib/gemini";
 import { getCurrentMember } from "@/lib/member-auth";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,13 +16,15 @@ type CreatePayload = {
 export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
+  const unavailable = await liveReadingsUnavailable();
+  if (unavailable) return unavailable;
 
   const throttle = await checkRateLimit("ai-vastu-reading-create", `member:${member.id}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as CreatePayload;
-  const clientName = body.clientName?.trim().slice(0, 120) ?? "";
-  const question = body.question?.trim().slice(0, 800) ?? "";
+  const body = (await readJsonBody(request)) as CreatePayload;
+  const clientName = asText(body.clientName)?.trim().slice(0, 120) ?? "";
+  const question = asText(body.question)?.trim().slice(0, 800) ?? "";
 
   if (!clientName) return Response.json({ error: "Please share your name." }, { status: 400 });
   if (question.length < 15) return Response.json({ error: "Please describe your home/office layout and concern in a bit more detail." }, { status: 400 });

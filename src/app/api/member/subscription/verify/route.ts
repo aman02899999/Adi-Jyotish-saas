@@ -1,5 +1,6 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { verifySubscriptionCheckout } from "@/lib/subscriptions";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Sign in required." }, { status: 401 });
 
-  const body = (await request.json()) as VerifyPayload;
+  const body = (await readJsonBody(request)) as VerifyPayload;
   const subscriptionId = body.razorpay_subscription_id?.trim();
   const paymentId = body.razorpay_payment_id?.trim();
   const signature = body.razorpay_signature?.trim();

@@ -5,6 +5,7 @@ import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
 import { getAllPersonasAdmin } from "@/lib/ai-personas";
 import { isGeminiConfigured } from "@/lib/gemini";
+import { freeAiReadingsEnabled } from "@/lib/free-ai";
 
 export const dynamic = "force-dynamic";
 
@@ -26,7 +27,7 @@ export default async function AdminAiPersonasPage() {
           </div>
         )}
         <AdminGeminiHealth />
-        <AdminAiPersonas initialPersonas={personas} />
+        <AdminAiPersonas initialPersonas={personas} freeReadingsEnabled={freeAiReadingsEnabled()} />
       </div>
     </AdminShell>
   );

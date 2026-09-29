@@ -108,6 +108,14 @@ vi.mock("@/lib/razorpay-webhook-supabase", () => ({
   syncMemberPlanLabelInSupabase: async () => {},
 }));
 
+const settle = vi.hoisted(() => ({ calls: [] as Array<{ id: string; notes?: Record<string, string> }> }));
+vi.mock("@/lib/order-reconciliation", () => ({
+  settleUnconfirmedCapture: async (payment: { id: string; notes?: Record<string, string> }) => {
+    settle.calls.push(payment);
+    return null;
+  },
+}));
+
 import { POST } from "./route";
 
 function sign(body: string) {
@@ -283,5 +291,23 @@ describe("event dispatch", () => {
     const body = JSON.stringify({ event: "refund.processed", payload: {} });
     const response = await signed(body, "evt_noentity");
     expect(response.status).toBe(200);
+  });
+});
+
+describe("payments the browser never confirmed", () => {
+  const captured = (id: string, notes: Record<string, string>) =>
+    JSON.stringify({ event: "payment.captured", payload: { payment: { entity: { id, order_id: `order_${id}`, status: "captured", amount: 19900, notes } } } });
+
+  beforeEach(() => { settle.calls.length = 0; });
+
+  it("settles a reading paid by a member who closed the tab before it was confirmed", async () => {
+    const response = await signed(captured("pay_reading", { memberId: "m1", readingId: "r1" }), "evt_reading");
+    expect(response.status).toBe(200);
+    expect(settle.calls.map((payment) => payment.id)).toEqual(["pay_reading"]);
+  });
+
+  it("does not also treat a wallet top-up as some other purchase", async () => {
+    await signed(captured("pay_topup", { memberId: "m1", purpose: "wallet_recharge" }), "evt_topup");
+    expect(settle.calls).toHaveLength(0);
   });
 });

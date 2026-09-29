@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { deletePractitionerAdmin, PractitionerAdminError, updatePractitionerAdmin } from "@/lib/scheduling";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!hasAdminPermission(admin, "practitioners")) return Response.json({ error: "Practitioners permission required." }, { status: 403 });
 
   const { id } = await params;
-  const body = (await request.json()) as UpdatePayload;
+  const body = (await readJsonBody(request)) as UpdatePayload;
   try {
     const updated = await updatePractitionerAdmin(id, body);
     await recordAudit(admin, "practitioner.updated", "practitioner", updated.id, { name: updated.name, active: updated.active });

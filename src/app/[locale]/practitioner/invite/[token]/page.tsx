@@ -1,17 +1,16 @@
 import { Link } from "@/i18n/navigation";
 import { ArrowLeft, ShieldCheck } from "lucide-react";
-import { db } from "@/lib/firestore";
 import { PractitionerInviteForm } from "@/components/practitioner-invite-form";
 import { BrandMark } from "@/components/brand-mark";
 import { findPractitionerInviteByToken } from "@/lib/practitioner-invites";
+import { getPractitionerById } from "@/lib/scheduling";
 
 export const dynamic = "force-dynamic";
 
 export default async function PractitionerInvitePage({ params }: { params: Promise<{ token: string }> }) {
   const { token } = await params;
   const invite = await findPractitionerInviteByToken(token);
-  const practitionerSnap = invite ? await db.collection("practitioners").doc(invite.practitionerSlug).get() : null;
-  const practitioner = practitionerSnap?.exists ? (practitionerSnap.data() as { name: string; email: string }) : null;
+  const practitioner = invite ? await getPractitionerById(invite.practitionerSlug) : null;
 
   return (
     <main className="invite-page">

@@ -1,12 +1,13 @@
 import { notFound } from "next/navigation";
 import { getLocale } from "next-intl/server";
 import { redirect } from "@/i18n/navigation";
-import { db } from "@/lib/firestore";
 import { ChatRoom } from "@/components/chat-room";
 import { MemberAppShell } from "@/components/member-app-shell";
 import { ChatSessionNotFoundError, getSessionOr404, listSessionMessages } from "@/lib/chat";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getActiveHold, getOrCreateWallet } from "@/lib/wallet";
+import { getPractitionerAttribution } from "@/lib/practitioner-attribution";
+import { AiPersonaBadge } from "@/components/ai-persona-badge";
 
 export const dynamic = "force-dynamic";
 
@@ -24,18 +25,17 @@ export default async function MemberChatPage({ params }: { params: Promise<{ id:
   }
   if (session.memberId !== member.id) notFound();
 
-  const [practitionerSnap, messages, hold, wallet] = await Promise.all([
-    db.collection("practitioners").doc(session.practitionerId).get(),
+  const [practitioner, messages, hold, wallet] = await Promise.all([
+    getPractitionerAttribution(session.practitionerId),
     listSessionMessages(id),
     getActiveHold(session.memberId, session.walletHoldId),
     getOrCreateWallet(member.id),
   ]);
-  const practitioner = practitionerSnap.exists ? (practitionerSnap.data() as { name: string }) : null;
   const holdMinutes = session.pricingModel === "metered" && hold ? Math.max(1, Math.round(hold.amount / session.ratePerMinute)) : 1;
 
   return (
     <MemberAppShell member={member} active="Wallet">
-      <div className="consultation-heading billing-heading"><div><p>Instant chat</p><h1>{practitioner?.name ?? "Practitioner"}</h1><span>{session.pricingModel === "fixed" ? "One flat price for this session." : "Metered by the minute from your wallet balance."}</span></div></div>
+      <div className="consultation-heading billing-heading"><div><p>Instant chat</p><h1>{practitioner?.name ?? "Practitioner"}</h1>{practitioner?.isAiPowered && <AiPersonaBadge />}<span>{session.pricingModel === "fixed" ? "One flat price for this session." : "Metered by the minute from your wallet balance."}</span></div></div>
       <ChatRoom
         sessionId={session.id}
         initialMessages={messages.map((message) => ({ ...message, createdAt: message.createdAt.toISOString() }))}
@@ -47,6 +47,7 @@ export default async function MemberChatPage({ params }: { params: Promise<{ id:
         currency={wallet.currency}
         holdMinutes={holdMinutes}
         counterpartName={practitioner?.name ?? "Practitioner"}
+        counterpartIsAi={practitioner?.isAiPowered ?? false}
         viewerRole="member"
         senderName={member.name}
       />

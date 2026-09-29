@@ -8,6 +8,7 @@ import { DELETE_CONFIRMATION_PHRASE } from "@/lib/account-privacy";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { getCurrentMember, revokeMemberSession } from "@/lib/member-auth";
 import { getTwoFactorState, verifyTotpOrBackupCode, type TwoFactorAccount } from "@/lib/two-factor";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -41,9 +42,9 @@ export async function POST(request: Request) {
   const throttle = await checkAuthThrottle("member-delete-account", member.id, request);
   if (!throttle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(throttle.retryAfter) } });
 
-  const body = (await request.json().catch(() => ({}))) as { confirmation?: string; code?: string };
+  const body = (await readJsonBody(request)) as { confirmation?: string; code?: string };
 
-  if ((body.confirmation ?? "").trim() !== DELETE_CONFIRMATION_PHRASE) {
+  if ((asText(body.confirmation) ?? "").trim() !== DELETE_CONFIRMATION_PHRASE) {
     return Response.json({ error: `Type ${DELETE_CONFIRMATION_PHRASE} exactly to confirm.` }, { status: 400 });
   }
 

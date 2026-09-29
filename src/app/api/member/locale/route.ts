@@ -1,4 +1,5 @@
 import { getCurrentMember, setMemberLocale } from "@/lib/member-auth";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,8 +14,8 @@ export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ ok: true, stored: false });
 
-  const body = (await request.json()) as { locale?: string };
-  const locale = body.locale?.trim() ?? "";
+  const body = (await readJsonBody(request)) as { locale?: string };
+  const locale = asText(body.locale)?.trim() ?? "";
   const stored = await setMemberLocale(member.id, locale);
   if (!stored) return Response.json({ error: "That language is not available." }, { status: 400 });
   return Response.json({ ok: true, stored: true });

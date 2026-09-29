@@ -55,9 +55,11 @@ const CATEGORY_COPY: Record<string, { eyebrow: string; heading: string; emphasis
 
 const DEFAULT_COPY = {
   eyebrow: "The Jyotish guide collective",
-  heading: "Meet the person",
-  emphasis: "behind the reading.",
-  lead: "Choose a practitioner by method, language, lived experience, and the kind of conversation you need—not by a noisy popularity contest.",
+  // Not "Meet the person behind the reading": this list includes the AI astrologers, which are
+  // labelled as AI on every card and cannot be booked for a scheduled consultation.
+  heading: "Find the right guide",
+  emphasis: "for your reading.",
+  lead: "Choose an astrologer by method, language, experience, and the kind of conversation you need. AI guides are clearly marked, and every scheduled consultation is with a real astrologer.",
 };
 
 function copyFor(q: string | undefined) {
@@ -94,6 +96,7 @@ export default async function AstrologersPage({ searchParams }: { searchParams: 
     photoUrl: person.photoUrl,
     online: person.online,
     featured: person.featured,
+    isAiPowered: person.isAiPowered,
     rating: person.rating,
     reviewCount: person.reviewCount,
     chatRatePerMinute: person.chatRatePerMinute,

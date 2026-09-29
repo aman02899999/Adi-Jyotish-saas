@@ -5,6 +5,7 @@ import {
   camelToSnake as scriptCamelToSnake,
   dedupeByPk,
   knownColumns,
+  readDocs,
   SKIP_FIELDS,
   stripUnknownColumns,
   TABLES,
@@ -264,6 +265,88 @@ describeCopy("copy script against the real schema", () => {
     await query(`delete from public.gemstone_coupon_customer_usage where id = $1`, [
       "WELCOME10_asha@example.com",
     ]);
+  });
+
+  it("copies gift cards and their payment index, whose code lives only in the document id", async () => {
+    // gift-cards.ts keys giftCards by the code and giftCardPaymentIndex by the Razorpay payment id,
+    // and stores neither in the document body. Both columns are NOT NULL, so unless the copy fills
+    // them from the id, every gift card fails to copy at cutover.
+    const cardSpec = TABLES.find((s) => s.table === "gift_cards");
+    const indexSpec = TABLES.find((s) => s.table === "gift_card_payment_index");
+    if (!cardSpec || !indexSpec) throw new Error("gift card tables missing from TABLES");
+
+    const card = buildRow(cardSpec, null, {
+      id: "AJG-ITESTCPY",
+      data: () => ({ buyerId: null, buyerName: "Asha", amount: 1000, currency: "INR", recipientName: "Ravi", message: "", status: "unclaimed", redeemedBy: null, razorpayPaymentId: "pay_itestcopy", expiresAt: new Date() }),
+    });
+    const index = buildRow(indexSpec, null, { id: "pay_itestcopy", data: () => ({ code: "AJG-ITESTCPY", createdAt: new Date() }) });
+
+    await query(`delete from public.gift_cards where id = $1`, ["AJG-ITESTCPY"]);
+    await query(`delete from public.gift_card_payment_index where id = $1`, ["pay_itestcopy"]);
+    for (const [spec, row] of [[cardSpec, card], [indexSpec, index]] as const) {
+      const allowed = await withClient((client) => knownColumns(client, spec.table));
+      expect(await withClient((client) => upsert(client, spec, stripUnknownColumns([row], allowed).rows))).toBe(1);
+    }
+
+    const cardRow = await query(`select code, amount::int as amount from public.gift_cards where id = $1`, ["AJG-ITESTCPY"]);
+    expect(cardRow.rows[0]).toEqual({ code: "AJG-ITESTCPY", amount: 1000 });
+    const indexRow = await query(`select razorpay_payment_id, code from public.gift_card_payment_index where id = $1`, ["pay_itestcopy"]);
+    expect(indexRow.rows[0]).toEqual({ razorpay_payment_id: "pay_itestcopy", code: "AJG-ITESTCPY" });
+    await query(`delete from public.gift_cards where id = $1`, ["AJG-ITESTCPY"]);
+    await query(`delete from public.gift_card_payment_index where id = $1`, ["pay_itestcopy"]);
+  });
+
+  it("copies a numerology reading with its result, not just who it was for", async () => {
+    // Until 0015 the table had no columns for the numbers or narrative, and stripUnknownColumns
+    // dropped them from every copied reading.
+    const spec = TABLES.find((s) => s.table === "numerology_readings");
+    if (!spec) throw new Error("numerology_readings missing from TABLES");
+    const row = buildRow(spec, null, {
+      id: "itest-copy-numerology",
+      data: () => ({ memberId: null, name: "Asha", birthDate: "1990-01-01", lifePathNumber: 11, destinyNumber: 7, narrative: "A reading.", createdAt: new Date() }),
+    });
+
+    await query(`delete from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
+    const allowed = await withClient((client) => knownColumns(client, spec.table));
+    const { rows, dropped } = stripUnknownColumns([row], allowed);
+    expect([...dropped]).toEqual([]);
+    await withClient((client) => upsert(client, spec, rows));
+
+    const stored = await query(`select life_path_number, destiny_number, narrative from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
+    expect(stored.rows[0]).toEqual({ life_path_number: 11, destiny_number: 7, narrative: "A reading." });
+    await query(`delete from public.numerology_readings where id = $1`, ["itest-copy-numerology"]);
+  });
+
+  it("copies experiment results, whose parent document never exists in Firestore", async () => {
+    // experiments.ts writes only experiments/{key}/variants/{variant}. Firestore's get() does not
+    // return a parent that exists only through its subcollection, so without includeMissingDocs no
+    // experiments row is copied and every variant fails experiment_variants' foreign key.
+    const parentSpec = TABLES.find((s) => s.table === "experiments");
+    const variantSpec = TABLES.find((s) => s.table === "experiment_variants");
+    if (!parentSpec || !variantSpec) throw new Error("experiment tables missing from TABLES");
+    const KEY = "itest-copy-experiment";
+    const variant = { id: "control", data: () => ({ impressions: 40, conversions: 6 }) };
+    const firestore = {
+      collection: () => ({
+        get: async () => ({ docs: [] }),
+        listDocuments: async () => [{ id: KEY, collection: () => ({ get: async () => ({ docs: [variant] }) }) }],
+      }),
+      getAll: async (...refs: Array<{ id: string }>) => refs.map((ref) => ({ id: ref.id, exists: false, data: () => ({}) })),
+    };
+
+    await query(`delete from public.experiments where id = $1`, [KEY]);
+    for (const spec of [parentSpec, variantSpec]) {
+      const docs = await readDocs(firestore, spec);
+      const rows = docs.map(({ parentId, doc }) => buildRow(spec, parentId, doc));
+      const allowed = await withClient((client) => knownColumns(client, spec.table));
+      expect(await withClient((client) => upsert(client, spec, stripUnknownColumns(rows, allowed).rows))).toBe(1);
+    }
+    // Copying again is harmless, including for the id-only parent row.
+    expect(await withClient((client) => upsert(client, parentSpec, [{ id: KEY }]))).toBe(0);
+
+    const { rows } = await query(`select experiment_key, variant, impressions, conversions from public.experiment_variants where experiment_key = $1`, [KEY]);
+    expect(rows).toEqual([{ experiment_key: KEY, variant: "control", impressions: 40, conversions: 6 }]);
+    await query(`delete from public.experiments where id = $1`, [KEY]);
   });
 
   it("rejects a row with no value for its primary key", async () => {

@@ -26,7 +26,7 @@ export function TarotReadingForm({ member, price, currency, onlinePaymentsAvaila
   const [error, setError] = useState("");
   const [waiting, setWaiting] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
-  const { wallet, refresh: refreshWallet } = useWalletBalance();
+  const { wallet, refresh: refreshWallet } = useWalletBalance(Boolean(member));
   const [walletPaying, setWalletPaying] = useState(false);
 
   if (!member) {

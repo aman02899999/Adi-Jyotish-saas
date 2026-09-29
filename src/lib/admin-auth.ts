@@ -80,7 +80,10 @@ export function hasAdminPermission(admin: AdminIdentity | null, permission: Admi
   return Boolean(admin && admin.permissions.includes(permission));
 }
 
-export function normalizeEmail(email: string) {
+/** Accepts `unknown` because request bodies are cast, not checked: a non-string is treated as empty,
+ * which every caller's email validation then rejects, rather than throwing on `.trim()`. */
+export function normalizeEmail(email: unknown) {
+  if (typeof email !== "string") return "";
   return email.trim().toLowerCase().slice(0, 180);
 }
 

@@ -1,5 +1,6 @@
 import type { MetadataRoute } from "next";
 import { getActivePersonas } from "@/lib/ai-personas";
+import { isPersonaOffered } from "@/lib/free-ai";
 import { getAllPosts } from "@/lib/blog";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { getPublishedCustomPages } from "@/lib/custom-pages";
@@ -13,7 +14,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const updated = new Date();
   const people = await getMarketplacePractitioners();
   const posts = getAllPosts();
-  const [personas, customPages] = await Promise.all([getActivePersonas(), getPublishedCustomPages()]);
+  const [personas, customPages] = await Promise.all([getActivePersonas().then((rows) => rows.filter(isPersonaOffered)), getPublishedCustomPages()]);
   return [
     { url: new URL("/", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 1 },
     { url: new URL("/astrologers", site).toString(), lastModified: updated, changeFrequency: "daily", priority: 0.95 },

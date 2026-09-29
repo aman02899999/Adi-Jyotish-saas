@@ -6,18 +6,20 @@ import { useTranslations } from "next-intl";
 import { ArrowUpRight, Menu } from "lucide-react";
 import { LanguageSwitcher } from "@/components/language-switcher";
 
+// `primary` items are the ones the desktop bar has room for; the mobile menu lists everything.
+// Eleven links in one bar squeezed the sign-in link and the main button onto several lines.
 const NAV_ITEMS = [
-  { href: "/gemstones", key: "gemstones" as const },
-  { href: "/astrologers", key: "practitioners" as const },
-  { href: "/#services", key: "readings" as const },
-  { href: "/#method", key: "ourMethod" as const },
-  { href: "/ask", key: "askLive" as const },
-  { href: "/palm-reading", key: "palmReading" as const },
-  { href: "/tarot-reading", key: "tarotReading" as const },
-  { href: "/horoscope", key: "horoscope" as const },
-  { href: "/blog", key: "journal" as const },
-  { href: "/pricing", key: "pricing" as const },
-  { href: "/book", key: "book" as const },
+  { href: "/astrologers", key: "practitioners" as const, primary: true },
+  { href: "/#services", key: "readings" as const, primary: true },
+  { href: "/ask", key: "askLive" as const, primary: true },
+  { href: "/horoscope", key: "horoscope" as const, primary: true },
+  { href: "/gemstones", key: "gemstones" as const, primary: true },
+  { href: "/pricing", key: "pricing" as const, primary: true },
+  { href: "/palm-reading", key: "palmReading" as const, primary: false },
+  { href: "/tarot-reading", key: "tarotReading" as const, primary: false },
+  { href: "/#method", key: "ourMethod" as const, primary: false },
+  { href: "/blog", key: "journal" as const, primary: false },
+  { href: "/book", key: "book" as const, primary: false },
 ];
 
 function isNavItemActive(pathname: string, href: string) {
@@ -68,7 +70,7 @@ export function SiteNav() {
   return (
     <>
       <nav className="desktop-nav" aria-label="Primary navigation">
-        {NAV_ITEMS.map((item) => (
+        {NAV_ITEMS.filter((item) => item.primary).map((item) => (
           <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{t(item.key)}</Link>
         ))}
       </nav>

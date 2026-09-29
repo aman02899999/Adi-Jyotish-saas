@@ -17,6 +17,7 @@ import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { listBookingsInSupabase } from "@/lib/bookings-supabase";
 import { getServiceByIdInSupabase } from "@/lib/services-supabase";
 import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -89,15 +90,15 @@ export async function GET() {
 }
 
 export async function POST(request: Request) {
-  const body = (await request.json()) as BookingPayload;
+  const body = (await readJsonBody(request)) as BookingPayload;
   const [member, settings] = await Promise.all([getCurrentMember(), getStudioSettings()]);
   if (!member) return Response.json({ error: "Sign in to book a consultation." }, { status: 401 });
 
   const throttle = await checkRateLimit("booking-create", `member:${member.id}`, 8, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
-  const serviceId = body.serviceId?.trim() ?? "";
-  const practitionerId = body.practitionerId?.trim() ?? "";
-  const bookingDate = body.bookingDate?.trim() ?? "";
+  const serviceId = asText(body.serviceId)?.trim() ?? "";
+  const practitionerId = asText(body.practitionerId)?.trim() ?? "";
+  const bookingDate = asText(body.bookingDate)?.trim() ?? "";
   // The booking-for-family-member picker (booking-flow.tsx) submits the family member's name here
   // — falling back to the account owner's name keeps this backward compatible for the "myself"
   // case and any older client that never sends the field. The account's own email is always used
@@ -130,7 +131,7 @@ export async function POST(request: Request) {
 
   await seedServices();
   let service: { id: string; title: string; price: number; duration: number; active: boolean } | null;
-  let practitioner: { id: string; name: string; active: boolean } | null;
+  let practitioner: { id: string; name: string; active: boolean; isAiPowered?: boolean } | null;
   if (isSupabaseCutoverActive()) {
     const [serviceRow, practitionerRow] = await Promise.all([
       getServiceByIdInSupabase(serviceId),
@@ -146,10 +147,15 @@ export async function POST(request: Request) {
       db.collection("practitioners").doc(practitionerId).get(),
     ]);
     service = serviceSnap.exists ? { id: serviceSnap.id, ...(serviceSnap.data() as { title: string; price: number; duration: number; active: boolean }) } : null;
-    practitioner = practitionerSnap.exists ? { id: practitionerSnap.id, ...(practitionerSnap.data() as { name: string; active: boolean }) } : null;
+    practitioner = practitionerSnap.exists ? { id: practitionerSnap.id, ...(practitionerSnap.data() as { name: string; active: boolean; isAiPowered?: boolean }) } : null;
   }
   if (!service || !service.active) return Response.json({ error: "This reading is not currently available." }, { status: 404 });
   if (!practitioner || !practitioner.active) return Response.json({ error: "This astrologer is not currently available." }, { status: 404 });
+  // Checked explicitly as well as by the slot lookup below, so the reason is stated rather than
+  // surfacing as "this time is no longer available". See getAvailableSlots.
+  if (practitioner.isAiPowered) {
+    return Response.json({ error: `${practitioner.name} is an AI astrologer available by instant chat, not for scheduled consultations. Choose a human astrologer to book a time.` }, { status: 409 });
+  }
   const available = await validateAvailableSlot({ date: bookingDate, duration: service.duration, practitionerId, startsAt: scheduledAt });
   if (!available) return Response.json({ error: "This time is no longer available. Choose another open slot." }, { status: 409 });
 

@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { CouponError, createCoupon, getAllCouponsAdmin, type CouponPayload } from "@/lib/gemstone-coupons";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "gemstones")) return Response.json({ error: "Gemstones permission required." }, { status: 403 });
 
-  const body = (await request.json()) as CouponPayload;
+  const body = (await readJsonBody(request)) as CouponPayload;
   try {
     const created = await createCoupon(body);
     await recordAudit(admin, "gemstone_coupon.created", "gemstone_coupon", created.id, { code: created.code });

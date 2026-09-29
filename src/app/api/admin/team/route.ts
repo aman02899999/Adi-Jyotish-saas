@@ -3,23 +3,18 @@ import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
 import { createAdminInvite, listPendingAdminInvites } from "@/lib/admin-invites";
 import { roleSlugExists } from "@/lib/admin-roles";
-import { adminUserExistsWithEmailInSupabase, listAdminUsersInSupabase, type AdminUserRow } from "@/lib/admin-team-supabase";
+import { adminUserExistsWithEmailInSupabase } from "@/lib/admin-team-supabase";
+import { listAdminUsersForAdmin } from "@/lib/admin-directory";
 import { findGoTrueUserByEmail } from "@/lib/gotrue-admin";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
-type AdminUserDoc = { name: string; email: string; role: string; active: boolean; lastLoginAt?: FirebaseFirestore.Timestamp | null; createdAt?: FirebaseFirestore.Timestamp };
-
-async function firestoreAdminUsers(): Promise<AdminUserRow[]> {
-  const usersSnap = await db.collection("adminUsers").get();
-  return usersSnap.docs
-    .map((doc) => {
-      const data = doc.data() as AdminUserDoc;
-      return { id: doc.id, name: data.name, email: data.email, role: data.role, active: data.active, lastLoginAt: data.lastLoginAt ? data.lastLoginAt.toDate() : null, createdAt: data.createdAt ? data.createdAt.toDate() : new Date() };
-    })
-    .sort((a, b) => a.name.localeCompare(b.name));
-}
+/** Shown when the address already signs in to the site but is not on the team, which usually means
+ * a customer account. Such an account is never turned into an administrator, because sign-up does
+ * not prove the person controls the address; the owner has to invite a different one. */
+const EXISTING_SIGN_IN = "This email already has an account on the site (usually a customer account), so it cannot be invited. Invite a different address, such as a work email.";
 
 export async function GET() {
   const admin = await getCurrentAdmin();
@@ -27,7 +22,7 @@ export async function GET() {
   if (!hasAdminPermission(admin, "team")) return Response.json({ error: "Owner access required." }, { status: 403 });
 
   const [users, invites] = await Promise.all([
-    isSupabaseCutoverActive() ? listAdminUsersInSupabase() : firestoreAdminUsers(),
+    listAdminUsersForAdmin(),
     listPendingAdminInvites(),
   ]);
 
@@ -39,11 +34,11 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "team")) return Response.json({ error: "Owner access required." }, { status: 403 });
 
-  const body = await request.json() as { email?: string; role?: string };
-  const email = normalizeEmail(body.email ?? "");
-  const requestedRole = body.role ?? "";
-  const role = requestedRole !== "owner" && await roleSlugExists(requestedRole) ? requestedRole : "support";
+  const body = await readJsonBody(request) as { email?: unknown; role?: unknown };
+  const email = normalizeEmail(typeof body.email === "string" ? body.email : "");
   if (!/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "Enter a valid team email." }, { status: 400 });
+  const requestedRole = typeof body.role === "string" ? body.role : "";
+  const role = requestedRole !== "owner" && await roleSlugExists(requestedRole) ? requestedRole : "support";
 
   const alreadyAnAdmin = isSupabaseCutoverActive()
     ? await adminUserExistsWithEmailInSupabase(email)
@@ -53,13 +48,11 @@ export async function POST(request: Request) {
   // An auth account that exists but has no admin row means the address is already taken
   // by someone else's sign-in; inviting it would hand an existing credential into the team.
   if (isSupabaseCutoverActive()) {
-    if (await findGoTrueUserByEmail(email)) {
-      return Response.json({ error: "This person already has an administrator account." }, { status: 409 });
-    }
+    if (await findGoTrueUserByEmail(email)) return Response.json({ error: EXISTING_SIGN_IN }, { status: 409 });
   } else {
     try {
       await getAuth().getUserByEmail(email);
-      return Response.json({ error: "This person already has an administrator account." }, { status: 409 });
+      return Response.json({ error: EXISTING_SIGN_IN }, { status: 409 });
     } catch {
       // No existing Firebase Auth user for this email — safe to invite.
     }

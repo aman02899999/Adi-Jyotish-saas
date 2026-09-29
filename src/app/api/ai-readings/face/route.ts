@@ -1,4 +1,5 @@
 import { attachRazorpayOrder, AI_FACE_READING_PRICE, AI_READING_CURRENCY, createPendingFaceReading, reserveReadingId, uploadFaceImage } from "@/lib/ai-readings";
+import { liveReadingsUnavailable } from "@/lib/gemini";
 import { isStorageConfigured } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
@@ -31,6 +32,8 @@ async function readImageFile(file: FormDataEntryValue | null): Promise<{ buffer:
 export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
+  const unavailable = await liveReadingsUnavailable();
+  if (unavailable) return unavailable;
 
   const throttle = await checkRateLimit("ai-face-reading-create", `member:${member.id}:ip:${requestIp(request)}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);

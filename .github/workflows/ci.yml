@@ -65,6 +65,37 @@ jobs:
           path: playwright-report/
           retention-days: 7
 
+  # Firestore is what production runs on, yet every Firestore test in build-and-test mocks it —
+  # and a mock cannot tell you whether a real query returns what the code assumes. Suites named
+  # *.firestore.test.ts run here against the emulator and self-skip everywhere else.
+  # REQUIRE_FIRESTORE_EMULATOR makes a failed emulator start a red job rather than a quietly
+  # skipped one.
+  firestore:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      - uses: actions/setup-java@v4
+        with:
+          distribution: temurin
+          java-version: "21"
+
+      - name: Install dependencies
+        run: npm ci
+
+      - name: Run Firestore suites against the emulator
+        # emulators:exec sets FIRESTORE_EMULATOR_HOST for the command it wraps.
+        run: npx firebase emulators:exec --project=demo-jyotish --only firestore "npx vitest run --no-file-parallelism firestore.test"
+        env:
+          GCLOUD_PROJECT: demo-jyotish
+          GOOGLE_CLOUD_PROJECT: demo-jyotish
+          REQUIRE_FIRESTORE_EMULATOR: "true"
+
   # The 35 integration suites gate on SUPABASE_DB_URL && SUPABASE_CUTOVER === "true".
   # Without a database they self-skip, so build-and-test above proves only the Firestore
   # paths — 443 tests, including every ported money path, never executed anywhere. This job

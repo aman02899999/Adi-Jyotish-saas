@@ -244,6 +244,18 @@ export async function getBookingsByEmailInSupabase(email: string): Promise<Booki
   );
 }
 
+/** The member's next booking that is not cancelled, or null. */
+export async function getNextBookingByEmailInSupabase(email: string, now: Date): Promise<BookingRow | null> {
+  const rows = await queryModels<BookingRow>(
+    `select ${BOOKING_COLUMNS} from public.bookings
+      where client_email = $1 and scheduled_at > $2 and status <> 'cancelled'
+      order by scheduled_at asc limit 1`,
+    [email, now],
+    BOOKING_NUMERIC,
+  );
+  return rows[0] ?? null;
+}
+
 /**
  * Bookings created on or after `from`, newest first, for the CSV export.
  *
@@ -265,6 +277,8 @@ export type BookingPatch = {
   scheduledAt?: Date;
   /** `undefined` leaves notes alone; `null` clears them. */
   notes?: string | null;
+  /** Moves the booking to another practitioner. The caller has checked they can take it. */
+  practitioner?: { id: string; name: string };
 };
 
 /**
@@ -281,20 +295,20 @@ export type BookingPatch = {
  */
 export async function updateBookingInSupabase(id: string, patch: BookingPatch): Promise<BookingRow | null> {
   return withTransaction(async (client) => {
-    const existing = await client.query<{ practitioner_id: string; service_duration: number }>(
-      `select practitioner_id, service_duration from public.bookings where id = $1`,
+    const existing = await client.query<{ practitioner_id: string; service_duration: number; scheduled_at: Date }>(
+      `select practitioner_id, service_duration, scheduled_at from public.bookings where id = $1`,
       [id],
     );
     const row = existing.rows[0];
     if (!row) return null;
-    // Nothing ever reassigns a booking to another practitioner, so reading this
-    // before the lock is safe.
-    const practitionerId = row.practitioner_id;
+    // The slot is checked against whoever will hold the booking, at the time it will be held.
+    const practitionerId = patch.practitioner?.id ?? row.practitioner_id;
+    const startsAt = patch.scheduledAt ?? new Date(row.scheduled_at);
     const duration = Number(row.service_duration ?? 0);
 
-    if (patch.scheduledAt) {
+    if (patch.scheduledAt || (patch.practitioner && patch.practitioner.id !== row.practitioner_id)) {
       await client.query(`select pg_advisory_xact_lock(hashtextextended($1, 0))`, [`booking:${practitionerId}`]);
-      const endsAt = new Date(patch.scheduledAt.getTime() + duration * 60000);
+      const endsAt = new Date(startsAt.getTime() + duration * 60000);
       const conflict = await client.query<{ id: string }>(
         `select b.id
            from public.bookings b
@@ -304,7 +318,7 @@ export async function updateBookingInSupabase(id: string, patch: BookingPatch): 
             and b.scheduled_at < $3
             and b.scheduled_at + make_interval(mins => b.service_duration) > $4
           limit 1`,
-        [practitionerId, id, endsAt, patch.scheduledAt],
+        [practitionerId, id, endsAt, startsAt],
       );
       if (conflict.rows.length) throw new BookingSlotConflictError();
     }
@@ -323,6 +337,10 @@ export async function updateBookingInSupabase(id: string, patch: BookingPatch): 
       params.push(patch.notes);
       sets.push(`notes = $${params.length}`);
     }
+    if (patch.practitioner) {
+      params.push(patch.practitioner.id, patch.practitioner.name);
+      sets.push(`practitioner_id = $${params.length - 1}`, `practitioner_name = $${params.length}`);
+    }
 
     const updated = await client.query<BookingSqlRow>(
       `update public.bookings set ${sets.join(", ")} where id = $1 returning ${BOOKING_COLUMNS}`,
@@ -332,6 +350,30 @@ export async function updateBookingInSupabase(id: string, patch: BookingPatch): 
     if (!updatedRow) return null;
     return bookingRowFromSql(updatedRow);
   });
+}
+
+/**
+ * A member's completed bookings with one practitioner that have no review yet — the choices the
+ * profile page's review form offers. Any review counts, hidden or not, as it did on Firestore: a
+ * booking gets one review, and moderation does not reopen it.
+ */
+export async function getUnreviewedCompletedBookingsInSupabase(
+  memberEmail: string,
+  practitionerId: string,
+): Promise<Array<{ id: string; serviceTitle: string; scheduledAt: Date }>> {
+  const { rows } = await query<{ id: string; service_title: string; scheduled_at: Date }>(
+    `select b.id, b.service_title, b.scheduled_at
+       from public.bookings b
+      where b.client_email = $1
+        and b.practitioner_id = $2
+        and b.status = 'completed'
+        and not exists (
+          select 1 from public.practitioner_reviews r where r.booking_id = b.id or r.id = b.id
+        )
+      order by b.scheduled_at desc`,
+    [memberEmail, practitionerId],
+  );
+  return rows.map((row) => ({ id: row.id, serviceTitle: row.service_title, scheduledAt: new Date(row.scheduled_at) }));
 }
 
 /**

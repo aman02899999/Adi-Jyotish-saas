@@ -10,7 +10,21 @@ import { ensureGlobalUnlockListener, isSoundUnlocked, onSoundUnlocked, unlockSou
  * the visitor has interacted with the page at all this session — browsers block unmuted autoplay
  * before that unconditionally, so starting muted is the only way autoplay is reliable on first
  * load. The visible tap-to-unmute button is both the manual override and the fallback for a
- * visitor who scrolls straight to a video before clicking anything else. */
+ * visitor who scrolls straight to a video before clicking anything else.
+ *
+ * Loading: nothing but the poster is fetched until the video is near the screen AND the page has
+ * finished loading, and never on Data Saver or a 2G/3G connection. The homepage carries two of
+ * these (about 4 MB together); fetched eagerly they competed with the page's own text, images and
+ * scripts, pushing the main content past 11 seconds on a mid-range phone, and every visit spent
+ * that bandwidth on the hosting plan whether or not anyone scrolled down to the second one. */
+
+type NetworkInformationLike = { saveData?: boolean; effectiveType?: string };
+
+/** Data Saver, or a connection too slow for a decorative video to be worth its megabytes. */
+function prefersPosterOnly() {
+  const connection = (navigator as Navigator & { connection?: NetworkInformationLike }).connection;
+  return Boolean(connection?.saveData) || /(^|slow-)2g|3g/.test(connection?.effectiveType ?? "");
+}
 export function HeroVideo({
   posterSrc,
   mp4Src,
@@ -30,6 +44,37 @@ export function HeroVideo({
 }) {
   const videoRef = useRef<HTMLVideoElement>(null);
   const [muted, setMuted] = useState(() => !isSoundUnlocked());
+  // The <source> elements are only rendered once this is true, so the browser has nothing to
+  // download before then.
+  const [shouldLoad, setShouldLoad] = useState(false);
+
+  useEffect(() => {
+    const video = videoRef.current;
+    if (!video || prefersPosterOnly()) return;
+    let cancelled = false;
+    const start = () => { if (!cancelled) setShouldLoad(true); };
+    const whenPageLoaded = () => {
+      if (document.readyState === "complete") start();
+      else window.addEventListener("load", start, { once: true });
+    };
+    const observer = new IntersectionObserver((entries) => {
+      if (entries.some((entry) => entry.isIntersecting)) {
+        observer.disconnect();
+        whenPageLoaded();
+      }
+    }, { rootMargin: "300px 0px" });
+    observer.observe(video);
+    return () => {
+      cancelled = true;
+      observer.disconnect();
+      window.removeEventListener("load", start);
+    };
+  }, []);
+
+  // Sources added after mount are not picked up until the element is told to reload.
+  useEffect(() => {
+    if (shouldLoad) videoRef.current?.load();
+  }, [shouldLoad]);
 
   useEffect(() => {
     ensureGlobalUnlockListener();
@@ -38,7 +83,7 @@ export function HeroVideo({
 
   useEffect(() => {
     const video = videoRef.current;
-    if (!video) return;
+    if (!video || !shouldLoad) return;
 
     const tryPlay = () => {
       // Set imperatively, not just via the JSX `muted` prop — React doesn't always sync it to the
@@ -68,7 +113,7 @@ export function HeroVideo({
       video.removeEventListener("canplay", tryPlay);
       observer.disconnect();
     };
-  }, [muted]);
+  }, [muted, shouldLoad]);
 
   function toggleSound() {
     setMuted((current) => {
@@ -84,17 +129,16 @@ export function HeroVideo({
         ref={videoRef}
         className={fill ? "hero-video hero-video--cover" : "hero-video"}
         poster={posterSrc}
-        autoPlay
         muted
         loop
         playsInline
-        preload="auto"
+        preload="none"
         aria-hidden="true"
       >
-        {webmSrc && <source src={webmSrc} type="video/webm" />}
-        <source src={mp4Src} type="video/mp4" />
+        {shouldLoad && webmSrc && <source src={webmSrc} type="video/webm" />}
+        {shouldLoad && <source src={mp4Src} type="video/mp4" />}
       </video>
-      <button
+      {shouldLoad && <button
         type="button"
         className="hero-video-sound"
         onClick={toggleSound}
@@ -102,7 +146,7 @@ export function HeroVideo({
         aria-pressed={!muted}
       >
         {muted ? <VolumeX size={18} /> : <Volume2 size={18} />}
-      </button>
+      </button>}
     </div>
   );
 }

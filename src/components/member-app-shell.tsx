@@ -1,7 +1,6 @@
 import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 import {
-  Bell,
   BookOpenText,
   BriefcaseBusiness,
   CalendarDays,
@@ -127,7 +126,7 @@ export async function MemberAppShell({ member, active, children }: { member: Mem
             <nav><Link className={active === "Dashboard" ? "active" : ""} href="/dashboard">Dashboard</Link><Link className={active === "Consultations" ? "active" : ""} href="/dashboard/consultations">My consultations</Link><Link className={active === "AiReadings" ? "active" : ""} href="/dashboard/ai-readings">Live Answers</Link><Link className={active === "GemOrders" ? "active" : ""} href="/dashboard/gemstone-orders">Gem orders</Link><Link className={active === "Messages" ? "active" : ""} href="/dashboard/messages">Inbox</Link><Link className={active === "Wallet" ? "active" : ""} href="/dashboard/wallet">Wallet</Link><Link className={active === "Billing" ? "active" : ""} href="/dashboard/billing">Billing</Link><Link className={active === "Referrals" ? "active" : ""} href="/dashboard/referrals">Invite & earn</Link></nav>
             <div className="topbar-tools">
               <QuickNavSearch items={searchItems} placeholder="Search" ariaLabel="Search dashboard" />
-              <Link className="notification-button" href="/dashboard/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <span />}</Link>
+              <Link className="notification-button" href="/dashboard/messages" aria-label={`${unreadCount} unread messages`} title="Messages"><MessageSquareText size={18} />{unreadCount > 0 && <span />}</Link>
               <NotificationBell apiBase="/api/member/notifications" />
               <ProfileMenu initials={initials} name={member.name} subtitle={`${member.plan} plan`} logoutAction="/api/member/logout" redirectTo="/account" />
             </div>

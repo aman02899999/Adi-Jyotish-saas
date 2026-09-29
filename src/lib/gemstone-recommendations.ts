@@ -3,6 +3,8 @@ import "server-only";
 import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getProductCatalog, type ProductListItem } from "@/lib/gemstones";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getRecommendedPlanetsInSupabase, insertGemstoneRecommendationInSupabase } from "@/lib/gemstone-store-supabase";
 import { ZODIAC_SIGNS, type ZodiacSignKey } from "@/lib/horoscopes";
 import { buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
 
@@ -106,8 +108,10 @@ export async function createGemstoneRecommendation({ memberId, name, birthDate, 
   const definition = ZODIAC_SIGNS.find((entry) => entry.key === sign)!;
   const matches = await getMatchingProducts(definition.name);
 
-  const planetByProductId = new Map<string, string>();
-  if (matches.length) {
+  let planetByProductId = new Map<string, string>();
+  if (matches.length && isSupabaseCutoverActive()) {
+    planetByProductId = await getRecommendedPlanetsInSupabase(matches.map((item) => item.id));
+  } else if (matches.length) {
     const snaps = await db.getAll(...matches.map((item) => productsCol.doc(item.id)));
     for (const snap of snaps) {
       if (snap.exists) planetByProductId.set(snap.id, (snap.data()?.recommendedPlanets as string | undefined) ?? "");
@@ -118,6 +122,12 @@ export async function createGemstoneRecommendation({ memberId, name, birthDate, 
     name, signKey: sign, concern,
     gemstones: matches.map((item) => ({ name: item.name, planet: planetByProductId.get(item.id) || RULING_PLANET[sign], description: item.shortDescription, slug: item.slug })),
   });
+
+  if (isSupabaseCutoverActive()) {
+    const stored = { memberId, name, birthDate, concern: concern || null, zodiacSign: sign, categorySlugs: matches.map((item) => item.categorySlug).join(","), narrative };
+    const { id, createdAt } = await insertGemstoneRecommendationInSupabase(stored);
+    return { recommendation: { id, ...stored, createdAt } as GemstoneRecommendation, sign: definition, products: matches };
+  }
 
   const ref = recommendationsCol.doc();
   await ref.set({

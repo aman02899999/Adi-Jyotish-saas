@@ -1,6 +1,7 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { getBookingForInvoice, getInvoiceById, getReusablePendingPayment, recordPendingPayment } from "@/lib/invoice-actions";
+import { sameEmail } from "@/lib/same-email";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
 
   const invoice = await getInvoiceById(id);
   if (!invoice) return Response.json({ error: "Invoice not found." }, { status: 404 });
-  if (invoice.memberId !== member.id && invoice.customerEmail !== member.email) {
+  if (invoice.memberId !== member.id && !sameEmail(invoice.customerEmail, member.email)) {
     return Response.json({ error: "Invoice not found." }, { status: 404 });
   }
   if (invoice.status === "paid") return Response.json({ error: "This invoice is already paid." }, { status: 409 });

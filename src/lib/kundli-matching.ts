@@ -2,6 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getKundliMatchInSupabase, insertKundliMatchInSupabase, type StoredKundliMatch } from "@/lib/readings-supabase";
 import { computeAshtakoot, type AshtakootResult } from "@/lib/ashtakoot";
 import { computeGrahaPositions, NAKSHATRAS, RASHIS } from "@/lib/astro-engine";
 import { computeCompatibilityTimeline, type TimelineMonth } from "@/lib/compatibility-timeline";
@@ -114,7 +116,7 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
   const narrative = buildNarrative({ nameA, nameB, result });
   const timeline = computeCompatibilityTimeline({ nameA, moonARashiIndex: moonA.rashiIndex, nameB, moonBRashiIndex: moonB.rashiIndex });
 
-  const ref = await db.collection("kundliMatches").add({
+  const stored = {
     memberId,
     personAName: nameA,
     personABirthDate: birthDateA,
@@ -128,9 +130,11 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     breakdown: result.breakdown,
     narrative,
     timeline,
-    createdAt: FieldValue.serverTimestamp(),
-  });
-  const saved = { id: ref.id, memberId, personAName: nameA, personABirthDate: birthDateA, personABirthTime: birthTimeA, personABirthPlace: birthPlaceA, personBName: nameB, personBBirthDate: birthDateB, personBBirthTime: birthTimeB, personBBirthPlace: birthPlaceB, compatibilityScore: result.totalScore, breakdown: result.breakdown, narrative, timeline };
+  };
+  const id = isSupabaseCutoverActive()
+    ? await insertKundliMatchInSupabase(stored)
+    : (await db.collection("kundliMatches").add({ ...stored, createdAt: FieldValue.serverTimestamp() })).id;
+  const saved = { id, memberId, personAName: nameA, personABirthDate: birthDateA, personABirthTime: birthTimeA, personABirthPlace: birthPlaceA, personBName: nameB, personBBirthDate: birthDateB, personBBirthTime: birthTimeB, personBBirthPlace: birthPlaceB, compatibilityScore: result.totalScore, breakdown: result.breakdown, narrative, timeline };
 
   return {
     match: saved,
@@ -141,6 +145,12 @@ export async function createKundliMatch({ memberId, nameA, birthDateA, birthTime
     moonBNakshatra: NAKSHATRAS[moonB.nakshatraIndex],
     timeline: timeline as TimelineMonth[],
   };
+}
+
+async function readKundliMatch(id: string): Promise<StoredKundliMatch | null> {
+  if (isSupabaseCutoverActive()) return getKundliMatchInSupabase(id);
+  const snap = await db.collection("kundliMatches").doc(id).get();
+  return snap.exists ? { id: snap.id, ...(snap.data() as Omit<StoredKundliMatch, "id">) } : null;
 }
 
 export type KundliMatchRecord = {
@@ -164,14 +174,8 @@ export async function getKundliMatchById(id: string, memberId: string): Promise<
   result: AshtakootResult;
   moonARashi: string; moonANakshatra: string; moonBRashi: string; moonBNakshatra: string;
 } | null> {
-  const snap = await db.collection("kundliMatches").doc(id).get();
-  if (!snap.exists) return null;
-  const data = snap.data() as {
-    memberId: string | null;
-    personAName: string; personABirthDate: string; personABirthTime: string; personABirthPlace: string;
-    personBName: string; personBBirthDate: string; personBBirthTime: string; personBBirthPlace: string;
-    narrative: string; timeline: TimelineMonth[];
-  };
+  const data = await readKundliMatch(id);
+  if (!data) return null;
   if (!data.memberId || data.memberId !== memberId) return null;
 
   let momentA: ReturnType<typeof resolveBirthMoment>;
@@ -193,10 +197,10 @@ export async function getKundliMatchById(id: string, memberId: string): Promise<
 
   return {
     record: {
-      id: snap.id,
+      id,
       nameA: data.personAName, birthDateA: data.personABirthDate, birthTimeA: data.personABirthTime, birthPlaceA: data.personABirthPlace,
       nameB: data.personBName, birthDateB: data.personBBirthDate, birthTimeB: data.personBBirthTime, birthPlaceB: data.personBBirthPlace,
-      narrative: data.narrative, timeline: data.timeline,
+      narrative: data.narrative, timeline: data.timeline as TimelineMonth[],
     },
     result,
     moonARashi: RASHIS[moonA.rashiIndex].name, moonANakshatra: NAKSHATRAS[moonA.nakshatraIndex],
@@ -211,9 +215,8 @@ export { scoreTier };
 export type ShareableKundliMatch = { id: string; nameA: string; nameB: string; score: number; maxScore: number; tierLabel: string };
 
 export async function getShareableKundliMatch(id: string): Promise<ShareableKundliMatch | null> {
-  const snap = await db.collection("kundliMatches").doc(id).get();
-  if (!snap.exists) return null;
-  const data = snap.data() as { personAName: string; personBName: string; compatibilityScore: number };
+  const data = await readKundliMatch(id);
+  if (!data) return null;
   return {
     id,
     nameA: data.personAName,

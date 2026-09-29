@@ -3,6 +3,7 @@ import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
 import { GIFT_AMOUNTS } from "@/lib/gift-cards";
 import { getOrCreateWallet } from "@/lib/wallet";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -16,13 +17,13 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("gift-checkout", `member:${member.id}`, 10, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { amount?: number; recipientName?: string; message?: string };
+  const body = (await readJsonBody(request)) as { amount?: number; recipientName?: string; message?: string };
   const amount = Number(body.amount);
   if (!GIFT_AMOUNTS.includes(amount as (typeof GIFT_AMOUNTS)[number])) {
     return Response.json({ error: "Please choose one of the available gift amounts." }, { status: 400 });
   }
-  const recipientName = (body.recipientName ?? "").trim().slice(0, 120);
-  const message = (body.message ?? "").trim().slice(0, 280);
+  const recipientName = (asText(body.recipientName) ?? "").trim().slice(0, 120);
+  const message = (asText(body.message) ?? "").trim().slice(0, 280);
 
   const wallet = await getOrCreateWallet(member.id);
   const order = await razorpay.orders.create({

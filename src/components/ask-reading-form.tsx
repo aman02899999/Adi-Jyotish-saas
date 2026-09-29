@@ -143,7 +143,7 @@ export function AskReadingForm({ member, price, currency, onlinePaymentsAvailabl
         <ReadingShareNudge
           path="/ask"
           shareTitle="I just got a live astrology answer from Shree Santram Shashtri"
-          shareText="I just got a live astrology answer from Shree Santram Shashtri on Adi Jyotish Guru — your first question is free, try it:"
+          shareText="I just got a live astrology answer from Shree Santram Shashtri on Adi Jyotish Guru — try it:"
         />
         <div className="ask-answer__actions">
           <Link href="/dashboard/ai-readings" className="button button--ghost">View in your dashboard</Link>

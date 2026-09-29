@@ -9,6 +9,7 @@ import {
   markInvoicePaid,
   refundInvoice,
 } from "@/lib/invoice-actions";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "billing")) return Response.json({ error: "Billing permission required." }, { status: 403 });
   const { id } = await params;
-  const body = await request.json() as { action?: string };
+  const body = await readJsonBody(request) as { action?: string };
   if (!["mark_paid", "refund", "void", "reopen"].includes(body.action ?? "")) return Response.json({ error: "Unknown invoice action." }, { status: 400 });
 
   try {

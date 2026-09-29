@@ -7,11 +7,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * finishes — so each verdict is pinned here against the shape Gemini actually returns.
  */
 
-// gemini.ts reaches Firestore for the daily usage counter; the health check must not depend on it.
+// gemini.ts reads the daily usage counter from whichever provider is live (Firestore, or Postgres
+// under cutover); the health check must not depend on either, so both report the same count.
 vi.mock("@/lib/firestore", () => ({
   db: {
     collection: () => ({ doc: () => ({ get: async () => ({ data: () => ({ count: 7 }) }) }) }),
   },
+}));
+vi.mock("@/lib/gemini-usage-supabase", () => ({
+  getGeminiUsageInSupabase: async () => 7,
+  claimGeminiCallInSupabase: async () => true,
+  releaseGeminiCallInSupabase: async () => {},
 }));
 
 const ORIGINAL = { ...process.env };

@@ -1,6 +1,7 @@
 import "server-only";
 
-import { query, queryModel, queryModels } from "@/lib/postgres";
+import { GENUINE_REVIEW_SQL } from "@/lib/review-provenance";
+import { isUniqueViolation, query, queryModel, queryModels, withTransaction } from "@/lib/postgres";
 
 /**
  * Postgres data access behind the practitioner directory, the published reviews
@@ -113,8 +114,108 @@ export async function getPractitionersInSupabase(activeOnly: boolean, includeDem
   return rows.map((row) => ({ ...row, hasPortalAccess: row.firebaseUid !== null }));
 }
 
+export async function getPractitionerByIdInSupabase(id: string): Promise<PractitionerRow | null> {
+  const row = await queryModel<Omit<PractitionerRow, "hasPortalAccess">>(
+    `${PRACTITIONER_SELECT} where id = $1`,
+    [id],
+    PRACTITIONER_NUMERIC_COLUMNS,
+  );
+  return row ? { ...row, hasPortalAccess: row.firebaseUid !== null } : null;
+}
+
+/** Thrown for a duplicate email; the unique index enforces it, which also settles a race. */
+export class PractitionerEmailTakenError extends Error {}
+
+export type PractitionerInsert = Omit<PractitionerRow,
+  "id" | "isDemoAccount" | "firebaseUid" | "hasPortalAccess" | "lastLoginAt" | "createdAt" | "updatedAt">;
+
+const WRITABLE_COLUMNS: Record<keyof PractitionerInsert, string> = {
+  name: "name", slug: "slug", email: "email", title: "title", bio: "bio", specialties: "specialties",
+  languages: "languages", consultationModes: "consultation_modes", experienceYears: "experience_years",
+  verified: "verified", verificationLevel: "verification_level", photoUrl: "photo_url", videoUrl: "video_url",
+  online: "online", isAiPowered: "is_ai_powered", chatRatePerMinute: "chat_rate_per_minute",
+  active: "active", featured: "featured",
+};
+
+function emailConflict(error: unknown) {
+  return isUniqueViolation(error) && String((error as { constraint?: string }).constraint).includes("email");
+}
+
+/**
+ * Inserts a practitioner, trying `${slug}`, `${slug}-2`, … until one is free, with optional
+ * weekday hours written in the same transaction so a practitioner never exists half-created.
+ */
+export async function insertPractitionerInSupabase(
+  input: PractitionerInsert,
+  starterWeekdays: number[] = [],
+): Promise<string> {
+  const keys = Object.keys(WRITABLE_COLUMNS) as Array<keyof PractitionerInsert>;
+  for (let attempt = 0; attempt < 22; attempt += 1) {
+    const slug = attempt === 0 ? input.slug : `${input.slug}-${attempt + 1}`;
+    const values = keys.map((key) => (key === "slug" ? slug : input[key]));
+    try {
+      return await withTransaction(async (client) => {
+        await client.query(
+          `insert into public.practitioners (id, ${keys.map((key) => WRITABLE_COLUMNS[key]).join(", ")})
+           values ($1, ${keys.map((_, index) => `$${index + 2}`).join(", ")})`,
+          [slug, ...values],
+        );
+        for (const weekday of starterWeekdays) {
+          await client.query(
+            `insert into public.availability_rules (id, practitioner_id, weekday, start_time, end_time, active)
+             values ($1, $2, $3, '09:30', '17:30', true)`,
+            [`${slug}_starter-${weekday}`, slug, weekday],
+          );
+        }
+        return slug;
+      });
+    } catch (error) {
+      if (emailConflict(error)) throw new PractitionerEmailTakenError("A practitioner with that email already exists.");
+      if (!isUniqueViolation(error)) throw error;
+      // The id or slug is taken: try the next suffix.
+    }
+  }
+  throw new Error("Could not generate a unique profile URL.");
+}
+
+/** Updates the given fields. False when there is no such practitioner. */
+export async function updatePractitionerInSupabase(id: string, patch: Partial<PractitionerInsert>): Promise<boolean> {
+  const keys = (Object.keys(patch) as Array<keyof PractitionerInsert>).filter((key) => key in WRITABLE_COLUMNS && key !== "slug");
+  const sets = keys.map((key, index) => `${WRITABLE_COLUMNS[key]} = $${index + 2}`);
+  try {
+    const result = await query(
+      `update public.practitioners set ${[...sets, "updated_at = now()"].join(", ")} where id = $1`,
+      [id, ...keys.map((key) => patch[key])],
+    );
+    return (result.rowCount ?? 0) > 0;
+  } catch (error) {
+    if (emailConflict(error)) throw new PractitionerEmailTakenError("That email belongs to another practitioner.");
+    throw error;
+  }
+}
+
+/**
+ * Deletes a practitioner with no bookings or reviews; their hours and time off go with them by
+ * cascade. Reviews also cascade in this schema, so the check is what stops a delete from taking a
+ * practitioner's review history with it.
+ */
+export async function deleteUnusedPractitionerInSupabase(id: string): Promise<"deleted" | "not_found" | "has_history"> {
+  return withTransaction(async (client) => {
+    const found = await client.query(`select 1 from public.practitioners where id = $1 for update`, [id]);
+    if (!found.rowCount) return "not_found";
+    const history = await client.query(
+      `select exists (select 1 from public.bookings where practitioner_id = $1)
+           or exists (select 1 from public.practitioner_reviews where practitioner_id = $1) as used`,
+      [id],
+    );
+    if (history.rows[0]?.used) return "has_history";
+    await client.query(`delete from public.practitioners where id = $1`, [id]);
+    return "deleted";
+  });
+}
+
 /** The minimum the booking flow needs to confirm an astrologer can take a reading. */
-export type PractitionerAvailabilityRow = { id: string; name: string; active: boolean };
+export type PractitionerAvailabilityRow = { id: string; name: string; active: boolean; isAiPowered: boolean };
 
 /**
  * One practitioner by id, or null.
@@ -126,7 +227,7 @@ export type PractitionerAvailabilityRow = { id: string; name: string; active: bo
  */
 export async function getPractitionerAvailabilityInSupabase(id: string): Promise<PractitionerAvailabilityRow | null> {
   return queryModel<PractitionerAvailabilityRow>(
-    `select id, name, active from public.practitioners where id = $1`,
+    `select id, name, active, is_ai_powered from public.practitioners where id = $1`,
     [id],
   );
 }
@@ -225,6 +326,7 @@ export type ReviewRow = {
   usefulness: number;
   body: string;
   status: string;
+  source: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -232,14 +334,14 @@ export type ReviewRow = {
 const REVIEW_SELECT = `
   select id, practitioner_id, member_id, booking_id, reviewer_name,
          rating::int as rating, clarity::int as clarity, empathy::int as empathy,
-         usefulness::int as usefulness, body, status, created_at, updated_at
+         usefulness::int as usefulness, body, status, source, created_at, updated_at
     from public.practitioner_reviews`;
 
 const REVIEW_NUMERIC_COLUMNS = ["rating", "clarity", "empathy", "usefulness"] as const;
 
 export async function getPublishedReviewsInSupabase(): Promise<ReviewRow[]> {
   return queryModels<ReviewRow>(
-    `${REVIEW_SELECT} where status = 'published' order by created_at desc`,
+    `${REVIEW_SELECT} where status = 'published' and ${GENUINE_REVIEW_SQL} order by created_at desc`,
     [],
     REVIEW_NUMERIC_COLUMNS,
   );
@@ -247,7 +349,7 @@ export async function getPublishedReviewsInSupabase(): Promise<ReviewRow[]> {
 
 export async function getPublishedReviewsForPractitionerInSupabase(practitionerId: string): Promise<ReviewRow[]> {
   return queryModels<ReviewRow>(
-    `${REVIEW_SELECT} where practitioner_id = $1 and status = 'published' order by created_at desc`,
+    `${REVIEW_SELECT} where practitioner_id = $1 and status = 'published' and ${GENUINE_REVIEW_SQL} order by created_at desc`,
     [practitionerId],
     REVIEW_NUMERIC_COLUMNS,
   );
@@ -255,6 +357,58 @@ export async function getPublishedReviewsForPractitionerInSupabase(practitionerI
 
 export async function getAllReviewsInSupabase(): Promise<ReviewRow[]> {
   return queryModels<ReviewRow>(`${REVIEW_SELECT} order by created_at desc`, [], REVIEW_NUMERIC_COLUMNS);
+}
+
+const REVIEW_RETURNING = `returning id, practitioner_id, member_id, booking_id, reviewer_name,
+  rating::int as rating, clarity::int as clarity, empathy::int as empathy,
+  usefulness::int as usefulness, body, status, source, created_at, updated_at`;
+
+/** Admin moderation. Null when the review is gone. */
+export async function setReviewStatusInSupabase(id: string, status: string): Promise<ReviewRow | null> {
+  return queryModel<ReviewRow>(
+    `update public.practitioner_reviews set status = $2, updated_at = now() where id = $1 ${REVIEW_RETURNING}`,
+    [id, status],
+    REVIEW_NUMERIC_COLUMNS,
+  );
+}
+
+/** The deleted review's practitioner, or null when there was nothing to delete. */
+export async function deleteReviewInSupabase(id: string): Promise<{ practitionerId: string } | null> {
+  return queryModel<{ practitionerId: string }>(
+    `delete from public.practitioner_reviews where id = $1 returning practitioner_id`,
+    [id],
+  );
+}
+
+export type MemberReviewInsert = {
+  practitionerId: string;
+  memberId: string;
+  bookingId: string;
+  reviewerName: string;
+  rating: number;
+  clarity: number;
+  empathy: number;
+  usefulness: number;
+  body: string;
+  status: string;
+  source: string;
+};
+
+/**
+ * One review per booking: the id is the booking id, as it is in Firestore (whose create() failed
+ * if the document existed), so a second submit — or two racing — inserts nothing. Null then.
+ */
+export async function insertMemberReviewInSupabase(input: MemberReviewInsert): Promise<ReviewRow | null> {
+  return queryModel<ReviewRow>(
+    `insert into public.practitioner_reviews
+       (id, practitioner_id, member_id, booking_id, reviewer_name, rating, clarity, empathy, usefulness, body, status, source)
+     values ($1, $2, $3, $1, $4, $5, $6, $7, $8, $9, $10, $11)
+     on conflict (id) do nothing
+     ${REVIEW_RETURNING}`,
+    [input.bookingId, input.practitionerId, input.memberId, input.reviewerName, input.rating, input.clarity,
+      input.empathy, input.usefulness, input.body, input.status, input.source],
+    REVIEW_NUMERIC_COLUMNS,
+  );
 }
 
 /** Practitioner names/slugs for the admin review list, in one query. */

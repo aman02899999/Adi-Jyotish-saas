@@ -2,7 +2,9 @@
 
 import { useMemo, useState } from "react";
 import { Link } from "@/i18n/navigation";
+import { AiPersonaBadge } from "@/components/ai-persona-badge";
 import {
+  AlertTriangle,
   CalendarCheck2,
   CalendarPlus,
   Check,
@@ -42,28 +44,49 @@ export type AdminBooking = {
   updatedAt: string | Date;
 };
 
-const statuses = ["pending", "confirmed", "completed", "cancelled"];
+export type AdminBookingPractitioner = { id: string; name: string; active: boolean; isAiPowered: boolean };
 
-function toDateTimeInput(value: string | Date) {
-  const date = new Date(value);
-  const local = new Date(date.getTime() - date.getTimezoneOffset() * 60000);
-  return local.toISOString().slice(0, 16);
+const statuses = ["pending", "confirmed", "completed", "cancelled"];
+const AI_FILTER = "ai-persona";
+
+function isOpenAiBooking(item: AdminBooking, aiIds: Set<string>) {
+  return Boolean(item.practitionerId && aiIds.has(item.practitionerId)) && item.status !== "cancelled" && item.status !== "completed";
 }
 
-export function AdminBookings({ initialBookings }: { initialBookings: AdminBooking[] }) {
+// The table shows appointments in IST, so the editor does too. It used the browser's own zone, so
+// an admin outside India saw 06:00 in the editor for a row reading 11:30 AM.
+const IST_OFFSET_MINUTES = 330;
+
+function toDateTimeInput(value: string | Date) {
+  return new Date(new Date(value).getTime() + IST_OFFSET_MINUTES * 60000).toISOString().slice(0, 16);
+}
+
+function fromDateTimeInput(value: string) {
+  return new Date(`${value}:00+05:30`).toISOString();
+}
+
+export function AdminBookings({ initialBookings, practitioners }: { initialBookings: AdminBooking[]; practitioners: AdminBookingPractitioner[] }) {
   const [items, setItems] = useState(initialBookings);
   const [query, setQuery] = useState("");
   const [filter, setFilter] = useState("all");
   const [selected, setSelected] = useState<AdminBooking | null>(null);
   const [scheduledAt, setScheduledAt] = useState("");
   const [notes, setNotes] = useState("");
+  const [practitionerId, setPractitionerId] = useState("");
   const [saving, setSaving] = useState(false);
   const [notice, setNotice] = useState("");
 
+  const aiIds = useMemo(() => new Set(practitioners.filter((person) => person.isAiPowered).map((person) => person.id)), [practitioners]);
+  const humans = useMemo(() => practitioners.filter((person) => !person.isAiPowered && person.active), [practitioners]);
+  const withAi = (item: AdminBooking) => Boolean(item.practitionerId && aiIds.has(item.practitionerId));
+  // Sold before AI personas stopped being bookable: a paid slot with nobody to attend it.
+  const openAiBookings = useMemo(() => items.filter((item) => isOpenAiBooking(item, aiIds)).length, [items, aiIds]);
+
   const filtered = useMemo(() => items.filter((item) => {
-    const haystack = `${item.clientName} ${item.clientEmail} ${item.serviceTitle} ${item.reference}`.toLowerCase();
-    return haystack.includes(query.toLowerCase()) && (filter === "all" || item.status === filter);
-  }), [filter, items, query]);
+    const haystack = `${item.clientName} ${item.clientEmail} ${item.serviceTitle} ${item.reference} ${item.practitionerName ?? ""}`.toLowerCase();
+    const matchesFilter = filter === "all" || (filter === AI_FILTER ? isOpenAiBooking(item, aiIds) : item.status === filter);
+    return haystack.includes(query.toLowerCase()) && matchesFilter;
+  }), [filter, items, query, aiIds]);
 
   const stats = useMemo(() => {
     const active = items.filter(({ status }) => status !== "cancelled");
@@ -79,6 +102,7 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
     setSelected(item);
     setScheduledAt(toDateTimeInput(item.scheduledAt));
     setNotes(item.notes ?? "");
+    setPractitionerId(item.practitionerId ?? "");
   }
 
   async function update(item: AdminBooking, change: Partial<AdminBooking>, message: string) {
@@ -105,7 +129,12 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
 
   async function saveDetails() {
     if (!selected) return;
-    const ok = await update(selected, { scheduledAt: new Date(scheduledAt).toISOString(), notes }, "Appointment details updated.");
+    const reassigning = Boolean(practitionerId && practitionerId !== selected.practitionerId);
+    const ok = await update(
+      selected,
+      { scheduledAt: fromDateTimeInput(scheduledAt), notes, ...(reassigning ? { practitionerId } : {}) },
+      reassigning ? `Booking moved to ${practitioners.find((person) => person.id === practitionerId)?.name ?? "the new astrologer"}.` : "Appointment details updated.",
+    );
     if (ok) setSelected(null);
   }
 
@@ -128,6 +157,18 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
         <article><span><Check size={20} /></span><div><small>Completion rate</small><strong>{stats.completion}%</strong><p>All-time sessions</p></div></article>
       </section>
 
+      {openAiBookings > 0 && (
+        <section className="admin-table-card admin-callout" role="alert">
+          <div className="admin-table-header">
+            <div>
+              <h2><AlertTriangle size={17} /> {openAiBookings} open booking{openAiBookings === 1 ? "" : "s"} with an AI astrologer</h2>
+              <p>These were sold as scheduled consultations before AI astrologers stopped being bookable, and nobody will attend them. Move each to a human astrologer (open the booking), or cancel and refund it from Billing.</p>
+            </div>
+            <button className="button button--small" onClick={() => setFilter(AI_FILTER)}>Show them</button>
+          </div>
+        </section>
+      )}
+
       <section className="admin-table-card">
         <div className="admin-table-header">
           <div><h2>Consultation calendar</h2><p>Review customer details and manage each appointment.</p></div>
@@ -135,7 +176,7 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
         </div>
         <div className="admin-toolbar">
           <label><Search size={16} /><input value={query} onChange={(event) => setQuery(event.target.value)} placeholder="Name, email, service or reference…" /></label>
-          <div className="filter-select"><Filter size={15} /><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter bookings"><option value="all">All bookings</option>{statuses.map((status) => <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>)}</select><ChevronDown size={14} /></div>
+          <div className="filter-select"><Filter size={15} /><select value={filter} onChange={(event) => setFilter(event.target.value)} aria-label="Filter bookings"><option value="all">All bookings</option><option value={AI_FILTER}>Open, with an AI astrologer</option>{statuses.map((status) => <option key={status} value={status}>{status.charAt(0).toUpperCase() + status.slice(1)}</option>)}</select><ChevronDown size={14} /></div>
           <span>{filtered.length} results</span>
         </div>
 
@@ -145,7 +186,7 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
             const appointment = new Date(item.scheduledAt);
             return <div className="booking-table__row" role="row" key={item.id}>
               <div className="booking-customer"><span>{item.clientName.split(" ").map((part) => part[0]).join("").slice(0, 2)}</span><div><strong>{item.clientName}</strong><small>{item.clientEmail}</small><i>{item.reference}</i></div></div>
-              <div className="booking-reading"><strong>{item.serviceTitle}</strong><small>{item.practitionerName ?? "Unassigned"} · ${item.servicePrice}</small></div>
+              <div className="booking-reading"><strong>{item.serviceTitle}</strong><small>{item.practitionerName ?? "Unassigned"} · ₹{item.servicePrice}</small>{withAi(item) && <AiPersonaBadge compact />}</div>
               <div className="booking-date"><strong>{appointment.toLocaleDateString("en", { month: "short", day: "numeric", year: "numeric", timeZone: "Asia/Kolkata" })}</strong><small>{appointment.toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })}</small></div>
               <div className={`admin-status admin-status--${item.status}`}><select value={item.status} onChange={(event) => update(item, { status: event.target.value }, "Booking status updated.")}>{statuses.map((status) => <option key={status}>{status}</option>)}</select><ChevronDown size={12} /></div>
               <Link className={`payment-pill ${item.paymentStatus === "paid" ? "paid" : ""}`} href="/admin/billing" title="Manage in Billing">{item.paymentStatus}</Link>
@@ -167,10 +208,15 @@ export function AdminBookings({ initialBookings }: { initialBookings: AdminBooki
               <div><Mail size={15} /><span><small>Email</small><strong>{selected.clientEmail}</strong></span></div>
               <div><UserRound size={15} /><span><small>Phone</small><strong>{selected.clientPhone || "Not provided"}</strong></span></div>
               <div><CalendarCheck2 size={15} /><span><small>Birth details</small><strong>{selected.birthDate} · {selected.birthTime}</strong></span></div>
-              <div><MapPin size={15} /><span><small>Birth place</small><strong>{selected.birthPlace}</strong></span></div><div><UserRound size={15} /><span><small>Practitioner</small><strong>{selected.practitionerName ?? "Unassigned"}</strong></span></div>
+              <div><MapPin size={15} /><span><small>Birth place</small><strong>{selected.birthPlace}</strong></span></div><div><UserRound size={15} /><span><small>Practitioner</small><strong>{selected.practitionerName ?? "Unassigned"}</strong>{withAi(selected) && <AiPersonaBadge compact />}</span></div>
             </div>
             <div className="booking-detail-form">
-              <label><span>Appointment</span><input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
+              <label><span>Astrologer</span><select value={practitionerId} onChange={(event) => setPractitionerId(event.target.value)}>
+                {selected.practitionerId && !humans.some((person) => person.id === selected.practitionerId) && <option value={selected.practitionerId}>{selected.practitionerName ?? "Current"}{withAi(selected) ? " (AI — reassign)" : " (inactive)"}</option>}
+                {!selected.practitionerId && <option value="">Unassigned</option>}
+                {humans.map((person) => <option key={person.id} value={person.id}>{person.name}</option>)}
+              </select></label>
+              <label><span>Appointment (IST)</span><input type="datetime-local" value={scheduledAt} onChange={(event) => setScheduledAt(event.target.value)} /></label>
               <label><span>Notes and customer context</span><textarea rows={5} value={notes} onChange={(event) => setNotes(event.target.value)} placeholder="No notes were supplied." /></label>
             </div>
             <div className="booking-detail-actions"><button className="delete-link" onClick={() => remove(selected)}><Trash2 size={14} /> Delete booking</button><div><button className="button button--ghost" onClick={() => setSelected(null)}>Close</button><button className="button" disabled={saving} onClick={saveDetails}>{saving ? "Saving…" : "Save changes"}</button></div></div>

@@ -1,6 +1,7 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { createPractitionerAdmin, getPractitionerDirectory, PractitionerAdminError } from "@/lib/scheduling";
 import { computeVerificationFlags } from "@/lib/practitioner-portal";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -23,7 +24,7 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "practitioners")) return Response.json({ error: "Practitioners permission required." }, { status: 403 });
 
-  const body = (await request.json()) as CreatePayload;
+  const body = (await readJsonBody(request)) as CreatePayload;
   try {
     const created = await createPractitionerAdmin({
       name: body.name ?? "",

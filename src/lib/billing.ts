@@ -13,6 +13,7 @@ import {
   getPaymentsForInvoicesInSupabase,
   insertInvoiceIfAbsentInSupabase,
 } from "@/lib/billing-supabase";
+import { sameEmail } from "@/lib/same-email";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 
 /** The subset of a booking record billing needs. Structurally compatible with the Firestore
@@ -337,10 +338,22 @@ export async function getMemberBilling(memberId: string, email: string): Promise
     // requires the member id to match exactly, so a differently-cased row only
     // survives when it genuinely belongs to this member.
     const rows = (await getInvoicesForCustomerInSupabase(email))
-      .filter((row) => row.memberId === memberId || row.customerEmail === email);
+      .filter((row) => row.memberId === memberId || sameEmail(row.customerEmail, email));
     return attachBilling(rows);
   }
-  const snap = await invoicesCollection().where("customerEmail", "==", email).orderBy("createdAt", "desc").get();
-  const rows = snap.docs.map((doc) => invoiceFromSnap(doc)).filter((row) => row.memberId === memberId || row.customerEmail === email);
+  // Firestore equality is case-sensitive, and an invoice keeps the address as it was typed. Look up
+  // by member id and by both spellings of the address, then merge; matching only the exact session
+  // address hid invoices an admin raised as "Asha@Example.com" from asha@example.com's billing page.
+  const collection = invoicesCollection();
+  const lookups = [collection.where("memberId", "==", memberId).get(), collection.where("customerEmail", "==", email).get()];
+  if (email.toLowerCase() !== email) lookups.push(collection.where("customerEmail", "==", email.toLowerCase()).get());
+  const byId = new Map<string, Invoice>();
+  for (const snap of await Promise.all(lookups)) {
+    for (const doc of snap.docs) {
+      const row = invoiceFromSnap(doc);
+      if (row.memberId === memberId || sameEmail(row.customerEmail, email)) byId.set(row.id, row);
+    }
+  }
+  const rows = [...byId.values()].sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
   return attachBilling(rows);
 }

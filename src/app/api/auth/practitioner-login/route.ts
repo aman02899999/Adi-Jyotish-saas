@@ -1,8 +1,9 @@
-import { createPractitionerSession, findPractitionerByUid, getCurrentPractitioner } from "@/lib/practitioner-auth";
+import { createPractitionerSession, getCurrentPractitioner, hasPractitionerForUid } from "@/lib/practitioner-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { checkTwoFactorGate } from "@/lib/two-factor";
 import { verifyAuthToken } from "@/lib/auth-verify";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("practitioner-login", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { idToken?: string };
+  const body = (await readJsonBody(request)) as { idToken?: string };
   if (!body.idToken) return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
 
   let uid: string;
@@ -28,8 +29,7 @@ export async function POST(request: Request) {
   const authThrottle = await checkAuthThrottle("practitioner-login", uid, request);
   if (!authThrottle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(authThrottle.retryAfter) } });
 
-  const existing = await findPractitionerByUid(uid);
-  if (existing) {
+  if (await hasPractitionerForUid(uid)) {
     const challengeToken = await checkTwoFactorGate("practitioner", uid, body.idToken);
     if (challengeToken) {
       await clearAuthFailures(authThrottle.keyHash);

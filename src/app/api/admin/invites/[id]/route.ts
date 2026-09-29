@@ -1,4 +1,4 @@
-import { db } from "@/lib/firestore";
+import { deleteAdminInviteById } from "@/lib/admin-directory";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 
 export async function DELETE(_: Request, { params }: { params: Promise<{ id: string }> }) {
@@ -7,12 +7,9 @@ export async function DELETE(_: Request, { params }: { params: Promise<{ id: str
   if (!hasAdminPermission(admin, "team")) return Response.json({ error: "Owner access required." }, { status: 403 });
 
   const { id } = await params;
-  const ref = db.collection("adminInvites").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) return Response.json({ error: "Invitation not found." }, { status: 404 });
-
-  const email = (snap.data() as { email: string }).email;
-  await ref.delete();
+  const deleted = await deleteAdminInviteById(id);
+  if (!deleted) return Response.json({ error: "Invitation not found." }, { status: 404 });
+  const { email } = deleted;
   await recordAudit(admin, "team.invite_cancelled", "administrator_invite", id, { email });
   return Response.json({ ok: true, id });
 }

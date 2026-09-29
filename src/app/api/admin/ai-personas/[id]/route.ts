@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { AiPersonaError, deletePersona, updatePersona } from "@/lib/ai-personas";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   if (!hasAdminPermission(admin, "ai_personas")) return Response.json({ error: "AI personas permission required." }, { status: 403 });
 
   const { id } = await params;
-  const body = (await request.json()) as UpdatePayload;
+  const body = (await readJsonBody(request)) as UpdatePayload;
   try {
     const updated = await updatePersona(id, body);
     await recordAudit(admin, "ai_persona.updated", "ai_persona", updated.id, { name: updated.name, active: updated.active });

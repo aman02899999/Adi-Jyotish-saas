@@ -5,6 +5,7 @@ import { AvatarImage } from "@/components/avatar-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getActivePersonas } from "@/lib/ai-personas";
+import { isPersonaOffered } from "@/lib/free-ai";
 
 // Same list for every visitor (no auth check) — cached instead of read fresh on every request.
 export const revalidate = 3600;
@@ -15,7 +16,7 @@ export const metadata: Metadata = {
 };
 
 export default async function AiPersonasIndexPage() {
-  const personas = await getActivePersonas();
+  const personas = (await getActivePersonas()).filter(isPersonaOffered);
 
   return (
     <main className="marketing-page">

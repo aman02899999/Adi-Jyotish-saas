@@ -31,11 +31,13 @@ import {
   replaceProductVariantsInSupabase,
   updateCategoryInSupabase,
   updateProductInSupabase,
+  getAllProductRowsForAdminInSupabase,
 } from "@/lib/gemstones-admin-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { isUniqueViolation } from "@/lib/postgres";
 import { toSlug } from "@/lib/services";
 import { seedGemstoneCatalog } from "@/lib/gemstones-seed";
+import { getProductAdminSummariesInSupabase } from "@/lib/gemstone-store-supabase";
 
 export class GemstoneError extends Error {}
 
@@ -454,6 +456,14 @@ export type ProductPayload = {
 };
 
 export async function getAllProductsAdmin() {
+  if (isSupabaseCutoverActive()) {
+    const [summaries, products] = await Promise.all([getProductAdminSummariesInSupabase(), getAllProductRowsForAdminInSupabase()]);
+    const productById = new Map(products.map((product) => [product.id, product]));
+    return summaries.flatMap(({ id, ...summary }) => {
+      const product = productById.get(id);
+      return product ? [{ ...product, ...summary }] : [];
+    });
+  }
   const snap = await productsCol.orderBy("createdAt", "desc").get();
   const products = snap.docs.map(fromProductDoc);
   if (!products.length) return [];

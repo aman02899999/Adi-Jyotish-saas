@@ -28,10 +28,12 @@ export type WalletShortfallResponse = {
   wallet?: { balance: number; price: number; shortfall: number; currency: string };
 };
 
-/** Reads the member's balance once on mount, and again whenever `refresh()` is called. */
-export function useWalletBalance() {
+/** Reads the member's balance once on mount, and again whenever `refresh()` is called. Pass
+ * `enabled: false` for a signed-out visitor: there is no wallet to read, and the request would only
+ * come back 401 and log an error in the browser console. */
+export function useWalletBalance(enabled = true) {
   const [wallet, setWallet] = useState<WalletState>(null);
-  const [loading, setLoading] = useState(true);
+  const [loading, setLoading] = useState(enabled);
 
   const refresh = useCallback(async () => {
     try {
@@ -51,6 +53,7 @@ export function useWalletBalance() {
   // which is what keeps this a subscription to an external system rather than a synchronous
   // setState in an effect body. The `active` flag drops a response that arrives after unmount.
   useEffect(() => {
+    if (!enabled) return;
     let active = true;
     fetch("/api/member/wallet")
       .then((response) => (response.ok ? response.json() : null))
@@ -60,7 +63,7 @@ export function useWalletBalance() {
       .catch(() => {})
       .finally(() => { if (active) setLoading(false); });
     return () => { active = false; };
-  }, []);
+  }, [enabled]);
 
   return { wallet, loading, refresh };
 }

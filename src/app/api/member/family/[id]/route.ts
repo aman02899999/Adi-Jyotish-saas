@@ -8,6 +8,6 @@ export async function DELETE(_request: Request, { params }: { params: Promise<{ 
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
 
   const { id } = await params;
-  await deleteFamilyMember(member.id, id);
+  if (!(await deleteFamilyMember(member.id, id))) return Response.json({ error: "Family member not found." }, { status: 404 });
   return Response.json({ ok: true });
 }

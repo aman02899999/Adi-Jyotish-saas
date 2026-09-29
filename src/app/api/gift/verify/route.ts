@@ -1,6 +1,7 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
 import { createGiftCard } from "@/lib/gift-cards";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -17,7 +18,7 @@ export async function POST(request: Request) {
   const razorpay = getRazorpay();
   if (!razorpay) return Response.json({ error: "Online payments are not configured." }, { status: 503 });
 
-  const body = (await request.json()) as VerifyPayload;
+  const body = (await readJsonBody(request)) as VerifyPayload;
   const orderId = body.razorpay_order_id?.trim();
   const paymentId = body.razorpay_payment_id?.trim();
   const signature = body.razorpay_signature?.trim();

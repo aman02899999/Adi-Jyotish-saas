@@ -1,4 +1,4 @@
-import { db } from "@/lib/firestore";
+import { isAdminTotpEnabled, listAdminUsersForAdmin } from "@/lib/admin-directory";
 import { AdminSettings } from "@/components/admin-settings";
 import { AdminDemoAccounts } from "@/components/admin-demo-accounts";
 import { AdminPromoBanner } from "@/components/admin-promo-banner";
@@ -13,11 +13,6 @@ import { getStudioSettings } from "@/lib/studio-settings";
 
 export const dynamic = "force-dynamic";
 
-function toDate(value: FirebaseFirestore.Timestamp | Date | undefined | null): Date | null {
-  if (!value) return null;
-  return value instanceof Date ? value : value.toDate();
-}
-
 export default async function AdminSettingsPage() {
   const admin = await requireAdminPage("settings");
 
@@ -29,33 +24,17 @@ export default async function AdminSettingsPage() {
   // admins who can actually act on it, for the same reason the team roster above is gated.
   const canManageRoles = hasAdminPermission(admin, "roles");
 
-  const [settings, usersSnap, invites, roleOptions, initialRoles, promoBanner, selfSnap] = await Promise.all([
+  const [settings, users, invites, roleOptions, initialRoles, promoBanner, totpEnabled] = await Promise.all([
     getStudioSettings(),
-    canManageTeam ? db.collection("adminUsers").orderBy("name", "asc").get() : Promise.resolve(null),
+    canManageTeam ? listAdminUsersForAdmin() : Promise.resolve([]),
     canManageTeam ? listPendingAdminInvites() : Promise.resolve([]),
     // Only used by the team-invite role picker below — gated the same way as the roster/invites
     // above so an admin without "team" doesn't receive every role's name/slug in the page payload.
     canManageTeam ? getAssignableRoleSlugs() : Promise.resolve([]),
     canManageRoles ? getAllRolesAdmin() : Promise.resolve([]),
     getPromoBanner(),
-    db.collection("adminUsers").doc(admin!.id).get(),
+    isAdminTotpEnabled(admin!.id),
   ]);
-  const totpEnabled = selfSnap.data()?.totpEnabled === true;
-  const users = usersSnap
-    ? usersSnap.docs.map((doc) => {
-        const data = doc.data() as Record<string, unknown>;
-        return {
-          id: doc.id,
-          name: data.name as string,
-          email: data.email as string,
-          role: data.role as string,
-          active: data.active !== false,
-          lastLoginAt: toDate(data.lastLoginAt as FirebaseFirestore.Timestamp | undefined),
-          createdAt: toDate(data.createdAt as FirebaseFirestore.Timestamp | undefined) ?? new Date(),
-        };
-      })
-    : [];
-
   return (
     <AdminShell active="Settings">
       <div className="admin-content">
@@ -77,7 +56,7 @@ export default async function AdminSettingsPage() {
         <AdminPromoBanner initial={{ enabled: promoBanner.enabled, message: promoBanner.message, ctaLabel: promoBanner.ctaLabel, ctaHref: promoBanner.ctaHref }} />
         <TwoFactorSettings apiPrefix="/api/admin/2fa" initialEnabled={totpEnabled} description="Two-factor authentication is protecting your sign-in." />
         {/* Mints Owner-role admin logins — restricted to the same "roles" permission the API route requires, not just "settings". */}
-        {canManageRoles && <AdminDemoAccounts />}
+        {admin.role === "owner" && <AdminDemoAccounts />}
       </div>
     </AdminShell>
   );

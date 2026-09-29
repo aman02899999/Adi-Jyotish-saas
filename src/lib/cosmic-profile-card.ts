@@ -4,6 +4,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { buildKundliChart } from "@/lib/kundli-engine";
 import { RASHIS, type GrahaKey } from "@/lib/astro-engine";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getCosmicCardInSupabase, saveCosmicCardInSupabase } from "@/lib/engagement-supabase";
 
 /** Classical rulership of each rashi (Mesha..Meena) by its lord — Rahu/Ketu rule none. */
 const RASHI_LORDS: GrahaKey[] = [
@@ -55,11 +57,17 @@ export async function upsertCosmicProfileCard({ memberId, name, birthDate, birth
     blurb: LAGNA_LORD_BLURB[lagnaLord]!,
   };
 
+  if (isSupabaseCutoverActive()) {
+    const updatedAt = new Date().toISOString();
+    await saveCosmicCardInSupabase({ ...card, updatedAt });
+    return { ...card, updatedAt };
+  }
   await db.collection("cosmicProfileCards").doc(memberId).set({ ...card, updatedAt: FieldValue.serverTimestamp() });
   return { ...card, updatedAt: new Date().toISOString() };
 }
 
 export async function getCosmicProfileCard(memberId: string): Promise<CosmicProfileCard | null> {
+  if (isSupabaseCutoverActive()) return (await getCosmicCardInSupabase(memberId)) as CosmicProfileCard | null;
   const snap = await db.collection("cosmicProfileCards").doc(memberId).get();
   if (!snap.exists) return null;
   const data = snap.data() as CosmicProfileCardDoc;

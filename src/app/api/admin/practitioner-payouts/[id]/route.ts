@@ -1,9 +1,10 @@
-import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { PayoutError, updatePayoutStatus } from "@/lib/practitioner-portal";
 import { createNotification } from "@/lib/notifications";
 import { sendEmail, genericNotificationEmailHtml } from "@/lib/email";
 import { getSiteUrl } from "@/lib/site-url";
+import { getPractitionerById } from "@/lib/scheduling";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const id = (await params).id;
   if (!id) return Response.json({ error: "Invalid payout id." }, { status: 400 });
 
-  const body = (await request.json()) as { status?: "approved" | "paid" | "rejected"; adminNotes?: string; transactionRef?: string };
+  const body = (await readJsonBody(request)) as { status?: "approved" | "paid" | "rejected"; adminNotes?: string; transactionRef?: string };
   if (!body.status || !["approved", "paid", "rejected"].includes(body.status)) {
     return Response.json({ error: "Invalid status." }, { status: 400 });
   }
@@ -32,8 +33,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
       link: "/practitioner/earnings",
     }).catch(() => {});
 
-    const practitionerSnap = await db.collection("practitioners").doc(updated.practitionerId).get();
-    const practitioner = practitionerSnap.exists ? (practitionerSnap.data() as { name: string; email: string }) : null;
+    const practitioner = await getPractitionerById(updated.practitionerId);
     if (practitioner) {
       const statusCopy = body.status === "paid" ? `has been paid${updated.transactionRef ? ` (ref: ${updated.transactionRef})` : ""}.` : body.status === "approved" ? "was approved and will be paid soon." : "was rejected.";
       await sendEmail({

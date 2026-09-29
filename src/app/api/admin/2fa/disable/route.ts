@@ -1,6 +1,7 @@
 import { getCurrentAdmin, recordAudit, revokeCurrentSession } from "@/lib/admin-auth";
 import { disableTwoFactor, getTwoFactorState, verifyTotpOrBackupCode, type TwoFactorAccount } from "@/lib/two-factor";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -19,7 +20,7 @@ export async function POST(request: Request) {
   const throttle = await checkAuthThrottle("admin-2fa-disable", admin.id, request);
   if (!throttle.allowed) return Response.json({ error: "Too many attempts. Try again later." }, { status: 429, headers: { "Retry-After": String(throttle.retryAfter) } });
 
-  const body = (await request.json()) as { code?: string };
+  const body = (await readJsonBody(request)) as { code?: string };
   if (!(await verifyTotpOrBackupCode(account, secret, body.code ?? ""))) {
     await recordAuthFailure(throttle.keyHash);
     return Response.json({ error: "That code is incorrect." }, { status: 401 });

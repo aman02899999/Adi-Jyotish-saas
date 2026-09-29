@@ -6,6 +6,7 @@ import { AvatarImage } from "@/components/avatar-image";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getPersonaBySlug } from "@/lib/ai-personas";
+import { isPersonaOffered } from "@/lib/free-ai";
 import { getCurrentMember } from "@/lib/member-auth";
 import { isRazorpayConfigured } from "@/lib/razorpay";
 
@@ -14,7 +15,7 @@ export const dynamic = "force-dynamic";
 export async function generateMetadata({ params }: { params: Promise<{ slug: string }> }): Promise<Metadata> {
   const { slug } = await params;
   const persona = await getPersonaBySlug(slug);
-  if (!persona || !persona.active) return { title: "Reading not found" };
+  if (!persona || !isPersonaOffered(persona)) return { title: "Reading not found" };
   return {
     title: `${persona.name} · ${persona.title}`,
     description: persona.description,
@@ -25,7 +26,7 @@ export async function generateMetadata({ params }: { params: Promise<{ slug: str
 export default async function AiPersonaPage({ params }: { params: Promise<{ slug: string }> }) {
   const { slug } = await params;
   const [persona, member] = await Promise.all([getPersonaBySlug(slug), getCurrentMember()]);
-  if (!persona || !persona.active) notFound();
+  if (!persona || !isPersonaOffered(persona)) notFound();
 
   return (
     <main className="marketing-page">

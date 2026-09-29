@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { CouponError, updateCoupon, type CouponPayload } from "@/lib/gemstone-coupons";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!id) return Response.json({ error: "Invalid coupon id." }, { status: 400 });
 
-  const body = (await request.json()) as CouponPayload;
+  const body = (await readJsonBody(request)) as CouponPayload;
   try {
     const updated = await updateCoupon(id, body);
     await recordAudit(admin, "gemstone_coupon.updated", "gemstone_coupon", id, { code: updated.code, active: updated.active });

@@ -1,6 +1,7 @@
 import { getCurrentMember } from "@/lib/member-auth";
 import { PredictionError, resolvePrediction, type PredictionStatus } from "@/lib/predictions";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,7 +15,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
   const { id } = await params;
-  const body = (await request.json()) as { status?: string };
+  const body = (await readJsonBody(request)) as { status?: string };
   if (!RESOLVABLE_STATUSES.has(body.status as PredictionStatus)) {
     return Response.json({ error: "Please choose a valid outcome." }, { status: 400 });
   }

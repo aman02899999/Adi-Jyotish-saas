@@ -15,7 +15,7 @@ const emptyForm: FormState = {
   sampleQuestions: "", price: "149", active: false,
 };
 
-export function AdminAiPersonas({ initialPersonas }: { initialPersonas: AiPersona[] }) {
+export function AdminAiPersonas({ initialPersonas, freeReadingsEnabled }: { initialPersonas: AiPersona[]; freeReadingsEnabled: boolean }) {
   const [items, setItems] = useState(initialPersonas);
   const [editing, setEditing] = useState<AiPersona | null>(null);
   const [form, setForm] = useState<FormState>(emptyForm);
@@ -106,7 +106,7 @@ export function AdminAiPersonas({ initialPersonas }: { initialPersonas: AiPerson
                 <span className="table-service__icon"><AvatarImage src={persona.avatarUrl} alt="" style={{ width: 34, height: 34, borderRadius: "50%", objectFit: "cover" }} fallback={<Bot size={17} />} /></span>
                 <div><strong>{persona.name}</strong><small>{persona.title}</small></div>
               </div>
-              <strong>{persona.price > 0 ? `₹${persona.price}` : "Free"}</strong>
+              <strong>{persona.price > 0 ? `₹${persona.price}` : freeReadingsEnabled ? "Free" : <>Free<small title="Free AI readings are off (ALLOW_FREE_AI_READINGS), so this persona is hidden from the site. Set a price to offer it."> · hidden</small></>}</strong>
               <button className={`status-toggle ${persona.active ? "is-active" : ""}`} onClick={() => toggleActive(persona)}><i>{persona.active ? <Check size={10} /> : null}</i>{persona.active ? "Live" : "Draft"}</button>
               <span />
               <div className="row-actions">

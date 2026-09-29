@@ -2,6 +2,7 @@ import { getCurrentMember } from "@/lib/member-auth";
 import { ChatSessionConflictError, getOnlinePractitionerAlternatives, InsufficientBalanceError, PractitionerUnavailableError, startChatSession } from "@/lib/chat";
 import { chatChannelName } from "@/lib/ably";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,8 +16,8 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("chat-session-start", `member:${member.id}`, 15, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { practitionerId?: string };
-  const practitionerId = body.practitionerId?.trim();
+  const body = (await readJsonBody(request)) as { practitionerId?: string };
+  const practitionerId = asText(body.practitionerId)?.trim();
   if (!practitionerId) return Response.json({ error: "Invalid practitioner." }, { status: 400 });
 
   try {

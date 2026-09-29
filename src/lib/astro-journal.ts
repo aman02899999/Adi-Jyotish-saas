@@ -4,6 +4,8 @@ import { FieldValue, Timestamp } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import { computeGrahaPositions, RASHIS } from "@/lib/astro-engine";
 import { buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { listJournalEntriesInSupabase, saveJournalEntryInSupabase } from "@/lib/engagement-supabase";
 
 /** Lets a member log a daily mood/note, tagged (when their birth profile is known) with which
  * house the transiting Moon occupied relative to their natal Moon at that moment — classical
@@ -74,11 +76,17 @@ export async function logJournalEntry({ memberId, member, mood, note }: {
 
   const id = `${memberId}_${entryDate}`;
   const entry = { id, memberId, entryDate, mood, note: note.slice(0, 280), moonHouse, moonRashi };
+  if (isSupabaseCutoverActive()) {
+    const updatedAt = new Date().toISOString();
+    await saveJournalEntryInSupabase({ ...entry, updatedAt });
+    return { ...entry, updatedAt };
+  }
   await db.collection("journalEntries").doc(id).set({ ...entry, updatedAt: FieldValue.serverTimestamp() });
   return { ...entry, updatedAt: new Date().toISOString() };
 }
 
 export async function listJournalEntries(memberId: string, limit = 30): Promise<JournalEntry[]> {
+  if (isSupabaseCutoverActive()) return (await listJournalEntriesInSupabase(memberId, limit)) as JournalEntry[];
   const snap = await withIndexFallback(
     () => db.collection("journalEntries").where("memberId", "==", memberId).orderBy("entryDate", "desc").limit(limit).get(),
     { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,

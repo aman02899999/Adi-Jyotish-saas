@@ -12,6 +12,7 @@ import { isRazorpayWebhookConfigured, verifyRazorpayWebhookSignature } from "@/l
 import { processReferralReward } from "@/lib/referrals";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { rechargeWallet } from "@/lib/wallet";
+import { settleUnconfirmedCapture } from "@/lib/order-reconciliation";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import {
@@ -287,7 +288,11 @@ async function handlePaymentCaptured(payment?: RazorpayWebhookPayment) {
       const rechargeAmount = Math.round(payment.amount / 100);
       await rechargeWallet({ memberId, amount: rechargeAmount, razorpayPaymentId: payment.id });
       await processReferralReward(memberId, rechargeAmount).catch((error) => console.error("Referral reward processing failed", error));
+      return;
     }
+    // Readings, gemstone orders and gift cards are normally confirmed by the browser after
+    // checkout. If the member closed the tab first, this is the only thing that records the payment.
+    await settleUnconfirmedCapture(payment);
     return;
   }
   if (paymentStatus === "succeeded") return;

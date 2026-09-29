@@ -1,5 +1,5 @@
 import { Activity, KeyRound, ShieldCheck } from "lucide-react";
-import { db } from "@/lib/firestore";
+import { listRecentAuditEntries } from "@/lib/admin-directory";
 import { AdminShell } from "@/components/admin-shell";
 import { requireAdminPage } from "@/lib/admin-page";
 
@@ -11,11 +11,7 @@ function formatAction(action: string) {
 
 export default async function AdminActivityPage() {
   await requireAdminPage("activity");
-  const snap = await db.collection("auditLogs").orderBy("createdAt", "desc").limit(150).get();
-  const rows = snap.docs.map((doc) => {
-    const data = doc.data() as { adminId: string | null; adminName: string; action: string; entityType: string; entityId: string | null; details: string | null; createdAt: FirebaseFirestore.Timestamp };
-    return { id: doc.id, ...data, createdAt: data.createdAt?.toDate() ?? new Date() };
-  });
+  const rows = await listRecentAuditEntries(150);
 
   return (
     <AdminShell active="Activity">

@@ -3,6 +3,8 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getOrCreateWallet } from "@/lib/wallet";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { createGiftCardInSupabase, getGiftCardInSupabase, GiftCardRedeemError, redeemGiftCardInSupabase } from "@/lib/gift-cards-supabase";
 
 const GIFT_CARD_VALIDITY_MS = 90 * 24 * 60 * 60 * 1000;
 
@@ -54,6 +56,16 @@ export async function createGiftCard({ buyerId, buyerName, amount, currency, rec
   const recipientClean = recipientName.trim().slice(0, 120) || "a friend";
   const messageClean = message.trim().slice(0, 280);
 
+  if (isSupabaseCutoverActive()) {
+    const code = await createGiftCardInSupabase(
+      { buyerId, buyerName, amount, currency, recipientName: recipientClean, message: messageClean, expiresAt, razorpayPaymentId },
+      generateCode,
+    );
+    const created = await getGiftCard(code);
+    if (!created) throw new Error("Gift card creation failed unexpectedly.");
+    return created;
+  }
+
   // The payment-id index doc is read and written inside the same transaction as the gift card
   // itself, so two concurrent calls for the same payment (e.g. a redelivered webhook) can't both
   // pass the "does a gift card already exist for this payment" check before either writes. The
@@ -93,6 +105,7 @@ export async function createGiftCard({ buyerId, buyerName, amount, currency, rec
 }
 
 export async function getGiftCard(code: string): Promise<GiftCard | null> {
+  if (isSupabaseCutoverActive()) return getGiftCardInSupabase(code);
   const snap = await db.collection("giftCards").doc(code.toUpperCase()).get();
   if (!snap.exists) return null;
   return giftCardFromSnap(snap);
@@ -103,6 +116,16 @@ export async function getGiftCard(code: string): Promise<GiftCard | null> {
 export async function redeemGiftCard({ code, memberId }: { code: string; memberId: string }): Promise<GiftCard> {
   const normalizedCode = code.toUpperCase();
   await getOrCreateWallet(memberId);
+
+  if (isSupabaseCutoverActive()) {
+    try {
+      return await redeemGiftCardInSupabase(normalizedCode, memberId);
+    } catch (error) {
+      // Same error type the routes already map to a 400 with the message shown to the member.
+      if (error instanceof GiftCardRedeemError) throw new GiftCardError(error.message);
+      throw error;
+    }
+  }
 
   const giftRef = db.collection("giftCards").doc(normalizedCode);
   const walletRef = db.collection("wallets").doc(memberId);

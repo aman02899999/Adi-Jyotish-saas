@@ -1,8 +1,10 @@
 import { AI_LAL_KITAB_READING_PRICE, AI_READING_CURRENCY, attachRazorpayOrder, createPendingLalKitabReading } from "@/lib/ai-readings";
+import { liveReadingsUnavailable } from "@/lib/gemini";
 import { getCurrentMember } from "@/lib/member-auth";
 import { memberBypassesPayment } from "@/lib/payment-bypass";
 import { getRazorpay, getRazorpayKeyId } from "@/lib/razorpay";
 import { checkRateLimit, rateLimitResponse } from "@/lib/rate-limit";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -17,16 +19,18 @@ type CreatePayload = {
 export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
+  const unavailable = await liveReadingsUnavailable();
+  if (unavailable) return unavailable;
 
   const throttle = await checkRateLimit("ai-lalkitab-reading-create", `member:${member.id}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as CreatePayload;
-  const clientName = body.clientName?.trim() ?? "";
-  const birthDate = body.birthDate?.trim() ?? "";
-  const birthTime = body.birthTime?.trim() ?? "";
-  const birthPlace = body.birthPlace?.trim() ?? "";
-  const question = body.question?.trim().slice(0, 600) ?? "";
+  const body = (await readJsonBody(request)) as CreatePayload;
+  const clientName = asText(body.clientName)?.trim() ?? "";
+  const birthDate = asText(body.birthDate)?.trim() ?? "";
+  const birthTime = asText(body.birthTime)?.trim() ?? "";
+  const birthPlace = asText(body.birthPlace)?.trim() ?? "";
+  const question = asText(body.question)?.trim().slice(0, 600) ?? "";
 
   if (!clientName || !birthDate || !birthTime || !birthPlace) {
     return Response.json({ error: "Please share your name and exact birth date, time, and place." }, { status: 400 });

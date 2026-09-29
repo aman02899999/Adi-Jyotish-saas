@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { deleteRole, RoleError, updateRole } from "@/lib/admin-roles";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -13,7 +14,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id: slug } = await params;
   if (!slug) return Response.json({ error: "Invalid role id." }, { status: 400 });
 
-  const body = (await request.json()) as { name?: string; permissions?: string[] };
+  const body = (await readJsonBody(request)) as { name?: string; permissions?: string[] };
   try {
     const updated = await updateRole(slug, { name: body.name, permissions: body.permissions }, admin.role, admin.permissions);
     await recordAudit(admin, "admin_role.updated", "admin_role", slug, { name: updated.name, permissions: updated.permissions });

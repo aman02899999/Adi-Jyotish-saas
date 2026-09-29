@@ -2,8 +2,10 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
-import { debitWallet, InsufficientBalanceError, quoteWalletPayment } from "@/lib/wallet";
-import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { creditWalletBonus, debitWallet, InsufficientBalanceError, quoteWalletPayment } from "@/lib/wallet";
+import { getRazorpay } from "@/lib/razorpay";
+import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiBudgetError, isGeminiConfigured } from "@/lib/gemini";
+import { freeAiReadingsEnabled } from "@/lib/free-ai";
 import { getPersonaById } from "@/lib/ai-personas";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
@@ -28,6 +30,7 @@ import {
 } from "@/lib/ai-readings-supabase";
 import { downloadFromSupabaseStorage, uploadToSupabaseStorage } from "@/lib/supabase-storage";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { query } from "@/lib/postgres";
 
 // Every AI-persona reading (Gemini-backed: Ask Live, Palm, Tarot, Face, Vastu, Lal Kitab) is priced
 // on a fixed ₹99–₹999 ladder, ranked by input/output complexity — text-only and single-question
@@ -175,6 +178,7 @@ export async function createPendingReading({ memberId, clientName, birthDate, bi
 
 /** A member's very first question-type reading is free. Checked (and consumed) at creation time, so a second attempt is never free even if the first is still pending. */
 export async function isEligibleForFreeReading(memberId: string) {
+  if (!freeAiReadingsEnabled()) return false;
   if (isSupabaseCutoverActive()) return !(await hasQuestionReadingInSupabase(memberId));
   const snap = await collection.where("memberId", "==", memberId).where("readingType", "==", "question").limit(1).get();
   return snap.empty;
@@ -196,6 +200,9 @@ export async function createFreeReading({ memberId, clientName, birthDate, birth
   question: string;
   persona?: { id: string; slug: string; name: string };
 }) {
+  // Callers check isEligibleForFreeReading first; this keeps the switch authoritative even if one
+  // does not. FreeReadingAlreadyUsedError already means "take the paid flow" to every caller.
+  if (!freeAiReadingsEnabled()) throw new FreeReadingAlreadyUsedError();
   // isEligibleForFreeReading (the caller's check) reads outside any transaction, so two concurrent
   // requests (double submit, duplicate tab) could both see "not yet used" and both land here.
   // create() atomically fails if this doc already exists, so only the first actually gets through.
@@ -716,7 +723,7 @@ export async function payReadingFromWallet({ readingId, memberId }: { readingId:
 }
 
 const MAX_AI_ATTEMPTS = 3;
-const PERMANENT_FAILURE_MESSAGE = "This reading could not be generated after several attempts. Our team has been notified — please contact support for a refund or a manually prepared reading.";
+const PERMANENT_FAILURE_MESSAGE = "This reading could not be generated after several attempts, so your payment has been refunded: to your wallet if you paid from it, otherwise to your original payment method within 5–7 business days.";
 
 /** A paid-but-permanently-broken reading (bad image, Gemini quota, whatever) would otherwise sit
  * in "paid" forever and get a fresh Gemini call every time it's reopened — real, uncapped,
@@ -759,13 +766,77 @@ async function recordFailedAttempt(reading: AiReading, error: unknown) {
   }
 
   if (!shouldNotify) return;
-  const adminIds = await getAdminIdsWithPermission("insights");
+  // The refund policy promises no charge for a reading that fails to generate, so the refund is
+  // automatic, to the method the member paid with. This runs once per reading: shouldNotify is true
+  // only for the call that crossed the cap. Billing is told either way, and told plainly when a
+  // refund still needs a person.
+  const refund = await refundFailedReading(reading).catch((refundError): RefundOutcome => {
+    console.error(`Automatic refund failed for AI reading ${reading.id}`, refundError);
+    return { kind: "manual", detail: refundError instanceof Error ? refundError.message : "unknown error" };
+  });
+  const memberEmail = await readMemberEmail(reading.memberId).catch(() => null);
+  const refundLine = refund.kind === "wallet"
+    ? `Refunded automatically to their wallet (${reading.currency} ${reading.price}).`
+    : refund.kind === "card"
+      ? `Refunded automatically to their card (Razorpay refund ${refund.refundId}).`
+      : refund.kind === "none"
+        ? "Nothing to refund: no money was taken."
+        : `AUTOMATIC REFUND FAILED (${refund.detail}). Refund ${reading.currency} ${reading.price} by hand: credit their wallet from Wallets, or refund the card in Razorpay.`;
+  const adminIds = await getAdminIdsWithPermission("billing");
   await notifyAdmins(adminIds, {
     type: "ai_reading_failed",
-    title: `AI reading permanently failed: ${reading.readingType}`,
-    body: `${reading.clientName}'s ${reading.readingType} reading failed ${attempts} times and stopped retrying. Last error: ${message}`,
-    link: "/admin/insights",
+    title: refund.kind === "manual" ? `Refund needed: ${reading.readingType} reading failed` : `${reading.readingType} reading failed and was refunded`,
+    body: `${reading.clientName}'s ${reading.readingType} reading (${reading.currency} ${reading.price}${reading.razorpayPaymentId ? `, Razorpay payment ${reading.razorpayPaymentId}` : ""}) failed ${attempts} times and stopped retrying. Member: ${memberEmail ?? reading.memberId}. ${refundLine} Last error: ${message}`,
+    link: "/admin/wallets",
   }).catch((notifyError) => console.error("Failed to notify admins of a permanently failed AI reading", notifyError));
+}
+
+type RefundOutcome = { kind: "wallet" } | { kind: "card"; refundId: string } | { kind: "none" } | { kind: "manual"; detail: string };
+
+/** How the reading was paid, read fresh rather than from the caller's copy. */
+async function readPaymentSource(readingId: string): Promise<{ bypass: boolean; wallet: boolean; razorpayPaymentId: string | null; price: number } | null> {
+  if (isSupabaseCutoverActive()) {
+    const result = await query<{ paid_via_bypass: boolean; paid_from_wallet: boolean; razorpay_payment_id: string | null; price: string | number }>(
+      `select paid_via_bypass, paid_from_wallet, razorpay_payment_id, price from public.ai_readings where id = $1`,
+      [readingId],
+    );
+    const row = result.rows[0];
+    return row ? { bypass: row.paid_via_bypass, wallet: row.paid_from_wallet, razorpayPaymentId: row.razorpay_payment_id, price: Number(row.price) } : null;
+  }
+  const snap = await collection.doc(readingId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as AiReadingDoc & { paidViaBypass?: boolean; paidFromWallet?: boolean };
+  return { bypass: Boolean(data.paidViaBypass), wallet: Boolean(data.paidFromWallet), razorpayPaymentId: data.razorpayPaymentId ?? null, price: Number(data.price) || 0 };
+}
+
+async function refundFailedReading(reading: AiReading): Promise<RefundOutcome> {
+  const source = await readPaymentSource(reading.id);
+  if (!source) return { kind: "manual", detail: "reading not found" };
+  if (source.bypass || source.price <= 0) return { kind: "none" };
+  if (source.wallet) {
+    // Keyed on the reading, so a repeat can never refund twice.
+    await creditWalletBonus({ memberId: reading.memberId, amount: source.price, type: "refund", referenceType: "ai_reading", referenceId: `refund-ai-reading-${reading.id}` });
+    return { kind: "wallet" };
+  }
+  if (source.razorpayPaymentId) {
+    const razorpay = getRazorpay();
+    if (!razorpay) return { kind: "manual", detail: "Razorpay is not configured" };
+    const refund = await razorpay.payments.refund(source.razorpayPaymentId, {
+      amount: Math.round(source.price * 100),
+      notes: { aiReadingId: reading.id, reason: "reading could not be generated" },
+    });
+    return { kind: "card", refundId: refund.id };
+  }
+  return { kind: "manual", detail: "no payment record on the reading" };
+}
+
+async function readMemberEmail(memberId: string): Promise<string | null> {
+  if (isSupabaseCutoverActive()) {
+    const result = await query<{ email: string }>(`select email from public.members where id = $1`, [memberId]);
+    return result.rows[0]?.email ?? null;
+  }
+  const snap = await db.collection("members").doc(memberId).get();
+  return (snap.data() as { email?: string } | undefined)?.email ?? null;
 }
 
 /** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays
@@ -822,7 +893,9 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
       return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
     })();
   } catch (error) {
-    await recordFailedAttempt(reading, error);
+    // A spent daily cap is not a fault in this reading: it stays paid and succeeds on a later
+    // retry. Counting it would let a busy day turn paid readings permanently "failed".
+    if (!isGeminiBudgetError(error)) await recordFailedAttempt(reading, error);
     throw error;
   }
 

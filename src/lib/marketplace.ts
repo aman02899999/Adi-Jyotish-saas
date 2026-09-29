@@ -14,6 +14,9 @@ import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
 import { computeSessionPriceAnchor, computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
+import { genuineReviews } from "@/lib/review-provenance";
+import { listFavoritePractitionerIdsInSupabase } from "@/lib/member-favorites-supabase";
+import { getUnreviewedCompletedBookingsInSupabase } from "@/lib/bookings-supabase";
 
 export type PractitionerReview = {
   id: string;
@@ -27,6 +30,8 @@ export type PractitionerReview = {
   usefulness: number;
   body: string;
   status: string;
+  /** "seed" for synthetic reviews (see review-provenance.ts), "member" or absent for genuine ones. */
+  source: string | null;
   createdAt: Date;
   updatedAt: Date;
 };
@@ -45,6 +50,7 @@ function reviewFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot): Practition
     usefulness: data.usefulness,
     body: data.body,
     status: data.status,
+    source: (data.source as string | undefined) ?? null,
     createdAt: (data.createdAt as FirebaseFirestore.Timestamp)?.toDate() ?? new Date(),
     updatedAt: (data.updatedAt as FirebaseFirestore.Timestamp)?.toDate() ?? new Date(),
   };
@@ -72,7 +78,7 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
   // Reviews fall back to empty (practitioners still list, just without ratings) if the
   // (status, createdAt) composite index isn't built yet. Postgres has no equivalent
   // failure mode, so the cutover branch needs no fallback wrapper.
-  const [directory, reviews, accuracyMap] = await Promise.all([
+  const [directory, publishedReviews, accuracyMap] = await Promise.all([
     getPractitionerDirectory(true),
     isSupabaseCutoverActive()
       ? getPublishedReviewsInSupabase()
@@ -82,6 +88,10 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
         ).then((snap) => snap.docs.map(reviewFromDoc)),
     getPractitionerAccuracyMap(),
   ]);
+  // Ratings and review counts below set both what is displayed and what is charged (the
+  // new-practitioner discount and the AI persona price bands), so synthetic reviews are removed
+  // before either is computed. The Postgres query already excludes them; filtering again is free.
+  const reviews = genuineReviews(publishedReviews);
   const scored = directory.map((person) => {
     const personReviews = reviews.filter((review) => review.practitionerId === person.id);
     const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => personReviews.length ? personReviews.reduce((sum, review) => sum + review[field], 0) / personReviews.length : null;
@@ -140,24 +150,26 @@ export async function getMarketplacePractitioner(slug: string) {
   const people = await getMarketplacePractitioners();
   const practitioner = people.find((person) => person.slug === slug);
   if (!practitioner) return null;
-  const reviews = isSupabaseCutoverActive()
+  const reviews = genuineReviews(isSupabaseCutoverActive()
     ? await getPublishedReviewsForPractitionerInSupabase(practitioner.id)
     : (await db.collection("practitionerReviews")
         .where("practitionerId", "==", practitioner.id)
         .where("status", "==", "published")
         .orderBy("createdAt", "desc")
-        .get()).docs.map(reviewFromDoc);
+        .get()).docs.map(reviewFromDoc));
   return { practitioner, reviews };
 }
 
 /** Favorites are stored as members/{memberId}/favorites/{practitionerId} — doc existence IS the
  * membership check, so add/remove/list are all simple, no separate unique-index needed. */
 export async function getFavoritePractitionerIds(memberId: string) {
+  if (isSupabaseCutoverActive()) return listFavoritePractitionerIdsInSupabase(memberId);
   const snap = await db.collection("members").doc(memberId).collection("favorites").get();
   return snap.docs.map((doc) => doc.id);
 }
 
 export async function getEligibleReviewBookings(memberEmail: string, practitionerId: string) {
+  if (isSupabaseCutoverActive()) return getUnreviewedCompletedBookingsInSupabase(memberEmail, practitionerId);
   const [completedSnap, existingSnap] = await Promise.all([
     db.collection("bookings")
       .where("clientEmail", "==", memberEmail)

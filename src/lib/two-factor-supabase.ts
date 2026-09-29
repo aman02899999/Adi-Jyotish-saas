@@ -126,3 +126,43 @@ export async function consumeBackupCodeInSupabase(role: TwoFactorRole, id: strin
   );
   return (result.rowCount ?? 0) === 1;
 }
+
+/**
+ * Counts one wrong code against the account and returns the time its 2FA step is
+ * locked until, or null. One statement, so concurrent wrong guesses each count: the
+ * conflicting inserts serialise on the primary key and each sees the last one's count.
+ * A window older than `windowSeconds` starts over at one.
+ */
+export async function recordTwoFactorFailureInSupabase(
+  key: string,
+  maxFailures: number,
+  windowSeconds: number,
+  lockSeconds: number,
+): Promise<Date | null> {
+  const fresh = `f.window_started_at <= now() - make_interval(secs => $3)`;
+  const next = `(case when ${fresh} then 1 else f.failures + 1 end)`;
+  const row = await queryModel<{ blockedUntil: Date | null }>(
+    `insert into public.two_factor_failures as f (id, failures, window_started_at, blocked_until)
+     values ($1, 1, now(), case when 1 >= $2 then now() + make_interval(secs => $4) end)
+     on conflict (id) do update set
+       failures = ${next},
+       window_started_at = case when ${fresh} then now() else f.window_started_at end,
+       blocked_until = case when ${next} >= $2 then now() + make_interval(secs => $4) else f.blocked_until end
+     returning blocked_until`,
+    [key, maxFailures, windowSeconds, lockSeconds],
+  );
+  return row?.blockedUntil ?? null;
+}
+
+/** When the account's 2FA step is locked until, or null when it is not locked now. */
+export async function getTwoFactorLockInSupabase(key: string): Promise<Date | null> {
+  const row = await queryModel<{ blockedUntil: Date | null }>(
+    `select blocked_until from public.two_factor_failures where id = $1 and blocked_until > now()`,
+    [key],
+  );
+  return row?.blockedUntil ?? null;
+}
+
+export async function clearTwoFactorFailuresInSupabase(key: string): Promise<void> {
+  await query(`delete from public.two_factor_failures where id = $1`, [key]);
+}

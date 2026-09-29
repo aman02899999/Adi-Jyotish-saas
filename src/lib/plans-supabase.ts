@@ -90,7 +90,7 @@ export async function seedPlansInSupabase(
           features, session_discount_percent, highlighted, active, sort_order,
           razorpay_plan_id_monthly, razorpay_plan_id_yearly, created_at, updated_at)
        values ($1,$2,$3,$4,$5,$6,$7,$8,$9,$10,$11,$12,$13,null,null,now(),now())
-       on conflict (id) do nothing`,
+       on conflict do nothing`,
       [
         plan.key,
         plan.key,

@@ -7,6 +7,7 @@ import { listFamilyMembers } from "@/lib/family-members";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { getMemberDiscountPercent } from "@/lib/subscriptions";
+import { findFirstBookableDate } from "@/lib/scheduling";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -23,6 +24,11 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
   ]);
   const initialServiceId = query.service || undefined;
   const initialPractitionerId = query.practitioner || undefined;
+  const initialService = services.find((service) => service.id === initialServiceId) ?? services[0];
+  // Open on a day someone can actually be booked, not a weekend where everyone shows "Full".
+  const initialDate = initialService
+    ? await findFirstBookableDate({ duration: initialService.duration, practitionerId: initialPractitionerId }).catch(() => null)
+    : null;
 
   return (
     <main className="booking-page">
@@ -32,7 +38,7 @@ export default async function BookPage({ searchParams }: { searchParams: Promise
         <small>Three thoughtful steps · about two minutes</small>
       </div>
       <div className="booking-shell">
-        <BookingFlow services={services} initialServiceId={initialServiceId} initialPractitionerId={initialPractitionerId} member={member} familyMembers={familyMembers} cancellationHours={settings.cancellationHours} discountPercent={discountPercent} />
+        <BookingFlow services={services} initialServiceId={initialServiceId} initialDate={initialDate ?? undefined} initialPractitionerId={initialPractitionerId} member={member} familyMembers={familyMembers} cancellationHours={settings.cancellationHours} discountPercent={discountPercent} />
       </div>
     <SiteFooter />
     </main>

@@ -1,6 +1,7 @@
 import { DECISION_TYPES, decisionVaraNote, rankMuhurtaWindows, type DecisionType } from "@/lib/muhurat-concierge";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -14,10 +15,10 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("muhurat-concierge", `ip:${ip}`, 10, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as Payload;
+  const body = (await readJsonBody(request)) as Payload;
   const decisionType = body.decisionType ?? "";
-  const startDate = body.startDate?.trim() ?? "";
-  const endDate = body.endDate?.trim() ?? "";
+  const startDate = asText(body.startDate)?.trim() ?? "";
+  const endDate = asText(body.endDate)?.trim() ?? "";
 
   if (!DECISION_KEYS.has(decisionType as DecisionType)) {
     return Response.json({ error: "Please choose what you're planning for." }, { status: 400 });

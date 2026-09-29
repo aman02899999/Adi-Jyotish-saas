@@ -43,9 +43,20 @@ type PractitionerDoc = {
  * routing) rather than Firebase UID, because a practitioner record can exist — created by an
  * admin invite, or seeded demo data — before any Firebase Auth account is linked to it. The
  * `firebaseUid` field is the linkage, set once the practitioner actually signs in. */
-export async function findPractitionerByUid(uid: string) {
+async function findPractitionerDocByUid(uid: string) {
   const snap = await db.collection("practitioners").where("firebaseUid", "==", uid).limit(1).get();
   return snap.empty ? null : snap.docs[0];
+}
+
+/**
+ * Whether a practitioner record is linked to this uid — what the sign-in routes ask before deciding
+ * to demand a 2FA code. It must read the live provider: after cutover, a practitioner linked in
+ * Postgres is absent from Firestore, and a Firestore-only answer of "no such practitioner" would
+ * skip their 2FA challenge entirely.
+ */
+export async function hasPractitionerForUid(uid: string): Promise<boolean> {
+  if (isSupabaseCutoverActive()) return (await findPractitionerIdByUidInSupabase(uid)) !== null;
+  return (await findPractitionerDocByUid(uid)) !== null;
 }
 
 /** Verifies a client-obtained Firebase ID token and creates a session cookie. Unlike members,
@@ -57,7 +68,7 @@ export async function createPractitionerSession(idToken: string) {
     const id = await findPractitionerIdByUidInSupabase(decoded.uid);
     if (id) await touchPractitionerLastLoginInSupabase(id);
   } else {
-    const doc = await findPractitionerByUid(decoded.uid);
+    const doc = await findPractitionerDocByUid(decoded.uid);
     if (doc) await doc.ref.update({ lastLoginAt: FieldValue.serverTimestamp() });
   }
 
@@ -101,7 +112,7 @@ export async function getCurrentPractitioner(): Promise<PractitionerIdentity | n
     };
   }
 
-  const doc = await findPractitionerByUid(uid);
+  const doc = await findPractitionerDocByUid(uid);
   if (!doc) return null;
   const data = doc.data() as PractitionerDoc;
   if (!data.active) return null;

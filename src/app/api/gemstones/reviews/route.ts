@@ -1,6 +1,7 @@
 import { createReview, ReviewError } from "@/lib/gemstone-reviews";
 import { getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -9,8 +10,8 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("gemstone-review", member ? `member:${member.id}` : `ip:${requestIp(request)}`, 5, 600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { productId?: string; orderId?: string; reviewerName?: string; rating?: number; title?: string; body?: string };
-  const productId = body.productId?.trim();
+  const body = (await readJsonBody(request)) as { productId?: string; orderId?: string; reviewerName?: string; rating?: number; title?: string; body?: string };
+  const productId = asText(body.productId)?.trim();
   if (!productId) return Response.json({ error: "Invalid product." }, { status: 400 });
 
   try {
@@ -18,7 +19,7 @@ export async function POST(request: Request) {
       productId,
       memberId: member?.id ?? null,
       orderId: body.orderId ?? null,
-      reviewerName: body.reviewerName?.trim() || member?.name || "Anonymous",
+      reviewerName: asText(body.reviewerName)?.trim() || member?.name || "Anonymous",
       rating: Number(body.rating) || 0,
       title: body.title,
       body: body.body ?? "",

@@ -2,7 +2,6 @@ import type { ReactNode } from "react";
 import { Link } from "@/i18n/navigation";
 import {
   BarChart3,
-  Bell,
   BookOpenText,
   Bot,
   CalendarRange,
@@ -107,7 +106,7 @@ export async function AdminShell({ active, children }: { active: ActiveSection; 
               </details>
             </div>
             <QuickNavSearch items={searchItems} placeholder="Search anything…" ariaLabel="Search admin" showShortcutHint />
-            <div><Link href="/dashboard">Preview site <ExternalLink size={14} /></Link><Link className="notification-button" href="/admin/messages" aria-label={`${unreadCount} unread messages`}><Bell size={18} />{unreadCount > 0 && <i />}</Link><NotificationBell apiBase="/api/admin/notifications" /><ProfileMenu initials={initials} name={admin?.name ?? "Administrator"} subtitle={admin?.email ?? admin?.role ?? "admin"} logoutAction="/api/auth/logout" redirectTo="/admin/login" /></div>
+            <div><Link href="/dashboard">Preview site <ExternalLink size={14} /></Link><Link className="notification-button" href="/admin/messages" aria-label={`${unreadCount} unread messages`} title="Messages"><MessageSquareText size={18} />{unreadCount > 0 && <i />}</Link><NotificationBell apiBase="/api/admin/notifications" /><ProfileMenu initials={initials} name={admin?.name ?? "Administrator"} subtitle={admin?.email ?? admin?.role ?? "admin"} logoutAction="/api/auth/logout" redirectTo="/admin/login" /></div>
           </header>
           {children}
         </section>

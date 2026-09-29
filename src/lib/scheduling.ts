@@ -3,7 +3,15 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, isIndexBuildingError } from "@/lib/firestore";
 import { getBookingsInWindowInSupabase } from "@/lib/bookings-supabase";
-import { getPractitionerDirectoryInSupabase } from "@/lib/practitioners-supabase";
+import {
+  deleteUnusedPractitionerInSupabase,
+  getPractitionerByIdInSupabase,
+  getPractitionerDirectoryInSupabase,
+  insertPractitionerInSupabase,
+  PractitionerEmailTakenError,
+  updatePractitionerInSupabase,
+  type PractitionerInsert,
+} from "@/lib/practitioners-supabase";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getStudioSettings } from "@/lib/studio-settings";
 
@@ -94,7 +102,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     name: "Anika Sharma",
     slug: "anika-sharma",
     email: "anika@jyotish.studio",
-    title: "Senior Vedic Astrologer",
+    title: "Vedic Astrologer",
     bio: "Anika brings classical Parashari technique into grounded conversations about purpose, timing, and visible growth.",
     specialties: "Birth charts, Career & dharma, Planetary periods",
     languages: "English, Hindi, Sanskrit",
@@ -157,7 +165,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "ravindra-bhatt",
     email: "ravindra.bhatt@jyotish.studio",
     title: "Prem aur Rishtey Visheshagya",
-    bio: "Ravindra ji has spent over a decade helping clients navigate love, courtship, and long-distance relationships through classical Jyotish, with a practical focus on timing and honest communication.",
+    bio: "Ravindra ji helps clients navigate love, courtship, and long-distance relationships through classical Jyotish, with a practical focus on timing and honest communication.",
     specialties: "Relationships, Prem Vivah, Love Astrology, Timing Guidance",
     languages: "Hindi, Gujarati",
     consultationModes: "Audio, Chat",
@@ -231,7 +239,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "harish-shukla",
     email: "harish.shukla@jyotish.studio",
     title: "Vivah Jyotish Visheshagya",
-    bio: "Harish ji has guided hundreds of families through kundli milan and vivah muhurat selection, blending classical Ashtakoot matching with honest conversation about real compatibility.",
+    bio: "Harish ji guides families through kundli milan and vivah muhurat selection, blending classical Ashtakoot matching with honest conversation about real compatibility.",
     specialties: "Marriage, Kundli Milan, Vivah Muhurat, Ashtakoot Matching",
     languages: "Hindi, Sanskrit",
     consultationModes: "Audio, Video, Chat",
@@ -267,7 +275,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "om-prakash-tiwari",
     email: "omprakash.tiwari@jyotish.studio",
     title: "Marriage & Muhurat Expert",
-    bio: "With over two decades of experience, Om Prakash ji is known for precise vivah muhurat selection and practical remedies for dosha concerns raised before marriage.",
+    bio: "Om Prakash ji focuses on precise vivah muhurat selection and practical remedies for dosha concerns raised before marriage.",
     specialties: "Marriage, Vivah Muhurat, Dosha Remedies, Panchang",
     languages: "Hindi, Bhojpuri",
     consultationModes: "Audio, Chat",
@@ -487,7 +495,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "ramesh-iyengar",
     email: "ramesh.iyengar@jyotish.studio",
     title: "Vitality & Longevity Jyotishi",
-    bio: "Ramesh ji has two decades of experience reading longevity indicators and planetary health remedies, widely respected for his calm, thorough consultations.",
+    bio: "Ramesh ji reads longevity indicators and planetary health remedies in calm, thorough conversations.",
     specialties: "Health, Longevity, Planetary Health Remedies",
     languages: "Tamil, Telugu, Hindi",
     consultationModes: "Audio, Video, Chat",
@@ -507,7 +515,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "vinod-chaubey",
     email: "vinod.chaubey@jyotish.studio",
     title: "Vastu Shastra Consultant",
-    bio: "Vinod ji has consulted on Vastu for homes and offices for over two decades, focused on practical, non-structural remedies rather than costly renovations.",
+    bio: "Vinod ji advises on Vastu for homes and offices, focused on practical, non-structural remedies rather than costly renovations.",
     specialties: "Vastu, Home Harmony, Directional Remedies",
     languages: "Hindi, Sanskrit",
     consultationModes: "Audio, Video, Chat",
@@ -599,7 +607,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "naresh-vyas",
     email: "naresh.vyas@jyotish.studio",
     title: "Education & Academic Jyotishi",
-    bio: "Naresh ji has guided students and parents through exam timing and academic focus concerns for nearly two decades, drawing on 5th-house analysis and Saraswati yoga indicators.",
+    bio: "Naresh ji guides students and parents through exam timing and academic focus concerns, drawing on 5th-house analysis and Saraswati yoga indicators.",
     specialties: "Education, Exam Timing, Academic Focus",
     languages: "Hindi, Sanskrit",
     consultationModes: "Audio, Video, Chat",
@@ -671,7 +679,7 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
     slug: "ravi-shankar-pillai",
     email: "ravishankar.pillai@jyotish.studio",
     title: "Learning & Focus Jyotishi",
-    bio: "Ravi Shankar ji has nearly two decades of experience helping students with concentration remedies and guidance on career direction after their studies.",
+    bio: "Ravi Shankar ji helps students with concentration remedies and guidance on career direction after their studies.",
     specialties: "Education, Concentration Remedies, Career-after-Education Guidance",
     languages: "Tamil, Malayalam, Hindi",
     consultationModes: "Audio, Video, Chat",
@@ -693,14 +701,65 @@ const starterPractitioners: Array<Omit<Practitioner, "id" | "firebaseUid" | "has
 // of leaving them stuck at the false default forever.
 const REAL_PRACTITIONER_SLUGS = new Set(["jagmohan-shashtri-ji", "arun-dubey-ji"]);
 
+/**
+ * Starter copy that was published and later corrected — every AI persona above once claimed years
+ * of experience or seniority it cannot have. A stored field still holding the old text has never
+ * been edited, so it is safe to replace; anything else is someone's edit and is left alone.
+ */
+const SUPERSEDED_STARTER_COPY: Array<{ slug: string; field: "title" | "bio"; text: string }> = [
+  { slug: "anika-sharma", field: "title", text: "Senior Vedic Astrologer" },
+  { slug: "ravindra-bhatt", field: "bio", text: "Ravindra ji has spent over a decade helping clients navigate love, courtship, and long-distance relationships through classical Jyotish, with a practical focus on timing and honest communication." },
+  { slug: "harish-shukla", field: "bio", text: "Harish ji has guided hundreds of families through kundli milan and vivah muhurat selection, blending classical Ashtakoot matching with honest conversation about real compatibility." },
+  { slug: "om-prakash-tiwari", field: "bio", text: "With over two decades of experience, Om Prakash ji is known for precise vivah muhurat selection and practical remedies for dosha concerns raised before marriage." },
+  { slug: "ramesh-iyengar", field: "bio", text: "Ramesh ji has two decades of experience reading longevity indicators and planetary health remedies, widely respected for his calm, thorough consultations." },
+  { slug: "vinod-chaubey", field: "bio", text: "Vinod ji has consulted on Vastu for homes and offices for over two decades, focused on practical, non-structural remedies rather than costly renovations." },
+  { slug: "naresh-vyas", field: "bio", text: "Naresh ji has guided students and parents through exam timing and academic focus concerns for nearly two decades, drawing on 5th-house analysis and Saraswati yoga indicators." },
+  { slug: "ravi-shankar-pillai", field: "bio", text: "Ravi Shankar ji has nearly two decades of experience helping students with concentration remedies and guidance on career direction after their studies." },
+];
+
+/** Admin-deleted starter practitioners; seeding never recreates one listed here. */
+export const DELETED_STARTER_COLLECTION = "deletedStarterPractitioners";
+
+export function isStarterPractitioner(id: string) {
+  return starterPractitioners.some((starter) => starter.slug === id);
+}
+
+/**
+ * Creates any starter practitioner that does not exist yet, and otherwise changes only what no
+ * person owns. This runs on every directory read, so it used to be the thing reverting admins:
+ * it rewrote title, bio, rates, verification and featured on all 34 starters each time — including
+ * inside the admin update route itself, whose response came back with the edit already undone —
+ * recreated starters an admin had deleted, and re-added weekday hours to any starter whose
+ * availability had been cleared.
+ *
+ * For an existing starter it now only: keeps isAiPowered true to the roster, keeps AI personas
+ * online (there is nobody to switch them on), fills a missing photo, and replaces copy listed in
+ * SUPERSEDED_STARTER_COPY that has not been edited since. Writes happen only when something
+ * differs, and all 34 documents are read in one round trip.
+ */
 export async function seedPractitioners() {
   const collection = db.collection("practitioners");
-  for (const starter of starterPractitioners) {
+  const refs = starterPractitioners.map((starter) => collection.doc(starter.slug));
+  const [snaps, deleted] = await Promise.all([
+    db.getAll(...refs),
+    db.collection(DELETED_STARTER_COLLECTION).select().get(),
+  ]);
+  const deletedIds = new Set(deleted.docs.map((doc) => doc.id));
+
+  await Promise.all(starterPractitioners.map(async (starter, index) => {
     const isAiPowered = !REAL_PRACTITIONER_SLUGS.has(starter.slug);
-    const ref = collection.doc(starter.slug);
-    const snap = await ref.get();
+    const ref = refs[index];
+    const snap = snaps[index];
+
     if (!snap.exists) {
-      await ref.set({
+      if (deletedIds.has(starter.slug)) return;
+      // Availability is written with the profile, once. After that it belongs to the schedule
+      // editor, and an empty schedule is a choice, not something to repair.
+      const weekdays = starter.featured ? [1, 2, 3, 4, 5] : [2, 3, 4, 5, 6];
+      const batch = db.batch();
+      // create() rather than set(): two concurrent first reads both see the document missing, and
+      // the loser must not overwrite what the winner wrote.
+      batch.create(ref, {
         ...starter,
         firebaseUid: null,
         isAiPowered,
@@ -708,48 +767,28 @@ export async function seedPractitioners() {
         createdAt: FieldValue.serverTimestamp(),
         updatedAt: FieldValue.serverTimestamp(),
       });
-    } else {
-      // photoUrl is deliberately excluded from this always-on update — it's an admin/practitioner
-      // editable field (see updatePractitionerProfile), so blindly overwriting it here on every
-      // directory fetch would silently revert a real uploaded photo back to the seed default.
-      // Backfilling it only when the existing doc has none lets a newly-added seed photo reach
-      // practitioners that were already seeded (e.g. in production) without ever touching one
-      // that's already set. online is similarly left alone for real practitioners (their own
-      // toggle), but force-corrected back to true for AI ones on every pass — there's no human on
-      // the other end to accidentally flip it off, so if it's ever false that's drift, not intent.
-      const existingPhotoUrl = (snap.data() as { photoUrl?: string | null }).photoUrl ?? null;
-      await ref.update({
-        title: starter.title,
-        bio: starter.bio,
-        specialties: starter.specialties,
-        languages: starter.languages,
-        consultationModes: starter.consultationModes,
-        experienceYears: starter.experienceYears,
-        verified: starter.verified,
-        verificationLevel: starter.verificationLevel,
-        chatRatePerMinute: starter.chatRatePerMinute,
-        featured: starter.featured,
-        isAiPowered,
-        ...(existingPhotoUrl ? {} : { photoUrl: starter.photoUrl }),
-        ...(isAiPowered ? { online: true } : {}),
-      });
-    }
-
-    const rulesSnap = await ref.collection("availabilityRules").limit(1).get();
-    if (rulesSnap.empty) {
-      const weekdays = starter.featured ? [1, 2, 3, 4, 5] : [2, 3, 4, 5, 6];
-      const batch = db.batch();
       for (const weekday of weekdays) {
-        // A deterministic doc ID (not an auto-generated one) keeps this idempotent: this whole
-        // block runs on every directory read, so without it, two concurrent reads that both see
-        // rulesSnap.empty === true (the check-then-act race is real — nothing here locks between
-        // the read and the write) each create their own random-ID doc for the same weekday,
-        // doubling every slot the availability grid ever offers for that practitioner.
         batch.set(ref.collection("availabilityRules").doc(`starter-${weekday}`), { weekday, startTime: "09:30", endTime: "17:30", active: true });
       }
-      await batch.commit();
+      await batch.commit().catch((error: unknown) => {
+        // gRPC ALREADY_EXISTS: a concurrent read created it first.
+        if ((error as { code?: number }).code !== 6) throw error;
+      });
+      return;
     }
-  }
+
+    const data = snap.data() as Record<string, unknown>;
+    const patch: Record<string, unknown> = {};
+    if (data.isAiPowered !== isAiPowered) patch.isAiPowered = isAiPowered;
+    if (isAiPowered && data.online !== true) patch.online = true;
+    if (!data.photoUrl && starter.photoUrl) patch.photoUrl = starter.photoUrl;
+    for (const superseded of SUPERSEDED_STARTER_COPY) {
+      if (superseded.slug === starter.slug && data[superseded.field] === superseded.text) {
+        patch[superseded.field] = starter[superseded.field];
+      }
+    }
+    if (Object.keys(patch).length) await ref.update(patch);
+  }));
 }
 
 function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestore.DocumentSnapshot): Practitioner {
@@ -855,111 +894,170 @@ function toPractitionerSlug(name: string) {
     .slice(0, 100);
 }
 
+export type PractitionerProfilePatch = Partial<{
+  name: string; email: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
+  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null;
+  verified: boolean; verificationLevel: string; online: boolean; featured: boolean; active: boolean;
+}>;
+
+/** One set of rules for every admin surface that edits a practitioner (the Practitioners page and
+ * the Schedule page used to carry two, with different limits and different delete behaviour). */
+function normalizeProfilePatch(patch: PractitionerProfilePatch) {
+  const out: Record<string, unknown> = {};
+  if (patch.name !== undefined) {
+    const name = patch.name.trim().slice(0, 120);
+    if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
+    out.name = name;
+  }
+  if (patch.email !== undefined) {
+    const email = patch.email.trim().toLowerCase().slice(0, 180);
+    if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PractitionerAdminError("Enter a valid email address.");
+    out.email = email;
+  }
+  if (patch.title !== undefined) out.title = patch.title.trim().slice(0, 160);
+  if (patch.bio !== undefined) out.bio = patch.bio.trim().slice(0, 2000);
+  if (patch.specialties !== undefined) out.specialties = patch.specialties.trim().slice(0, 300);
+  if (patch.languages !== undefined) out.languages = patch.languages.trim().slice(0, 200);
+  if (patch.consultationModes !== undefined) out.consultationModes = patch.consultationModes.trim().slice(0, 200);
+  if (patch.experienceYears !== undefined) out.experienceYears = Math.max(0, Math.min(60, Number(patch.experienceYears) || 0));
+  if (patch.chatRatePerMinute !== undefined) out.chatRatePerMinute = Math.max(0, Number(patch.chatRatePerMinute) || 0);
+  if (patch.photoUrl !== undefined) out.photoUrl = sanitizeMediaUrl(patch.photoUrl ?? undefined);
+  if (patch.videoUrl !== undefined) out.videoUrl = sanitizeMediaUrl(patch.videoUrl ?? undefined);
+  if (patch.verified !== undefined) out.verified = Boolean(patch.verified);
+  if (patch.verificationLevel !== undefined) out.verificationLevel = patch.verificationLevel.trim().slice(0, 40) || "reviewed";
+  if (patch.online !== undefined) out.online = Boolean(patch.online);
+  if (patch.featured !== undefined) out.featured = Boolean(patch.featured);
+  if (patch.active !== undefined) out.active = Boolean(patch.active);
+  return out;
+}
+
+/** One practitioner by id (their slug) from the live provider, or null. */
+export async function getPractitionerById(id: string): Promise<Practitioner | null> {
+  if (isSupabaseCutoverActive()) return getPractitionerByIdInSupabase(id);
+  const snap = await db.collection("practitioners").doc(id).get();
+  return snap.exists ? practitionerFromDoc(snap) : null;
+}
+
 /** Practitioners previously could only be onboarded by inviting an email to an *existing*
- * Firestore doc — there was no way to create that doc from the admin UI at all, so a new
- * practitioner had to be added by hand (a seed script) before an invite could even be sent.
- * This creates the base record; the practitioner still needs a portal invite (see
- * practitioner-invites.ts) before they can sign in and self-manage their profile. */
-export async function createPractitionerAdmin(input: {
-  name: string; email: string; title: string; bio: string; specialties: string; languages: string;
-  consultationModes: string; experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null;
-  featured: boolean; active: boolean;
-}) {
-  const name = input.name.trim().slice(0, 120);
-  const email = input.email.trim().toLowerCase().slice(0, 180);
-  if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
-  if (!/^[^\s@]+@[^\s@]+\.[^\s@]+$/.test(email)) throw new PractitionerAdminError("Enter a valid email address.");
+ * record — there was no way to create one from the admin UI at all. This creates the base
+ * record; the practitioner still needs a portal invite (see practitioner-invites.ts) before they
+ * can sign in and self-manage their profile. `starterHours` adds weekday 09:30-17:30 availability,
+ * which the Schedule page promises; the Practitioners page leaves hours to be set explicitly. */
+export async function createPractitionerAdmin(
+  input: { name: string; email: string } & PractitionerProfilePatch,
+  options: { starterHours?: boolean } = {},
+): Promise<Practitioner> {
+  const fields = normalizeProfilePatch({ ...input, name: input.name, email: input.email });
+  const record = {
+    title: "", bio: "", specialties: "", languages: "", consultationModes: "", experienceYears: 0,
+    chatRatePerMinute: 0, photoUrl: null, videoUrl: null, verified: false, verificationLevel: "unverified",
+    online: false, featured: false, active: false,
+    ...fields,
+    isAiPowered: false,
+  } as Omit<PractitionerInsert, "slug"> & { name: string; email: string };
+  const base = toPractitionerSlug(record.name) || "practitioner";
+  const weekdays = options.starterHours ? [1, 2, 3, 4, 5] : [];
+
+  if (isSupabaseCutoverActive()) {
+    try {
+      const id = await insertPractitionerInSupabase({ ...record, slug: base }, weekdays);
+      return (await getPractitionerByIdInSupabase(id))!;
+    } catch (error) {
+      if (error instanceof PractitionerEmailTakenError) throw new PractitionerAdminError(error.message);
+      throw error;
+    }
+  }
 
   const collection = db.collection("practitioners");
-  const emailTaken = await collection.where("email", "==", email).limit(1).get();
+  const emailTaken = await collection.where("email", "==", record.email).limit(1).get();
   if (!emailTaken.empty) throw new PractitionerAdminError("A practitioner with that email already exists.");
 
-  const base = toPractitionerSlug(name) || "practitioner";
   let slug = base;
   for (let attempt = 0; (await collection.doc(slug).get()).exists; attempt += 1) {
     slug = `${base}-${attempt + 2}`;
     if (attempt > 20) throw new PractitionerAdminError("Could not generate a unique profile URL — try a different name.");
   }
-
-  const doc = {
-    name,
-    slug,
-    email,
-    title: input.title.trim().slice(0, 160),
-    bio: input.bio.trim().slice(0, 2000),
-    specialties: input.specialties.trim().slice(0, 300),
-    languages: input.languages.trim().slice(0, 200),
-    consultationModes: input.consultationModes.trim().slice(0, 200),
-    experienceYears: Math.max(0, Math.min(60, Number(input.experienceYears) || 0)),
-    verified: false,
-    verificationLevel: "unverified",
-    photoUrl: input.photoUrl?.trim() || null,
-    videoUrl: input.videoUrl?.trim() || null,
-    online: false,
-    isAiPowered: false,
-    chatRatePerMinute: Math.max(0, Number(input.chatRatePerMinute) || 0),
-    active: input.active,
-    featured: input.featured,
-    firebaseUid: null,
-  };
   const ref = collection.doc(slug);
-  await ref.set({ ...doc, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  const batch = db.batch();
+  batch.create(ref, { ...record, slug, firebaseUid: null, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  for (const weekday of weekdays) {
+    batch.set(ref.collection("availabilityRules").doc(`starter-${weekday}`), { weekday, startTime: "09:30", endTime: "17:30", active: true });
+  }
+  await batch.commit();
   return practitionerFromDoc(await ref.get());
 }
 
-export async function updatePractitionerAdmin(id: string, patch: Partial<{
-  name: string; title: string; bio: string; specialties: string; languages: string; consultationModes: string;
-  experienceYears: number; chatRatePerMinute: number; photoUrl: string | null; videoUrl: string | null; verified: boolean; featured: boolean; active: boolean;
-}>) {
-  const ref = db.collection("practitioners").doc(id);
-  const snap = await ref.get();
-  if (!snap.exists) throw new PractitionerAdminError("Practitioner not found.");
+export async function updatePractitionerAdmin(id: string, patch: PractitionerProfilePatch): Promise<Practitioner> {
+  const current = await getPractitionerById(id);
+  if (!current) throw new PractitionerAdminError("Practitioner not found.");
+  const update = normalizeProfilePatch(patch);
+  // Nobody can switch an AI persona on, so it cannot be switched off either; seedPractitioners
+  // would only switch it back.
+  if (current.isAiPowered) delete update.online;
 
-  const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
-  if (patch.name !== undefined) {
-    const name = patch.name.trim().slice(0, 120);
-    if (name.length < 2) throw new PractitionerAdminError("Enter the practitioner's name.");
-    update.name = name;
+  if (isSupabaseCutoverActive()) {
+    try {
+      await updatePractitionerInSupabase(id, update as Partial<PractitionerInsert>);
+    } catch (error) {
+      if (error instanceof PractitionerEmailTakenError) throw new PractitionerAdminError(error.message);
+      throw error;
+    }
+    return (await getPractitionerByIdInSupabase(id))!;
   }
-  if (patch.title !== undefined) update.title = patch.title.trim().slice(0, 160);
-  if (patch.bio !== undefined) update.bio = patch.bio.trim().slice(0, 2000);
-  if (patch.specialties !== undefined) update.specialties = patch.specialties.trim().slice(0, 300);
-  if (patch.languages !== undefined) update.languages = patch.languages.trim().slice(0, 200);
-  if (patch.consultationModes !== undefined) update.consultationModes = patch.consultationModes.trim().slice(0, 200);
-  if (patch.experienceYears !== undefined) update.experienceYears = Math.max(0, Math.min(60, Number(patch.experienceYears) || 0));
-  if (patch.chatRatePerMinute !== undefined) update.chatRatePerMinute = Math.max(0, Number(patch.chatRatePerMinute) || 0);
-  if (patch.photoUrl !== undefined) update.photoUrl = patch.photoUrl?.trim() || null;
-  if (patch.videoUrl !== undefined) update.videoUrl = patch.videoUrl?.trim() || null;
-  if (patch.verified !== undefined) update.verified = patch.verified;
-  if (patch.featured !== undefined) update.featured = patch.featured;
-  if (patch.active !== undefined) update.active = patch.active;
 
-  await ref.update(update);
+  if (typeof update.email === "string" && update.email !== current.email) {
+    const owner = await db.collection("practitioners").where("email", "==", update.email).limit(1).get();
+    if (!owner.empty && owner.docs[0].id !== id) throw new PractitionerAdminError("That email belongs to another practitioner.");
+  }
+  const ref = db.collection("practitioners").doc(id);
+  await ref.update({ ...update, updatedAt: FieldValue.serverTimestamp() });
   return practitionerFromDoc(await ref.get());
 }
 
 /** Hard-deletes a practitioner that never received any real activity (no bookings, no reviews) —
- * once real bookings/reviews/payouts point at this id, deleting the doc would orphan that
- * history, so those should be deactivated (active: false) instead via updatePractitionerAdmin. */
+ * once real bookings/reviews/payouts point at this id, deleting would orphan that history (or, on
+ * Postgres, cascade the reviews away), so those should be deactivated (active: false) instead. */
 export async function deletePractitionerAdmin(id: string) {
+  const inUse = "This practitioner has bookings or reviews on record — deactivate instead of deleting.";
+  if (isSupabaseCutoverActive()) {
+    const outcome = await deleteUnusedPractitionerInSupabase(id);
+    if (outcome === "not_found") throw new PractitionerAdminError("Practitioner not found.");
+    if (outcome === "has_history") throw new PractitionerAdminError(inUse);
+    return;
+  }
+
   const ref = db.collection("practitioners").doc(id);
   const snap = await ref.get();
   if (!snap.exists) throw new PractitionerAdminError("Practitioner not found.");
-
   const [bookings, reviews] = await Promise.all([
     db.collection("bookings").where("practitionerId", "==", id).limit(1).get(),
     db.collection("practitionerReviews").where("practitionerId", "==", id).limit(1).get(),
   ]);
-  if (!bookings.empty || !reviews.empty) {
-    throw new PractitionerAdminError("This practitioner has bookings or reviews on record — deactivate instead of deleting.");
-  }
+  if (!bookings.empty || !reviews.empty) throw new PractitionerAdminError(inUse);
 
-  const [rulesSnap, timeOffSnap] = await Promise.all([ref.collection("availabilityRules").get(), ref.collection("timeOff").get()]);
-  const batch = db.batch();
-  for (const doc of rulesSnap.docs) batch.delete(doc.ref);
-  for (const doc of timeOffSnap.docs) batch.delete(doc.ref);
-  batch.delete(ref);
-  await batch.commit();
+  // seedPractitioners() recreates a missing starter, so a starter's deletion is recorded.
+  if (isStarterPractitioner(id)) {
+    await db.collection(DELETED_STARTER_COLLECTION).doc(id).set({ name: snap.data()?.name ?? id, deletedAt: FieldValue.serverTimestamp() });
+  }
+  await db.recursiveDelete(ref);
+}
+
+/**
+ * The first date, from `from` onwards, with at least one open slot — what the booking page opens
+ * on. It used to open on tomorrow (skipping Sunday), which was fine while AI personas filled every
+ * weekday; with only the human astrologers bookable (Monday to Friday), a customer arriving on a
+ * Friday or Saturday saw every astrologer marked "Full". Null if nothing opens within `maxDays`.
+ */
+export async function findFirstBookableDate({ duration, practitionerId, from = new Date(), maxDays = 21 }: {
+  duration: number; practitionerId?: string; from?: Date; maxDays?: number;
+}): Promise<string | null> {
+  const { timezone } = await getStudioSettings();
+  for (let offset = 0; offset < maxDays; offset += 1) {
+    const date = dateInTimeZone(new Date(from.getTime() + offset * 86_400_000), timezone);
+    const { slots } = await getAvailableSlots({ date, duration, practitionerId });
+    if (slots.length) return date;
+  }
+  return null;
 }
 
 export function dateInTimeZone(date: Date, timeZone: string) {
@@ -1007,7 +1105,14 @@ type BookingForConflictCheck = { id: string; practitionerId: string | null; stat
 export async function getAvailableSlots({ date, duration, practitionerId, excludeBookingId }: { date: string; duration: number; practitionerId?: string; excludeBookingId?: string }) {
   if (!/^\d{4}-\d{2}-\d{2}$/.test(date)) return { slots: [] as AvailableSlot[], practitioners: [] as Omit<PractitionerWithSchedule, "rules" | "timeOff">[], timezone: "UTC" };
   const [settings, directory] = await Promise.all([getStudioSettings(), getPractitionerDirectory(true)]);
-  const people = practitionerId ? directory.filter((person) => person.id === practitionerId) : directory;
+  // Scheduled consultations are with human astrologers only. AI personas answer instant chat —
+  // nothing attends a scheduled slot on their behalf — yet every seeded persona carries weekday
+  // 09:30-17:30 availability rules, and the booking flow pre-selects the first slot's
+  // practitioner. With 32 of 34 seeded practitioners AI-powered, the default path through /book
+  // sold a paid one-to-one consultation nobody could deliver. validateAvailableSlot goes through
+  // here too, so the booking API refuses them as well, not just the picker.
+  const people = (practitionerId ? directory.filter((person) => person.id === practitionerId) : directory)
+    .filter((person) => !person.isAiPowered);
   const weekday = new Date(`${date}T00:00:00Z`).getUTCDay();
   const dayStart = civilToUtc(date, "00:00", settings.timezone);
   const dayEnd = civilToUtc(date, "23:59", settings.timezone);

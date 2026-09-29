@@ -3,6 +3,8 @@ import "server-only";
 import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, withFirebaseFallback } from "@/lib/firestore";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { getSiteContentInSupabase, mergeSiteContentInSupabase } from "@/lib/cms-supabase";
 
 export type HomeHeroContent = {
   eyebrow: string;
@@ -49,6 +51,22 @@ function isSafeCtaHref(href: string) {
   }
 }
 
+async function readContent<T>(id: string): Promise<Partial<T> | null> {
+  if (isSupabaseCutoverActive()) return (await getSiteContentInSupabase(id)) as Partial<T> | null;
+  const doc = await collection.doc(id).get();
+  return doc.exists ? (doc.data() as Partial<T>) : null;
+}
+
+/** Merges into the stored document; updatedAt is Firestore-only (the row has its own updated_at). */
+async function writeContent(id: string, update: Record<string, unknown>) {
+  if (isSupabaseCutoverActive()) {
+    const { updatedAt: _updatedAt, ...fields } = update;
+    await mergeSiteContentInSupabase(id, fields);
+    return;
+  }
+  await collection.doc(id).set(update, { merge: true });
+}
+
 const CTA_HREF_FIELDS = new Set<keyof HomeHeroContent>(["primaryCtaHref", "secondaryCtaHref"]);
 
 /** Every field falls back to the current hardcoded copy if the admin has never edited it, so a
@@ -56,9 +74,8 @@ const CTA_HREF_FIELDS = new Set<keyof HomeHeroContent>(["primaryCtaHref", "secon
  * system existed — nothing on the homepage can go blank from a missing Firestore doc. */
 async function fetchHomeHeroContent(): Promise<HomeHeroContent> {
   return withFirebaseFallback(async () => {
-    const doc = await collection.doc("home-hero").get();
-    if (!doc.exists) return DEFAULT_HERO;
-    const data = doc.data() as Partial<HomeHeroContent>;
+    const data = await readContent<HomeHeroContent>("home-hero");
+    if (!data) return DEFAULT_HERO;
     // Only pull the fields HomeHeroContent actually declares — the doc also carries an
     // updatedAt Firestore Timestamp (see updateHomeHeroContent) that has no place leaking into
     // this plain content object.
@@ -88,15 +105,14 @@ export async function updateHomeHeroContent(patch: Partial<HomeHeroContent>): Pr
     if (CTA_HREF_FIELDS.has(key) && value && !isSafeCtaHref(value)) continue;
     update[key] = value;
   }
-  await collection.doc("home-hero").set(update, { merge: true });
+  await writeContent("home-hero", update);
   return fetchHomeHeroContent();
 }
 
 async function fetchFooterContent(): Promise<FooterContent> {
   return withFirebaseFallback(async () => {
-    const doc = await collection.doc("footer").get();
-    if (!doc.exists) return DEFAULT_FOOTER;
-    const data = doc.data() as Partial<FooterContent>;
+    const data = await readContent<FooterContent>("footer");
+    if (!data) return DEFAULT_FOOTER;
     return { ...DEFAULT_FOOTER, ...(data.blurb ? { blurb: data.blurb } : {}) };
   }, DEFAULT_FOOTER, "getFooterContent");
 }
@@ -110,6 +126,6 @@ export const getFooterContent = unstable_cache(fetchFooterContent, ["footer-cont
 export async function updateFooterContent(patch: Partial<FooterContent>): Promise<FooterContent> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof patch.blurb === "string") update.blurb = patch.blurb.trim().slice(0, 400);
-  await collection.doc("footer").set(update, { merge: true });
+  await writeContent("footer", update);
   return fetchFooterContent();
 }

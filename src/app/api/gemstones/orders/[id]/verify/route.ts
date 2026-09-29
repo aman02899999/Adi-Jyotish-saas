@@ -2,6 +2,7 @@ import { orderConfirmationEmailHtml, sendEmail } from "@/lib/email";
 import { GEMSTONE_STORE_OPEN, getOrderById, getOrderItems, markOrderPaid, OrderNotFoundError } from "@/lib/gemstone-orders";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getRazorpay, verifyRazorpayPaymentSignature } from "@/lib/razorpay";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -22,7 +23,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ id:
   const member = await getCurrentMember();
   if (order.memberId && (!member || member.id !== order.memberId)) return Response.json({ error: "This order does not belong to your account." }, { status: 403 });
 
-  const body = (await request.json()) as VerifyPayload;
+  const body = (await readJsonBody(request)) as VerifyPayload;
   const razorpayOrderId = body.razorpay_order_id?.trim();
   const paymentId = body.razorpay_payment_id?.trim();
   const signature = body.razorpay_signature?.trim();

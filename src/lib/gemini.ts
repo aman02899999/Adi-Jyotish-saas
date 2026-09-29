@@ -2,6 +2,8 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import type { TarotCardDraw } from "@/lib/tarot-deck";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { claimGeminiCallInSupabase, getGeminiUsageInSupabase, releaseGeminiCallInSupabase } from "@/lib/gemini-usage-supabase";
 
 /**
  * The only AI calls left in the platform. Every other tool (horoscope, Kundli report,
@@ -20,18 +22,68 @@ export function isGeminiConfigured() {
   return Boolean(process.env.GEMINI_API_KEY);
 }
 
+/**
+ * Every AI reading is paid for before it is generated. Without a key, or once today's call cap is
+ * used up, the payment would go through and the reading would fail, leaving the member to chase a
+ * refund. Routes that take payment for an AI reading return this first, so nothing is charged
+ * while a reading cannot be produced.
+ */
+export async function liveReadingsUnavailable(): Promise<Response | null> {
+  if (!isGeminiConfigured()) {
+    return Response.json(
+      { error: "Live readings are temporarily unavailable. You have not been charged. Please try again later." },
+      { status: 503 },
+    );
+  }
+  if (await isDailyGeminiCapSpent()) {
+    return Response.json(
+      { error: "Today's live readings are fully booked. You have not been charged. Please try again tomorrow." },
+      { status: 503 },
+    );
+  }
+  return null;
+}
+
 type GeminiPart = { text: string } | { inline_data: { mime_type: string; data: string } };
 
 // A hard ceiling on Gemini calls per UTC day, configurable via env since the right number depends
-// entirely on the account's actual budget. Defaults generously (2000/day) so this is inert until
-// someone sets it deliberately, rather than silently rate-limiting a fresh deployment. Every AI
-// reading type funnels through this one function, so gating here covers all of them at once.
-const DAILY_CALL_LIMIT = Number(process.env.GEMINI_DAILY_CALL_LIMIT) || 2000;
+// entirely on the account's actual budget. Defaults to 200/day, the owner's chosen launch budget,
+// so a deployment that never sets the env var still has a tight ceiling on the Gemini bill. Every
+// AI reading type funnels through this one function, so gating here covers all of them at once.
+const DAILY_CALL_LIMIT = Number(process.env.GEMINI_DAILY_CALL_LIMIT) || 200;
 
 class GeminiBudgetError extends Error {}
 
+/** True when a call was refused only because today's cap is used up. That says nothing about the
+ * reading itself, so callers must not count it as a failed attempt at producing it. */
+export function isGeminiBudgetError(error: unknown): boolean {
+  return error instanceof GeminiBudgetError;
+}
+
+/** True once today's calls are used up, so a paid AI service can refuse before taking money. */
+export async function isDailyGeminiCapSpent(): Promise<boolean> {
+  return (await getGeminiUsageToday()) >= DAILY_CALL_LIMIT;
+}
+
+/** Reads 0 when the count can't be read, so a storage hiccup never stops sales: the claim in
+ * claimGeminiBudget still enforces the cap on every actual call. */
+async function getGeminiUsageToday(): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    if (isSupabaseCutoverActive()) return await getGeminiUsageInSupabase(today);
+    const snap = await db.collection("geminiUsage").doc(today).get();
+    return (snap.data() as { count?: number } | undefined)?.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
+
 async function claimGeminiBudget() {
   const today = new Date().toISOString().slice(0, 10);
+  if (isSupabaseCutoverActive()) {
+    if (!(await claimGeminiCallInSupabase(today, DAILY_CALL_LIMIT))) throw new GeminiBudgetError("Live readings have reached today's usage limit. Please try again tomorrow, or contact support.");
+    return;
+  }
   const ref = db.collection("geminiUsage").doc(today);
   const withinBudget = await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -49,6 +101,7 @@ async function claimGeminiBudget() {
  * members get budget-exhausted errors for the rest of the UTC day. */
 async function releaseGeminiBudget() {
   const today = new Date().toISOString().slice(0, 10);
+  if (isSupabaseCutoverActive()) return releaseGeminiCallInSupabase(today);
   const ref = db.collection("geminiUsage").doc(today);
   await db.runTransaction(async (tx) => {
     const snap = await tx.get(ref);
@@ -346,13 +399,12 @@ export async function checkGeminiHealth(): Promise<GeminiHealth> {
       return { status: "error", model: MODEL, httpStatus: response.status, detail: "The request succeeded but the model returned no text." };
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const usage = await db.collection("geminiUsage").doc(today).get().catch(() => null);
+    const usageToday = await getGeminiUsageToday();
     return {
       status: "ok",
       model: MODEL,
       latencyMs: Date.now() - startedAt,
-      usageToday: (usage?.data() as { count?: number } | undefined)?.count ?? 0,
+      usageToday,
       dailyLimit: DAILY_CALL_LIMIT,
     };
   } catch (error) {

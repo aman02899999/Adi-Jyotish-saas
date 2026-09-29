@@ -206,6 +206,9 @@ export async function getAssignableRoleSlugs() {
 }
 
 export async function roleSlugExists(slug: string) {
+  // An empty or slash-containing slug is not a Firestore document id: doc("") and doc("a/b") throw
+  // rather than returning "not found", which turned a team invite without a role into a 500.
+  if (typeof slug !== "string" || !slug || slug.includes("/")) return false;
   if (isSupabaseCutoverActive()) return roleSlugExistsInSupabase(slug);
   const snap = await db.collection("adminRoles").doc(slug).get();
   return snap.exists;

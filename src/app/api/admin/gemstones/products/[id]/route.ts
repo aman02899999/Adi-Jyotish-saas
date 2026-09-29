@@ -1,6 +1,7 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { deleteProduct, GemstoneError, getProductAdminById, updateProduct, type ProductPayload } from "@/lib/gemstones";
 import { notifyWishlistedMembers } from "@/lib/gemstone-wishlist";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +26,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!id) return Response.json({ error: "Invalid product id." }, { status: 400 });
 
-  const body = (await request.json()) as ProductPayload;
+  const body = (await readJsonBody(request)) as ProductPayload;
   try {
     const { product, wishlistTrigger } = await updateProduct(id, body);
     await recordAudit(admin, "gemstone_product.updated", "gemstone_product", id, { name: product.name, active: product.active });

@@ -3,6 +3,9 @@ import { db } from "@/lib/firestore";
 import { getCurrentMember } from "@/lib/member-auth";
 import { getVariant, recordExperimentConversion } from "@/lib/experiments";
 import { buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
+import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { updateMemberBirthProfileInSupabase } from "@/lib/member-auth-supabase";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -10,11 +13,11 @@ export async function PUT(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
 
-  const body = await request.json() as { phone?: string; birthDate?: string; birthTime?: string; birthPlace?: string };
-  const phone = body.phone?.trim().slice(0, 40) ?? "";
-  const birthDate = body.birthDate?.trim().slice(0, 10) ?? "";
-  const birthTime = body.birthTime?.trim().slice(0, 8) ?? "";
-  const birthPlace = body.birthPlace?.trim().slice(0, 180) ?? "";
+  const body = await readJsonBody(request) as { phone?: string; birthDate?: string; birthTime?: string; birthPlace?: string };
+  const phone = asText(body.phone)?.trim().slice(0, 40) ?? "";
+  const birthDate = asText(body.birthDate)?.trim().slice(0, 10) ?? "";
+  const birthTime = asText(body.birthTime)?.trim().slice(0, 8) ?? "";
+  const birthPlace = asText(body.birthPlace)?.trim().slice(0, 180) ?? "";
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || !/^\d{2}:\d{2}$/.test(birthTime) || birthPlace.length < 2) {
     return Response.json({ error: "Complete your exact birth date, time, and place." }, { status: 400 });
@@ -40,14 +43,19 @@ export async function PUT(request: Request) {
     throw error;
   }
 
-  await db.collection("members").doc(member.id).update({
-    phone: phone || null,
-    birthDate,
-    birthTime,
-    birthPlace,
-    onboardingComplete: true,
-    updatedAt: FieldValue.serverTimestamp(),
-  });
+  if (isSupabaseCutoverActive()) {
+    const saved = await updateMemberBirthProfileInSupabase(member.id, { phone: phone || null, birthDate, birthTime, birthPlace });
+    if (!saved) return Response.json({ error: "Member sign-in required." }, { status: 401 });
+  } else {
+    await db.collection("members").doc(member.id).update({
+      phone: phone || null,
+      birthDate,
+      birthTime,
+      birthPlace,
+      onboardingComplete: true,
+      updatedAt: FieldValue.serverTimestamp(),
+    });
+  }
 
   // Only the transition into onboardingComplete counts as a conversion — a later edit to an
   // already-complete profile isn't a new "completed onboarding" event.

@@ -276,3 +276,53 @@ describeDb("booking reads, edits and deletes (live database)", () => {
     expect(await deleteBookingInSupabase(idA)).toBeNull();
   });
 });
+
+describeDb("moving a booking to another practitioner (live database)", () => {
+  const FROM = `${P}from`;
+  const TO = `${P}to`;
+  const day = (hour: number) => new Date(Date.UTC(2030, 1, 14, hour));
+  const booking = (practitionerId: string, hour: number, ref: string): BookingInsert => ({
+    ...insertValues(day(hour), ref),
+    practitionerId,
+    practitionerName: practitionerId,
+  });
+
+  beforeAll(async () => {
+    await cleanup();
+    for (const id of [FROM, TO]) {
+      await query(`insert into public.practitioners (id, name, slug, email) values ($1, $1, $1, $2)`, [id, `${id}@example.test`]);
+    }
+    await query(
+      `insert into public.services (id, slug, title, category, description, price, duration)
+       values ($1, $1, 'Test reading', 'Test', 'd', 1500, 30)`,
+      [SERVICE],
+    );
+  });
+  afterAll(cleanup);
+
+  it("moves the booking and its practitioner name, keeping the time", async () => {
+    const { id } = await insertBookingInSupabase(booking(FROM, 9, `${P}move`));
+    const moved = await updateBookingInSupabase(id, { practitioner: { id: TO, name: "The new astrologer" } });
+
+    expect(moved).toMatchObject({ practitionerId: TO, practitionerName: "The new astrologer" });
+    expect(moved?.scheduledAt.toISOString()).toBe(day(9).toISOString());
+  });
+
+  it("refuses when the new practitioner is already booked at that time", async () => {
+    await insertBookingInSupabase(booking(TO, 11, `${P}taken`));
+    const { id } = await insertBookingInSupabase(booking(FROM, 11, `${P}clash`));
+
+    await expect(updateBookingInSupabase(id, { practitioner: { id: TO, name: "x" } })).rejects.toBeInstanceOf(BookingSlotConflictError);
+    expect((await getBookingByIdInSupabase(id))?.practitionerId).toBe(FROM);
+  });
+
+  it("checks the new practitioner at the new time when both change", async () => {
+    await insertBookingInSupabase(booking(TO, 14, `${P}busy-later`));
+    const { id } = await insertBookingInSupabase(booking(FROM, 13, `${P}both`));
+
+    await expect(updateBookingInSupabase(id, { practitioner: { id: TO, name: "x" }, scheduledAt: day(14) })).rejects.toBeInstanceOf(BookingSlotConflictError);
+    const moved = await updateBookingInSupabase(id, { practitioner: { id: TO, name: "x" }, scheduledAt: day(15) });
+    expect(moved).toMatchObject({ practitionerId: TO });
+    expect(moved?.scheduledAt.toISOString()).toBe(day(15).toISOString());
+  });
+});

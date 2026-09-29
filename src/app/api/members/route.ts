@@ -3,8 +3,10 @@ import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin, hasAdminPermission, normalizeEmail, recordAudit } from "@/lib/admin-auth";
 import { createGoTrueUser } from "@/lib/gotrue-admin";
-import { createMemberAdminInSupabase, listMembersInSupabase, type MemberAdminRow } from "@/lib/member-admin-supabase";
+import { createMemberAdminInSupabase } from "@/lib/member-admin-supabase";
+import { listMembersForAdmin } from "@/lib/admin-directory";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,41 +17,13 @@ type MemberPayload = {
   birthDate?: string; birthTime?: string; birthPlace?: string; plan?: string; active?: boolean;
 };
 
-function toDate(value: FirebaseFirestore.Timestamp | Date | undefined | null): Date | null {
-  if (!value) return null;
-  return value instanceof Date ? value : value.toDate();
-}
-
-async function firestoreMembers(): Promise<MemberAdminRow[]> {
-  const snap = await db.collection("members").orderBy("name", "asc").get();
-  return snap.docs.map((doc) => {
-    const data = doc.data() as Record<string, unknown>;
-    return {
-      id: doc.id,
-      name: data.name as string,
-      email: data.email as string,
-      phone: (data.phone as string | null) ?? null,
-      birthDate: (data.birthDate as string | null) ?? null,
-      birthTime: (data.birthTime as string | null) ?? null,
-      birthPlace: (data.birthPlace as string | null) ?? null,
-      plan: (data.plan as string) ?? "member",
-      onboardingComplete: Boolean(data.onboardingComplete),
-      // A Firestore document with no `active` field is active; the Postgres column is
-      // not null default true, so reading it directly is the same rule.
-      active: data.active !== false,
-      lastLoginAt: toDate(data.lastLoginAt as FirebaseFirestore.Timestamp | undefined),
-      createdAt: toDate(data.createdAt as FirebaseFirestore.Timestamp | undefined) ?? new Date(),
-      updatedAt: toDate(data.updatedAt as FirebaseFirestore.Timestamp | undefined) ?? new Date(),
-    };
-  });
-}
 
 export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_view")) return Response.json({ error: "Member access required." }, { status: 403 });
 
-  const rows = isSupabaseCutoverActive() ? await listMembersInSupabase() : await firestoreMembers();
+  const rows = await listMembersForAdmin();
   return Response.json(rows);
 }
 
@@ -57,20 +31,20 @@ export async function POST(request: Request) {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "members_manage")) return Response.json({ error: "Member management permission required." }, { status: 403 });
-  const body = await request.json() as MemberPayload;
-  const name = body.name?.trim().slice(0, 120) ?? "";
+  const body = await readJsonBody(request) as MemberPayload;
+  const name = asText(body.name)?.trim().slice(0, 120) ?? "";
   const email = normalizeEmail(body.email ?? "");
-  const password = body.password ?? "";
+  const password = asText(body.password) ?? "";
   const plan = plans.includes(body.plan ?? "") ? body.plan! : "member";
   if (name.length < 2 || !/^\S+@\S+\.\S+$/.test(email)) return Response.json({ error: "A name and valid email are required." }, { status: 400 });
   if (password.length < 10 || password.length > 128) return Response.json({ error: "Temporary password must be 10–128 characters." }, { status: 400 });
 
-  const birthDate = body.birthDate?.trim().slice(0, 10) || null;
-  const birthTime = body.birthTime?.trim().slice(0, 8) || null;
-  const birthPlace = body.birthPlace?.trim().slice(0, 180) || null;
+  const birthDate = asText(body.birthDate)?.trim().slice(0, 10) || null;
+  const birthTime = asText(body.birthTime)?.trim().slice(0, 8) || null;
+  const birthPlace = asText(body.birthPlace)?.trim().slice(0, 180) || null;
   const onboardingComplete = Boolean(birthDate && birthTime && birthPlace);
-  const active = body.active ?? true;
-  const phone = body.phone?.trim().slice(0, 40) || null;
+  const active = typeof body.active === "boolean" ? body.active : true;
+  const phone = asText(body.phone)?.trim().slice(0, 40) || null;
 
   let uid: string;
   try {

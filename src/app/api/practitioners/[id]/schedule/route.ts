@@ -4,6 +4,7 @@ import { getPractitionerDirectory } from "@/lib/scheduling";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
 import { replacePortalScheduleInSupabase } from "@/lib/practitioner-portal-supabase";
+import { readJsonBody } from "@/lib/request-body";
 
 export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}){
   const admin=await getCurrentAdmin();
@@ -19,7 +20,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
     if(!snap.exists)return Response.json({error:"Practitioner not found."},{status:404});
   }
 
-  const body=await request.json() as {rules?:Array<{weekday:number;startTime:string;endTime:string;active?:boolean}>;timeOff?:Array<{startsAt:string;endsAt:string;reason?:string}>};
+  const body=await readJsonBody(request) as {rules?:Array<{weekday:number;startTime:string;endTime:string;active?:boolean}>;timeOff?:Array<{startsAt:string;endsAt:string;reason?:string}>};
   const rules=(body.rules??[]).filter(rule=>Number.isInteger(rule.weekday)&&rule.weekday>=0&&rule.weekday<=6&&/^\d{2}:\d{2}$/.test(rule.startTime)&&/^\d{2}:\d{2}$/.test(rule.endTime)&&rule.startTime<rule.endTime);
   const timeOff=(body.timeOff??[]).map(item=>({startsAt:new Date(item.startsAt),endsAt:new Date(item.endsAt),reason:item.reason?.trim().slice(0,180)||null})).filter(item=>!Number.isNaN(item.startsAt.getTime())&&!Number.isNaN(item.endsAt.getTime())&&item.startsAt<item.endsAt);
 

@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { deleteReview, moderateReview, ReviewError } from "@/lib/gemstone-reviews";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -11,7 +12,7 @@ export async function PUT(request: Request, { params }: { params: Promise<{ id: 
   const { id } = await params;
   if (!id) return Response.json({ error: "Invalid review id." }, { status: 400 });
 
-  const body = (await request.json()) as { status?: string };
+  const body = (await readJsonBody(request)) as { status?: string };
   if (body.status !== "published" && body.status !== "hidden") return Response.json({ error: "Invalid status." }, { status: 400 });
 
   try {

@@ -1,5 +1,6 @@
 import { CouponError, validateCoupon } from "@/lib/gemstone-coupons";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
+import { asText, readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -7,8 +8,8 @@ export async function POST(request: Request) {
   const throttle = await checkRateLimit("coupon-validate", requestIp(request), 20, 300);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
-  const body = (await request.json()) as { code?: string; subtotal?: number };
-  const code = body.code?.trim();
+  const body = (await readJsonBody(request)) as { code?: string; subtotal?: number };
+  const code = asText(body.code)?.trim();
   const subtotal = Number(body.subtotal) || 0;
   if (!code) return Response.json({ error: "Enter a coupon code." }, { status: 400 });
 

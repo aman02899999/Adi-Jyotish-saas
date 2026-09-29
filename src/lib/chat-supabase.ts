@@ -1,5 +1,6 @@
 import "server-only";
 
+import { GENUINE_REVIEW_SQL } from "@/lib/review-provenance";
 import { isUniqueViolation, query, queryModel, queryModels } from "@/lib/postgres";
 import { rowToCamel } from "@/lib/postgres-mapping";
 
@@ -284,7 +285,8 @@ export async function listOnlineChatPractitionersFromSupabase(limit: number): Pr
 
 export async function countPublishedPractitionerReviewsFromSupabase(practitionerId: string): Promise<number> {
   const row = await queryModel<{ n: number }>(
-    `select count(*)::int as n from public.practitioner_reviews where practitioner_id = $1 and status = 'published'`,
+    `select count(*)::int as n from public.practitioner_reviews
+      where practitioner_id = $1 and status = 'published' and ${GENUINE_REVIEW_SQL}`,
     [practitionerId],
   );
   return row?.n ?? 0;

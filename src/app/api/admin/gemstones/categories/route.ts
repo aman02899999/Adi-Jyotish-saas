@@ -1,5 +1,6 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
 import { createCategory, getAllCategoriesAdmin, GemstoneError, type CategoryPayload } from "@/lib/gemstones";
+import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
 
@@ -15,7 +16,7 @@ export async function POST(request: Request) {
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "gemstones")) return Response.json({ error: "Gemstones permission required." }, { status: 403 });
 
-  const body = (await request.json()) as CategoryPayload;
+  const body = (await readJsonBody(request)) as CategoryPayload;
   try {
     const created = await createCategory(body);
     await recordAudit(admin, "gemstone_category.created", "gemstone_category", created.id, { name: created.name });

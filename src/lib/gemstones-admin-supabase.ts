@@ -279,6 +279,18 @@ export async function getProductForAdminInSupabase(id: string): Promise<ProductR
   return row ? productFromSqlRow(row as ProductSqlRow) : null;
 }
 
+/** Every product, newest first, for the admin list. */
+export async function getAllProductRowsForAdminInSupabase(): Promise<ProductRow[]> {
+  const result = await query<ProductSqlRow>(
+    `select id, category_id, name, slug, short_description, description, benefits, who_should_wear,
+            recommended_zodiac, recommended_planets, origin, color, treatment, certification,
+            certificate_url, currency, sku, featured, trending, bestseller, active,
+            meta_title, meta_description, created_at, updated_at
+       from public.gemstone_products order by created_at desc`,
+  );
+  return result.rows.map((row) => productFromSqlRow(row as ProductSqlRow));
+}
+
 /** gemstone_order_items.product_id is not a foreign key, so this is an explicit
  * count rather than something a constraint would block for us. */
 export async function productHasOrderItemsInSupabase(productId: string): Promise<boolean> {

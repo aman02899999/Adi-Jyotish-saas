@@ -1,4 +1,5 @@
 import type { Metadata, Viewport } from "next";
+import { Fraunces, Inter } from "next/font/google";
 import type { ReactNode } from "react";
 import { hasLocale, NextIntlClientProvider } from "next-intl";
 import { getTranslations, setRequestLocale } from "next-intl/server";
@@ -11,6 +12,17 @@ import { RouteProgress } from "@/components/route-progress";
 import { routing, type AppLocale } from "@/i18n/routing";
 import { getSiteUrl } from "@/lib/site-url";
 import "../globals.css";
+
+// Self-hosted at build time by next/font: no request to Google from the visitor's browser, and a
+// size-matched fallback means text does not jump when the font arrives. Fraunces carries the
+// headings and Inter the text; they replace the Georgia/Arial system stack, which globals.css keeps
+// as the fallbacks behind these variables.
+// Headings are set at weight 400 almost everywhere (211 of 214 rules), so Fraunces loads as that
+// one static weight in upright and true italic (the <em> in every headline) rather than the
+// variable font, whose optical-size axis made each file about 80 KB. latin-ext is included and
+// preloaded because prices use the ₹ sign; left out, the browser still fetched it, only later.
+const serifFont = Fraunces({ subsets: ["latin", "latin-ext"], weight: "400", style: ["normal", "italic"], variable: "--font-serif", display: "swap" });
+const sansFont = Inter({ subsets: ["latin", "latin-ext"], variable: "--font-sans", display: "swap" });
 
 const siteUrl = getSiteUrl();
 const websiteJsonLd = {
@@ -69,7 +81,7 @@ export default async function RootLayout({ children, params }: { children: React
   setRequestLocale(locale as AppLocale);
 
   return (
-    <html lang={locale}>
+    <html lang={locale} className={`${serifFont.variable} ${sansFont.variable}`}>
       <body>
         <NextIntlClientProvider>
           <RouteProgress />

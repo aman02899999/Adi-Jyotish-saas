@@ -1,6 +1,6 @@
 import "server-only";
 
-import { query, queryModel, queryModels, withTransaction } from "@/lib/postgres";
+import { query, queryModel, queryModels, retryOnInsertRace, withTransaction } from "@/lib/postgres";
 
 /**
  * Postgres data access for member subscriptions.
@@ -118,7 +118,9 @@ export async function claimSubscriptionCheckoutInSupabase(
   activeStatuses: readonly string[],
   pendingTtlMs: number,
 ): Promise<ClaimedCheckout> {
-  return withTransaction(async (client) => {
+  // Two first-ever checkouts race to insert the member's row; the loser can collide on the
+  // member_id index rather than the id it names, and a retry then reads the winner's claim.
+  return retryOnInsertRace(() => withTransaction(async (client) => {
     const before = await client.query<{ status: string; razorpay_customer_id: string | null }>(
       `select status, razorpay_customer_id from public.member_subscriptions where id = $1 for update`,
       [memberId],
@@ -144,7 +146,7 @@ export async function claimSubscriptionCheckoutInSupabase(
       razorpayCustomerId: existing?.razorpay_customer_id ?? null,
       hadRow: Boolean(existing),
     };
-  });
+  }));
 }
 
 /** Puts the claim back after a failed Razorpay call, so the member is not stranded for the TTL. */
