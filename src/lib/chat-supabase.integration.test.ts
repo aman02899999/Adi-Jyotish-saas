@@ -36,8 +36,15 @@ vi.mock("@/lib/studio-settings", () => ({
 vi.mock("@/lib/ably", () => ({ publishChatEvent: async () => {}, chatChannelName: (id: string) => `chat:${id}` }));
 // AI replies are not under test here; `configured` stands in for GEMINI_API_KEY being set, which
 // an AI-powered session needs before it may start at all.
-const gemini = vi.hoisted(() => ({ configured: true }));
-vi.mock("@/lib/gemini", () => ({ isGeminiConfigured: () => gemini.configured, getPractitionerChatReply: async () => "" }));
+const gemini = vi.hoisted(() => ({ configured: true, capSpent: false, replyFails: false }));
+vi.mock("@/lib/gemini", () => ({
+  isGeminiConfigured: () => gemini.configured,
+  isDailyGeminiCapSpent: async () => gemini.capSpent,
+  getPractitionerChatReply: async () => {
+    if (gemini.replyFails) throw new Error("Live readings have reached today's usage limit.");
+    return "";
+  },
+}));
 
 import {
   ChatSessionConflictError,
@@ -252,10 +259,38 @@ describeChat("chat on Postgres", () => {
     expect(holdMinutes).toBe(30);
     expect(await balance()).toBe(1000 - MARKETPLACE_SESSION_PRICE);
 
-    // A fixed-price session captures the whole price however long it ran.
+    // A fixed-price session that got its answer captures the whole price however long it ran.
+    await sendMessage({ sessionId: session.id, senderType: "practitioner", senderName: "AI Astrologer", body: "Namaste." });
     const ended = await endChatSession(session.id, "member");
     expect(ended.capturedAmount).toBe(MARKETPLACE_SESSION_PRICE);
     expect(await balance()).toBe(1000 - MARKETPLACE_SESSION_PRICE);
+  });
+
+  it("charges nothing for an AI chat that never got a reply", async () => {
+    // Gemini failed on every turn, or the day's cap ran out mid-chat: the member heard nothing.
+    const before = await balance();
+    gemini.replyFails = true;
+    try {
+      const { session } = await startChatSession(MEMBER_ID, PRAC_AI);
+      await sendMessage({ sessionId: session.id, senderType: "member", senderName: "Member", body: "Will I change jobs this year?" });
+      const ended = await endChatSession(session.id, "member");
+      expect(ended.capturedAmount).toBe(0);
+      expect(await balance()).toBe(before);
+    } finally {
+      gemini.replyFails = false;
+    }
+  });
+
+  it("refuses an AI chat once today's Gemini cap is used up, before taking a lock or a hold", async () => {
+    gemini.capSpent = true;
+    try {
+      await expect(startChatSession(MEMBER_ID, PRAC_AI)).rejects.toThrow("You have not been charged");
+      expect(await lockHeld()).toBe(false);
+      const { rowCount } = await query(`select 1 from public.wallet_holds where wallet_id = $1 and status = 'active'`, [MEMBER_ID]);
+      expect(rowCount).toBe(0);
+    } finally {
+      gemini.capSpent = false;
+    }
   });
 
   it("refuses an AI-powered chat while no Gemini key is set, before taking a lock or a hold", async () => {

@@ -7,7 +7,7 @@ import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 import { reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
-import { getPractitionerChatReply, isGeminiConfigured } from "@/lib/gemini";
+import { getPractitionerChatReply, isDailyGeminiCapSpent, isGeminiConfigured } from "@/lib/gemini";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { countGenuinePublishedReviews } from "@/lib/synthetic-reviews";
 import { buildPractitionerSystemPrompt, chatStartMessage } from "@/lib/ai-persona-prompt";
@@ -326,6 +326,11 @@ export async function startChatSession(memberId: string, practitionerId: string)
   if (practitioner.isAiPowered && !isGeminiConfigured()) {
     throw new PractitionerUnavailableError("This AI astrologer is unavailable right now. You have not been charged.");
   }
+  // Once today's Gemini calls are used up every reply would fail, so the chat would be silent and
+  // still charged its flat price.
+  if (practitioner.isAiPowered && (await isDailyGeminiCapSpent())) {
+    throw new PractitionerUnavailableError("AI chats are fully booked for today. You have not been charged. Please try again tomorrow.");
+  }
 
   await expireStaleChatSessions().catch((error) => console.error("Stale chat session sweep failed", error));
 
@@ -563,8 +568,13 @@ export async function endChatSession(sessionId: string, endedBy: "member" | "pra
   // Fixed-price sessions always capture the full held amount — the price was set once at session
   // start and doesn't prorate by how long the chat actually ran. Metered sessions still capture
   // only what elapsed time actually earned, capped at what the hold reserved.
+  // A fixed-price chat is an AI astrologer's. If no reply ever arrived (Gemini failed, or the daily
+  // cap ran out mid-chat) the member got nothing, so nothing is captured and the hold is released.
+  const aiReplied = session.pricingModel === "fixed"
+    ? (await listSessionMessages(sessionId)).some((message) => message.senderType === "practitioner")
+    : true;
   const capturedAmount = session.pricingModel === "fixed"
-    ? (hold?.amount ?? session.fixedPrice ?? 0)
+    ? (aiReplied ? (hold?.amount ?? session.fixedPrice ?? 0) : 0)
     : Math.min(elapsedMinutesSince(session.startedAt) * session.ratePerMinute, hold?.amount ?? elapsedMinutesSince(session.startedAt) * session.ratePerMinute);
   await captureWalletHold({ memberId: session.memberId, holdId: session.walletHoldId, capturedAmount, referenceType: "chat_session" });
 

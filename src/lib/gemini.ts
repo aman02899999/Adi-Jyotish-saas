@@ -35,7 +35,7 @@ export async function liveReadingsUnavailable(): Promise<Response | null> {
       { status: 503 },
     );
   }
-  if ((await getGeminiUsageToday()) >= DAILY_CALL_LIMIT) {
+  if (await isDailyGeminiCapSpent()) {
     return Response.json(
       { error: "Today's live readings are fully booked. You have not been charged. Please try again tomorrow." },
       { status: 503 },
@@ -58,6 +58,11 @@ class GeminiBudgetError extends Error {}
  * reading itself, so callers must not count it as a failed attempt at producing it. */
 export function isGeminiBudgetError(error: unknown): boolean {
   return error instanceof GeminiBudgetError;
+}
+
+/** True once today's calls are used up, so a paid AI service can refuse before taking money. */
+export async function isDailyGeminiCapSpent(): Promise<boolean> {
+  return (await getGeminiUsageToday()) >= DAILY_CALL_LIMIT;
 }
 
 /** Reads 0 when the count can't be read, so a storage hiccup never stops sales: the claim in
