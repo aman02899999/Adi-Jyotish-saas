@@ -1,11 +1,12 @@
 "use client";
 
-import { useState } from "react";
+import { useEffect, useState } from "react";
 import { Link } from "@/i18n/navigation";
 import { CalendarDays, Check, Clock3, LoaderCircle, Sparkles, UserRound, X } from "lucide-react";
 import { openRazorpayCheckout } from "@/lib/razorpay-checkout";
 import { walletShortfallMessage } from "@/components/wallet-pay";
 import { PlaceAutocomplete } from "@/components/place-autocomplete";
+import { FREE_CHART_BIRTH_KEY } from "@/components/free-chart-teaser";
 
 type MemberPrefill = { name: string; email: string; birthDate: string | null; birthTime: string | null; birthPlace: string | null };
 
@@ -45,6 +46,21 @@ export function KundliReportForm({ member, price, currency, onlinePaymentsAvaila
   const [waiting, setWaiting] = useState(false);
   const [answer, setAnswer] = useState<string | null>(null);
   const [reportId, setReportId] = useState<string | null>(null);
+
+  // A visitor who just tried the free chart on the homepage came here to unlock that same chart,
+  // so those details win over the saved profile. An unknown birth time is left blank on purpose:
+  // the full report's Lagna and houses need the real one. Read after mount, as the cart does:
+  // sessionStorage doesn't exist during the server render, so reading it in useState would mismatch.
+  useEffect(() => {
+    try {
+      const saved = JSON.parse(sessionStorage.getItem(FREE_CHART_BIRTH_KEY) ?? "null") as { birthDate?: string; birthTime?: string; birthPlace?: string; timeUnknown?: boolean } | null;
+      if (!saved?.birthDate) return;
+      // eslint-disable-next-line react-hooks/set-state-in-effect
+      setBirthDate(saved.birthDate);
+      setBirthTime(saved.timeUnknown ? "" : saved.birthTime ?? "");
+      if (saved.birthPlace) setBirthPlace(saved.birthPlace);
+    } catch { /* storage unavailable: the form simply starts from the profile */ }
+  }, []);
 
   if (!member) {
     return (

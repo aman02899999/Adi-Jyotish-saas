@@ -8,6 +8,8 @@ import {
   MoreHorizontal,
   ScrollText,
   Sparkles,
+  Moon,
+  ShieldAlert,
   Star,
   SunMedium,
   UserRound,
@@ -23,6 +25,9 @@ import { BADGE_MILESTONES, recordDailyVisit } from "@/lib/streaks";
 import { buildHouseGrid, buildKundliChart, KundliEngineError } from "@/lib/kundli-engine";
 import { formatDegree, NAKSHATRAS } from "@/lib/astro-engine";
 import { getVariant, recordExperimentImpression } from "@/lib/experiments";
+import { buildMemberToday, runningDasha, windowStatus } from "@/lib/member-today";
+import { todayCivilDate } from "@/lib/horoscopes";
+import { REFERENCE_LOCATION } from "@/lib/panchang";
 import { computeLifePathNumber, computeDestinyNumber, computePersonalYearNumber, LUCKY_COLOR_BY_NUMBER } from "@/lib/numerology";
 
 const ONBOARDING_CTA_LABEL: Record<string, string> = { control: "Complete birth profile", "get-my-chart": "Get my free chart" };
@@ -53,11 +58,29 @@ export default async function DashboardPage() {
     recordDailyVisit(member.id),
   ]);
   const firstName = member.name.split(" ")[0];
-  const location = member.birthPlace?.split(",")[0] || "Your location";
-  const today = new Date().toLocaleDateString("en", { weekday: "long", month: "short", day: "numeric" });
   const kundli = buildDashboardKundli(member);
   const moon = kundli?.chart.positions.find((position) => position.graha === "moon");
   const sun = kundli?.chart.positions.find((position) => position.graha === "sun");
+
+  // Today's sky for the member's own city: the birth place on their chart, else New Delhi.
+  const timeZone = kundli?.chart.timezone ?? REFERENCE_LOCATION.timeZone;
+  const now = new Date();
+  const todaySky = buildMemberToday({
+    civilDate: await todayCivilDate(),
+    latitude: kundli?.chart.latitude ?? REFERENCE_LOCATION.latitude,
+    longitude: kundli?.chart.longitude ?? REFERENCE_LOCATION.longitude,
+    timeZone,
+    placeLabel: kundli ? kundli.chart.matchedPlace.split(",")[0] : "New Delhi",
+  });
+  const clock = (iso: string) => new Date(iso).toLocaleTimeString("en-IN", { hour: "numeric", minute: "2-digit", timeZone });
+  const span = (window: { start: string; end: string }) => `${clock(window.start)} – ${clock(window.end)}`;
+  const hour = Number(now.toLocaleString("en-GB", { hour: "2-digit", hour12: false, timeZone }));
+  const greeting = hour < 12 ? "Good morning" : hour < 17 ? "Good afternoon" : "Good evening";
+  const today = now.toLocaleDateString("en", { weekday: "long", month: "long", day: "numeric", timeZone });
+  const abhijitStatus = todaySky.abhijit ? windowStatus(todaySky.abhijit, now) : null;
+  const abhijitMinutes = todaySky.abhijit ? Math.round((Date.parse(todaySky.abhijit.end) - Date.parse(todaySky.abhijit.start)) / 60000) : 0;
+  const dasha = kundli && moon ? runningDasha(moon.longitude, kundli.chart.birthInstant, now) : null;
+  const monthYear = (iso: string) => new Date(iso).toLocaleDateString("en", { month: "short", year: "numeric" });
 
   const onboardingCtaVariant = kundli ? null : getVariant("dashboard-onboarding-cta", member.id);
   if (onboardingCtaVariant) {
@@ -71,10 +94,19 @@ export default async function DashboardPage() {
 
   return (
     <MemberAppShell member={member} active="Dashboard">
-      <div className="dashboard-welcome">
-        <div><p>Welcome back, {firstName}</p><h1>Your cosmic overview</h1></div>
-        <div className="today-pill"><SunMedium size={17} /><span><small>{location}</small>{today}</span></div>
-      </div>
+      <section className="today-band" aria-label="Today">
+        <div className="today-band__greet">
+          <p>{greeting}, {firstName}</p>
+          <h1>Your day, <em>read from the sky</em></h1>
+          <small><SunMedium size={14} /> {today} · {todaySky.placeLabel}</small>
+        </div>
+        <div className="today-band__chips">
+          <div><small>Tithi</small><strong>{todaySky.tithi}</strong><span>{todaySky.vara}</span></div>
+          <div><small>Nakshatra</small><strong>{todaySky.nakshatra.name}</strong>{todaySky.nakshatra.endsAt && <span>until {clock(todaySky.nakshatra.endsAt)}</span>}</div>
+          {todaySky.abhijit && <div className="today-band__chip--good"><small>Best window</small><strong>{span(todaySky.abhijit)}</strong><span>Abhijit Muhurat</span></div>}
+          {todaySky.rahuKala && <div className="today-band__chip--avoid"><small><ShieldAlert size={12} /> Avoid</small><strong>{span(todaySky.rahuKala)}</strong><span>Rahu Kaal</span></div>}
+        </div>
+      </section>
 
       {onboardingCtaVariant && (
         <section className="dashboard-onboarding">
@@ -112,8 +144,8 @@ export default async function DashboardPage() {
 
         <article className="glass-card muhurat-card">
           <div className="card-heading"><div><p>{nextBooking ? "Your calendar" : "Today’s guidance"}</p><h2>{nextBooking ? <>Upcoming<br /><em>Reading</em></> : <>Upcoming<br /><em>Muhurat</em></>}</h2></div><Star size={20} /></div>
-          <div className="muhurat-time"><Clock3 size={18} /><div><strong>{nextBooking ? new Date(nextBooking.scheduledAt).toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" }) : "10:42 – 11:28 AM"}</strong><small>{nextBooking ? `${new Date(nextBooking.scheduledAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })} · ${nextBooking.status}` : "Abhijit Muhurat · 46 min"}</small></div></div>
-          <p>{nextBooking ? `${nextBooking.serviceTitle} with ${nextBooking.practitionerName ?? "your Jyotish guide"} is reserved. Your chart will be prepared before the call.` : "Favorable for an important conversation, a new agreement, or beginning focused work."}</p>
+          <div className="muhurat-time"><Clock3 size={18} /><div><strong>{nextBooking ? new Date(nextBooking.scheduledAt).toLocaleDateString("en", { month: "short", day: "numeric", timeZone: "Asia/Kolkata" }) : todaySky.abhijit ? span(todaySky.abhijit) : "Not today"}</strong><small>{nextBooking ? `${new Date(nextBooking.scheduledAt).toLocaleTimeString("en", { hour: "numeric", minute: "2-digit", timeZone: "Asia/Kolkata" })} · ${nextBooking.status}` : todaySky.abhijit ? `Abhijit Muhurat · ${abhijitMinutes} min · ${abhijitStatus === "now" ? "open now" : abhijitStatus === "passed" ? "passed today" : "later today"}` : `No Abhijit Muhurat on ${todaySky.vara}`}</small></div></div>
+          <p>{nextBooking ? `${nextBooking.serviceTitle} with ${nextBooking.practitionerName ?? "your Jyotish guide"} is reserved. Your chart will be prepared before the call.` : `Computed for ${todaySky.placeLabel}. Favourable for an important conversation, a new agreement, or beginning focused work.`}</p>
           <Link href="/book" className="button button--small">{nextBooking ? "Book another" : "Book guidance"} <ArrowUpRight size={14} /></Link>
           <span className="card-watermark">☼</span>
         </article>
@@ -160,10 +192,14 @@ export default async function DashboardPage() {
         </article>
 
         <article className="glass-card insight-card" id="insights">
-          <div className="insight-icon"><Sparkles size={21} /></div>
-          <div><p>Personal intelligence</p><h2>Live Insight</h2></div>
-          <p>The shift you feel is not a disruption—it is an invitation to be more visible. Choose one brave, specific action today.</p>
-          <Link href="#services-list">Read full insight <ArrowRight size={14} /></Link>
+          <div className="insight-icon"><Moon size={21} /></div>
+          <div><p>Your chart, right now</p><h2>Current period</h2></div>
+          {dasha ? (
+            <p><strong>{dasha.maha.lord.replace(/ \(.*\)/, "")} Mahadasha</strong> until {monthYear(dasha.maha.end)}{dasha.antar && <>, with <strong>{dasha.antar.lord.replace(/ \(.*\)/, "")}</strong> as the sub-period until {monthYear(dasha.antar.end)}</>}. These periods set the tone of the years you are living through.</p>
+          ) : (
+            <p>Add your exact birth time and place to see which planetary period (dasha) you are living through, and when it changes.</p>
+          )}
+          <Link href={dasha ? "/dashboard/kundli" : "/onboarding"}>{dasha ? "See every period in your Kundli" : "Complete birth profile"} <ArrowRight size={14} /></Link>
           <span className="insight-star">✦</span>
         </article>
 
