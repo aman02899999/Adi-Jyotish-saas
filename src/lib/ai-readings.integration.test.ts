@@ -497,6 +497,12 @@ describeCutover("failed-attempt cap", () => {
 
     await failOnce(reading.id);
     expect(notify).toHaveBeenCalledTimes(1);
+    // What billing needs to refund it: the member, the amount and how it was paid.
+    const [, message] = notify.mock.calls[0] as unknown as [string[], { body: string; link: string }];
+    expect(message.body).toContain(`${MEMBER}@example.test`);
+    expect(message.body).toContain(`INR ${reading.price}`);
+    expect(message.body).toContain("pay_airead_itest_1");
+    expect(message.link).toBe("/admin/wallets");
 
     await failOnce(reading.id);
     expect(notify).toHaveBeenCalledTimes(1);

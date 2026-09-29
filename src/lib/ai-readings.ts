@@ -29,6 +29,7 @@ import {
 } from "@/lib/ai-readings-supabase";
 import { downloadFromSupabaseStorage, uploadToSupabaseStorage } from "@/lib/supabase-storage";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
+import { query } from "@/lib/postgres";
 
 // Every AI-persona reading (Gemini-backed: Ask Live, Palm, Tarot, Face, Vastu, Lal Kitab) is priced
 // on a fixed ₹99–₹999 ladder, ranked by input/output complexity — text-only and single-question
@@ -764,13 +765,26 @@ async function recordFailedAttempt(reading: AiReading, error: unknown) {
   }
 
   if (!shouldNotify) return;
-  const adminIds = await getAdminIdsWithPermission("insights");
+  // The member is told to contact support for a refund, so this goes to whoever can issue one, with
+  // what they need to do it: who paid, how much, and how.
+  const memberEmail = await readMemberEmail(reading.memberId).catch(() => null);
+  const payment = reading.razorpayPaymentId ? `card, Razorpay payment ${reading.razorpayPaymentId}` : "wallet, or no charge";
+  const adminIds = await getAdminIdsWithPermission("billing");
   await notifyAdmins(adminIds, {
     type: "ai_reading_failed",
-    title: `AI reading permanently failed: ${reading.readingType}`,
-    body: `${reading.clientName}'s ${reading.readingType} reading failed ${attempts} times and stopped retrying. Last error: ${message}`,
-    link: "/admin/insights",
+    title: `Refund due: ${reading.readingType} reading failed`,
+    body: `${reading.clientName}'s ${reading.readingType} reading (${reading.currency} ${reading.price}, paid by ${payment}) failed ${attempts} times and stopped retrying. Member: ${memberEmail ?? reading.memberId}. Credit their wallet from Wallets, or refund the card in Razorpay. Last error: ${message}`,
+    link: "/admin/wallets",
   }).catch((notifyError) => console.error("Failed to notify admins of a permanently failed AI reading", notifyError));
+}
+
+async function readMemberEmail(memberId: string): Promise<string | null> {
+  if (isSupabaseCutoverActive()) {
+    const result = await query<{ email: string }>(`select email from public.members where id = $1`, [memberId]);
+    return result.rows[0]?.email ?? null;
+  }
+  const snap = await db.collection("members").doc(memberId).get();
+  return (snap.data() as { email?: string } | undefined)?.email ?? null;
 }
 
 /** Saves the answer and returns the updated reading. Throws if generation fails; the reading stays

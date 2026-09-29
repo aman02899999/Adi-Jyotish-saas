@@ -25,6 +25,8 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
   const [notice, setNotice] = useState("");
 
   const answered = readings.filter((r) => r.status === "answered").length;
+  // An abandoned checkout was never a reading the member paid for, so it doesn't count as one owed.
+  const paidFor = readings.filter((r) => r.status !== "pending_payment").length;
 
   async function retry(id: string) {
     setRetrying(id);
@@ -46,7 +48,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
     <>
       <div className="consultation-heading billing-heading"><div><p>Ask Shree Santram Shashtri</p><h1>Live Answers</h1><span>Every reading you&apos;ve requested — questions, Kundli, Varshphal, palm, tarot, face, Vastu, and Lal Kitab.</span></div><div className="hero-actions"><Link href="/ask" className="button button--small"><Sparkles size={14} /> Ask a new question</Link><Link href="/kundli" className="button button--ghost button--small">Full Kundli report</Link><Link href="/varshphal" className="button button--ghost button--small">Varshphal</Link><Link href="/palm-reading" className="button button--ghost button--small">Palm reading</Link><Link href="/tarot-reading" className="button button--ghost button--small">Tarot reading</Link><Link href="/face-reading" className="button button--ghost button--small">Face reading</Link><Link href="/vastu-consultation" className="button button--ghost button--small">Vastu consultation</Link><Link href="/lal-kitab-reading" className="button button--ghost button--small">Lal Kitab reading</Link></div></div>
       <section className="member-billing-summary">
-        <article><span><Sparkles size={19} /></span><div><small>Readings answered</small><strong>{answered} of {readings.length}</strong></div></article>
+        <article><span><Sparkles size={19} /></span><div><small>Readings answered</small><strong>{answered} of {paidFor}</strong></div></article>
       </section>
       <section className="member-invoice-card">
         <header><div><p>History</p><h2>Your questions</h2></div><span>{readings.length} total</span></header>
@@ -59,13 +61,21 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
                 <h3>{reading.question ?? (reading.readingType === "palm" ? "Hast Rekha Palm Reading" : reading.readingType === "face" ? "Mukh Samudrik Face Reading" : reading.readingType === "varshphal" ? `Varshphal ${reading.year}` : "Full Kundli Report")}</h3>
                 {reading.status === "answered" && reading.answer
                   ? <p className="ai-reading-item__answer">{reading.answer}</p>
-                  : <p className="ai-reading-item__pending"><Clock3 size={13} /> Your payment is confirmed — the reading is still being prepared.</p>}
+                  : reading.status === "pending_payment"
+                    ? <p className="ai-reading-item__pending">Not paid. Checkout was not completed, so you have not been charged.</p>
+                    : reading.status === "failed"
+                      ? <p className="ai-reading-item__pending">This reading could not be generated. Our team has been alerted and will refund your payment.</p>
+                      : <p className="ai-reading-item__pending"><Clock3 size={13} /> Your payment is confirmed. The reading is still being prepared.</p>}
               </div>
               <div className="member-invoice-amount">
                 <strong>{reading.currency} {reading.price}</strong>
                 {reading.status === "answered"
                   ? <span className="invoice-status invoice-status--paid">answered</span>
-                  : <button type="button" className="ai-reading-item__retry" disabled={retrying === reading.id} onClick={() => retry(reading.id)}><RefreshCw size={13} className={retrying === reading.id ? "spin" : ""} /> {retrying === reading.id ? "Checking…" : "Check again"}</button>}
+                  : reading.status === "pending_payment"
+                    ? <span className="invoice-status invoice-status--void">unpaid</span>
+                    : reading.status === "failed"
+                      ? <span className="invoice-status invoice-status--refund_pending">refund due</span>
+                      : <button type="button" className="ai-reading-item__retry" disabled={retrying === reading.id} onClick={() => retry(reading.id)}><RefreshCw size={13} className={retrying === reading.id ? "spin" : ""} /> {retrying === reading.id ? "Checking…" : "Check again"}</button>}
               </div>
             </article>
           ))}
