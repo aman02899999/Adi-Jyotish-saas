@@ -64,7 +64,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
                   : reading.status === "pending_payment"
                     ? <p className="ai-reading-item__pending">Not paid. Checkout was not completed, so you have not been charged.</p>
                     : reading.status === "failed"
-                      ? <p className="ai-reading-item__pending">This reading could not be generated. Our team has been alerted and will refund your payment.</p>
+                      ? <p className="ai-reading-item__pending">This reading could not be generated, so your payment has been refunded: to your wallet if you paid from it, otherwise to your original payment method within 5–7 business days.</p>
                       : <p className="ai-reading-item__pending"><Clock3 size={13} /> Your payment is confirmed. The reading is still being prepared.</p>}
               </div>
               <div className="member-invoice-amount">
@@ -74,7 +74,7 @@ export function MemberAiReadings({ initialReadings }: { initialReadings: MemberA
                   : reading.status === "pending_payment"
                     ? <span className="invoice-status invoice-status--void">unpaid</span>
                     : reading.status === "failed"
-                      ? <span className="invoice-status invoice-status--refund_pending">refund due</span>
+                      ? <span className="invoice-status invoice-status--refunded">refunded</span>
                       : <button type="button" className="ai-reading-item__retry" disabled={retrying === reading.id} onClick={() => retry(reading.id)}><RefreshCw size={13} className={retrying === reading.id ? "spin" : ""} /> {retrying === reading.id ? "Checking…" : "Check again"}</button>}
               </div>
             </article>

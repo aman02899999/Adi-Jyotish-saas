@@ -2,7 +2,8 @@ import "server-only";
 
 import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
-import { debitWallet, InsufficientBalanceError, quoteWalletPayment } from "@/lib/wallet";
+import { creditWalletBonus, debitWallet, InsufficientBalanceError, quoteWalletPayment } from "@/lib/wallet";
+import { getRazorpay } from "@/lib/razorpay";
 import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiBudgetError, isGeminiConfigured } from "@/lib/gemini";
 import { freeAiReadingsEnabled } from "@/lib/free-ai";
 import { getPersonaById } from "@/lib/ai-personas";
@@ -722,7 +723,7 @@ export async function payReadingFromWallet({ readingId, memberId }: { readingId:
 }
 
 const MAX_AI_ATTEMPTS = 3;
-const PERMANENT_FAILURE_MESSAGE = "This reading could not be generated after several attempts. Our team has been notified — please contact support for a refund or a manually prepared reading.";
+const PERMANENT_FAILURE_MESSAGE = "This reading could not be generated after several attempts, so your payment has been refunded: to your wallet if you paid from it, otherwise to your original payment method within 5–7 business days.";
 
 /** A paid-but-permanently-broken reading (bad image, Gemini quota, whatever) would otherwise sit
  * in "paid" forever and get a fresh Gemini call every time it's reopened — real, uncapped,
@@ -765,17 +766,68 @@ async function recordFailedAttempt(reading: AiReading, error: unknown) {
   }
 
   if (!shouldNotify) return;
-  // The member is told to contact support for a refund, so this goes to whoever can issue one, with
-  // what they need to do it: who paid, how much, and how.
+  // The refund policy promises no charge for a reading that fails to generate, so the refund is
+  // automatic, to the method the member paid with. This runs once per reading: shouldNotify is true
+  // only for the call that crossed the cap. Billing is told either way, and told plainly when a
+  // refund still needs a person.
+  const refund = await refundFailedReading(reading).catch((refundError): RefundOutcome => {
+    console.error(`Automatic refund failed for AI reading ${reading.id}`, refundError);
+    return { kind: "manual", detail: refundError instanceof Error ? refundError.message : "unknown error" };
+  });
   const memberEmail = await readMemberEmail(reading.memberId).catch(() => null);
-  const payment = reading.razorpayPaymentId ? `card, Razorpay payment ${reading.razorpayPaymentId}` : "wallet, or no charge";
+  const refundLine = refund.kind === "wallet"
+    ? `Refunded automatically to their wallet (${reading.currency} ${reading.price}).`
+    : refund.kind === "card"
+      ? `Refunded automatically to their card (Razorpay refund ${refund.refundId}).`
+      : refund.kind === "none"
+        ? "Nothing to refund: no money was taken."
+        : `AUTOMATIC REFUND FAILED (${refund.detail}). Refund ${reading.currency} ${reading.price} by hand: credit their wallet from Wallets, or refund the card in Razorpay.`;
   const adminIds = await getAdminIdsWithPermission("billing");
   await notifyAdmins(adminIds, {
     type: "ai_reading_failed",
-    title: `Refund due: ${reading.readingType} reading failed`,
-    body: `${reading.clientName}'s ${reading.readingType} reading (${reading.currency} ${reading.price}, paid by ${payment}) failed ${attempts} times and stopped retrying. Member: ${memberEmail ?? reading.memberId}. Credit their wallet from Wallets, or refund the card in Razorpay. Last error: ${message}`,
+    title: refund.kind === "manual" ? `Refund needed: ${reading.readingType} reading failed` : `${reading.readingType} reading failed and was refunded`,
+    body: `${reading.clientName}'s ${reading.readingType} reading (${reading.currency} ${reading.price}${reading.razorpayPaymentId ? `, Razorpay payment ${reading.razorpayPaymentId}` : ""}) failed ${attempts} times and stopped retrying. Member: ${memberEmail ?? reading.memberId}. ${refundLine} Last error: ${message}`,
     link: "/admin/wallets",
   }).catch((notifyError) => console.error("Failed to notify admins of a permanently failed AI reading", notifyError));
+}
+
+type RefundOutcome = { kind: "wallet" } | { kind: "card"; refundId: string } | { kind: "none" } | { kind: "manual"; detail: string };
+
+/** How the reading was paid, read fresh rather than from the caller's copy. */
+async function readPaymentSource(readingId: string): Promise<{ bypass: boolean; wallet: boolean; razorpayPaymentId: string | null; price: number } | null> {
+  if (isSupabaseCutoverActive()) {
+    const result = await query<{ paid_via_bypass: boolean; paid_from_wallet: boolean; razorpay_payment_id: string | null; price: string | number }>(
+      `select paid_via_bypass, paid_from_wallet, razorpay_payment_id, price from public.ai_readings where id = $1`,
+      [readingId],
+    );
+    const row = result.rows[0];
+    return row ? { bypass: row.paid_via_bypass, wallet: row.paid_from_wallet, razorpayPaymentId: row.razorpay_payment_id, price: Number(row.price) } : null;
+  }
+  const snap = await collection.doc(readingId).get();
+  if (!snap.exists) return null;
+  const data = snap.data() as AiReadingDoc & { paidViaBypass?: boolean; paidFromWallet?: boolean };
+  return { bypass: Boolean(data.paidViaBypass), wallet: Boolean(data.paidFromWallet), razorpayPaymentId: data.razorpayPaymentId ?? null, price: Number(data.price) || 0 };
+}
+
+async function refundFailedReading(reading: AiReading): Promise<RefundOutcome> {
+  const source = await readPaymentSource(reading.id);
+  if (!source) return { kind: "manual", detail: "reading not found" };
+  if (source.bypass || source.price <= 0) return { kind: "none" };
+  if (source.wallet) {
+    // Keyed on the reading, so a repeat can never refund twice.
+    await creditWalletBonus({ memberId: reading.memberId, amount: source.price, type: "refund", referenceType: "ai_reading", referenceId: `refund-ai-reading-${reading.id}` });
+    return { kind: "wallet" };
+  }
+  if (source.razorpayPaymentId) {
+    const razorpay = getRazorpay();
+    if (!razorpay) return { kind: "manual", detail: "Razorpay is not configured" };
+    const refund = await razorpay.payments.refund(source.razorpayPaymentId, {
+      amount: Math.round(source.price * 100),
+      notes: { aiReadingId: reading.id, reason: "reading could not be generated" },
+    });
+    return { kind: "card", refundId: refund.id };
+  }
+  return { kind: "manual", detail: "no payment record on the reading" };
 }
 
 async function readMemberEmail(memberId: string): Promise<string | null> {

@@ -10,7 +10,16 @@ import { rechargeWallet } from "@/lib/wallet";
 
 // A spy rather than a plain stub: the "notify exactly once when the cap is
 // crossed" assertion below has nothing else to observe.
-const spies = vi.hoisted(() => ({ notifyAdmins: vi.fn(async () => undefined), budgetSpent: false }));
+const spies = vi.hoisted(() => ({
+  notifyAdmins: vi.fn(async () => undefined),
+  budgetSpent: false,
+  // Razorpay is an outside service; its refund call is recorded here instead of made.
+  razorpayConfigured: true,
+  razorpayRefund: vi.fn(async (_paymentId: string, _options: { amount: number }) => ({ id: "rfnd_itest_1" })),
+}));
+vi.mock("@/lib/razorpay", () => ({
+  getRazorpay: () => (spies.razorpayConfigured ? { payments: { refund: spies.razorpayRefund } } : null),
+}));
 vi.mock("@/lib/notifications", () => ({ notifyAdmins: spies.notifyAdmins }));
 // unstable_cache needs Next's incremental cache, which does not exist outside a
 // Next runtime. The wallet path reads settings.currency off this, so it has to be
@@ -465,6 +474,70 @@ describeCutover("failed-attempt cap", () => {
 
     const answered = await generateReadingAnswer((await getReadingById(reading.id, MEMBER))!);
     expect(answered).toMatchObject({ status: "answered", answer: "GEMINI ANSWER" });
+  });
+
+  it("refunds a wallet-paid reading to the wallet once it fails for good, exactly once", async () => {
+    spies.razorpayRefund.mockClear();
+    await rechargeWallet({ memberId: MEMBER, amount: 1000, razorpayPaymentId: "pay_airead_itest_refund_topup" });
+    const reading = await createPendingReading({ ...BIRTH, memberId: MEMBER, question: "q" });
+    await payReadingFromWallet({ readingId: reading.id, memberId: MEMBER });
+    const walletBalance = async () => Number((await query(`select balance from public.wallets where id = $1`, [MEMBER])).rows[0].balance);
+    expect(await walletBalance()).toBe(1000 - reading.price);
+
+    await failOnce(reading.id);
+    await failOnce(reading.id);
+    expect(await walletBalance()).toBe(1000 - reading.price);
+    await failOnce(reading.id);
+    expect(await walletBalance()).toBe(1000);
+    await failOnce(reading.id);
+    expect(await walletBalance()).toBe(1000);
+
+    const refunds = await query(`select amount from public.wallet_entries where wallet_id = $1 and type = 'refund'`, [MEMBER]);
+    expect(refunds.rows.map((row) => Number(row.amount))).toEqual([reading.price]);
+    expect(spies.razorpayRefund).not.toHaveBeenCalled();
+  });
+
+  it("refunds a card-paid reading through Razorpay, once, for the reading's price", async () => {
+    spies.razorpayRefund.mockClear();
+    spies.notifyAdmins.mockClear();
+    const reading = await createPendingReading({ ...BIRTH, memberId: MEMBER, question: "q" });
+    await markReadingPaid({ readingId: reading.id, razorpayPaymentId: "pay_airead_itest_card" });
+
+    for (let attempt = 0; attempt < 4; attempt += 1) await failOnce(reading.id);
+
+    expect(spies.razorpayRefund).toHaveBeenCalledTimes(1);
+    expect(spies.razorpayRefund.mock.calls[0]![0]).toBe("pay_airead_itest_card");
+    expect(spies.razorpayRefund.mock.calls[0]![1].amount).toBe(reading.price * 100);
+    const [, message] = spies.notifyAdmins.mock.calls[0] as unknown as [string[], { title: string; body: string }];
+    expect(message.body).toContain("Refunded automatically to their card (Razorpay refund rfnd_itest_1)");
+  });
+
+  it("tells billing plainly when the automatic card refund fails", async () => {
+    spies.notifyAdmins.mockClear();
+    spies.razorpayRefund.mockImplementationOnce(async () => { throw new Error("The payment has been fully refunded already"); });
+    const reading = await createPendingReading({ ...BIRTH, memberId: MEMBER, question: "q" });
+    await markReadingPaid({ readingId: reading.id, razorpayPaymentId: "pay_airead_itest_card_fail" });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) await failOnce(reading.id);
+
+    const [, message] = spies.notifyAdmins.mock.calls[0] as unknown as [string[], { title: string; body: string }];
+    expect(message.title).toMatch(/^Refund needed/);
+    expect(message.body).toContain("AUTOMATIC REFUND FAILED (The payment has been fully refunded already)");
+  });
+
+  it("refunds nothing for a reading no money was taken for, and raises no false alarm", async () => {
+    spies.razorpayRefund.mockClear();
+    spies.notifyAdmins.mockClear();
+    const reading = await createPendingReading({ ...BIRTH, memberId: MEMBER, question: "q" });
+    await markReadingPaidWithoutCharge({ readingId: reading.id, memberId: MEMBER });
+
+    for (let attempt = 0; attempt < 3; attempt += 1) await failOnce(reading.id);
+
+    expect(spies.razorpayRefund).not.toHaveBeenCalled();
+    const refunds = await query(`select 1 from public.wallet_entries where wallet_id = $1 and type = 'refund'`, [MEMBER]);
+    expect(refunds.rowCount).toBe(0);
+    const [, message] = spies.notifyAdmins.mock.calls[0] as unknown as [string[], { title: string; body: string }];
+    expect(message.body).toContain("Nothing to refund: no money was taken.");
   });
 
   it("never lets concurrent retries slip past the cap", async () => {
