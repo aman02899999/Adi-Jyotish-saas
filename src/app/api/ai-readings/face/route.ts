@@ -32,7 +32,7 @@ async function readImageFile(file: FormDataEntryValue | null): Promise<{ buffer:
 export async function POST(request: Request) {
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
-  const unavailable = liveReadingsUnavailable();
+  const unavailable = await liveReadingsUnavailable();
   if (unavailable) return unavailable;
 
   const throttle = await checkRateLimit("ai-face-reading-create", `member:${member.id}:ip:${requestIp(request)}`, 5, 600);

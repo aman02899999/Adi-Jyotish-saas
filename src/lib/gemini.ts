@@ -23,16 +23,25 @@ export function isGeminiConfigured() {
 }
 
 /**
- * Every AI reading is paid for before it is generated. Without a key the payment would go through
- * and the reading would fail, leaving the member to chase a refund. Routes that take payment for
- * an AI reading return this first, so nothing is charged while the key is missing.
+ * Every AI reading is paid for before it is generated. Without a key, or once today's call cap is
+ * used up, the payment would go through and the reading would fail, leaving the member to chase a
+ * refund. Routes that take payment for an AI reading return this first, so nothing is charged
+ * while a reading cannot be produced.
  */
-export function liveReadingsUnavailable(): Response | null {
-  if (isGeminiConfigured()) return null;
-  return Response.json(
-    { error: "Live readings are temporarily unavailable. You have not been charged. Please try again later." },
-    { status: 503 },
-  );
+export async function liveReadingsUnavailable(): Promise<Response | null> {
+  if (!isGeminiConfigured()) {
+    return Response.json(
+      { error: "Live readings are temporarily unavailable. You have not been charged. Please try again later." },
+      { status: 503 },
+    );
+  }
+  if ((await getGeminiUsageToday()) >= DAILY_CALL_LIMIT) {
+    return Response.json(
+      { error: "Today's live readings are fully booked. You have not been charged. Please try again tomorrow." },
+      { status: 503 },
+    );
+  }
+  return null;
 }
 
 type GeminiPart = { text: string } | { inline_data: { mime_type: string; data: string } };
@@ -44,6 +53,25 @@ type GeminiPart = { text: string } | { inline_data: { mime_type: string; data: s
 const DAILY_CALL_LIMIT = Number(process.env.GEMINI_DAILY_CALL_LIMIT) || 200;
 
 class GeminiBudgetError extends Error {}
+
+/** True when a call was refused only because today's cap is used up. That says nothing about the
+ * reading itself, so callers must not count it as a failed attempt at producing it. */
+export function isGeminiBudgetError(error: unknown): boolean {
+  return error instanceof GeminiBudgetError;
+}
+
+/** Reads 0 when the count can't be read, so a storage hiccup never stops sales: the claim in
+ * claimGeminiBudget still enforces the cap on every actual call. */
+async function getGeminiUsageToday(): Promise<number> {
+  const today = new Date().toISOString().slice(0, 10);
+  try {
+    if (isSupabaseCutoverActive()) return await getGeminiUsageInSupabase(today);
+    const snap = await db.collection("geminiUsage").doc(today).get();
+    return (snap.data() as { count?: number } | undefined)?.count ?? 0;
+  } catch {
+    return 0;
+  }
+}
 
 async function claimGeminiBudget() {
   const today = new Date().toISOString().slice(0, 10);
@@ -366,10 +394,7 @@ export async function checkGeminiHealth(): Promise<GeminiHealth> {
       return { status: "error", model: MODEL, httpStatus: response.status, detail: "The request succeeded but the model returned no text." };
     }
 
-    const today = new Date().toISOString().slice(0, 10);
-    const usageToday = isSupabaseCutoverActive()
-      ? await getGeminiUsageInSupabase(today).catch(() => 0)
-      : ((await db.collection("geminiUsage").doc(today).get().catch(() => null))?.data() as { count?: number } | undefined)?.count ?? 0;
+    const usageToday = await getGeminiUsageToday();
     return {
       status: "ok",
       model: MODEL,

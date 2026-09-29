@@ -44,7 +44,7 @@ export async function settleReadingFromWallet(member: MemberIdentity, reading: A
   // Kundli and Varshphal are computed locally; every other type needs Gemini, so refuse before the
   // wallet is debited rather than charging for a reading that cannot be produced.
   if (reading.readingType !== "kundli" && reading.readingType !== "varshphal") {
-    const unavailable = liveReadingsUnavailable();
+    const unavailable = await liveReadingsUnavailable();
     if (unavailable) return unavailable;
   }
 

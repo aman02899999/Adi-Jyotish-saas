@@ -20,7 +20,7 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   const member = await getCurrentMember();
   if (!member) return Response.json({ error: "Member sign-in required." }, { status: 401 });
-  const unavailable = liveReadingsUnavailable();
+  const unavailable = await liveReadingsUnavailable();
   if (unavailable) return unavailable;
 
   const throttle = await checkRateLimit("ai-persona-reading-create", `member:${member.id}`, 5, 600);

@@ -10,7 +10,7 @@ import { rechargeWallet } from "@/lib/wallet";
 
 // A spy rather than a plain stub: the "notify exactly once when the cap is
 // crossed" assertion below has nothing else to observe.
-const spies = vi.hoisted(() => ({ notifyAdmins: vi.fn(async () => undefined) }));
+const spies = vi.hoisted(() => ({ notifyAdmins: vi.fn(async () => undefined), budgetSpent: false }));
 vi.mock("@/lib/notifications", () => ({ notifyAdmins: spies.notifyAdmins }));
 // unstable_cache needs Next's incremental cache, which does not exist outside a
 // Next runtime. The wallet path reads settings.currency off this, so it has to be
@@ -31,7 +31,11 @@ vi.mock("@/lib/studio-settings", () => ({
 }));
 vi.mock("@/lib/gemini", () => ({
   isGeminiConfigured: () => true,
-  getAiReadingAnswer: async () => "GEMINI ANSWER",
+  isGeminiBudgetError: (error: unknown) => (error as { budget?: boolean })?.budget === true,
+  getAiReadingAnswer: async () => {
+    if (spies.budgetSpent) throw Object.assign(new Error("Live readings have reached today's usage limit."), { budget: true });
+    return "GEMINI ANSWER";
+  },
   getPalmReadingAnswer: async () => "PALM ANSWER",
   getTarotReadingAnswer: async () => "TAROT ANSWER",
   getFaceReadingAnswer: async () => "FACE ANSWER",
@@ -441,6 +445,26 @@ describeCutover("failed-attempt cap", () => {
     // A fourth attempt must not advance the counter or notify a second time.
     await failOnce(reading.id);
     expect(await rawReading(reading.id)).toMatchObject({ ai_attempts: 3, status: "failed" });
+  });
+
+  it("does not count a spent daily cap against a paid reading", async () => {
+    // A busy day used to burn a paid reading's three attempts on "today's limit reached" and
+    // leave it permanently failed, with the member charged and nothing to show for it.
+    const reading = await createPendingReading({ ...BIRTH, memberId: MEMBER, question: "q" });
+    await markReadingPaid({ readingId: reading.id, razorpayPaymentId: "pay_airead_itest_1" });
+
+    spies.budgetSpent = true;
+    try {
+      for (let attempt = 0; attempt < 4; attempt += 1) {
+        await expect(generateReadingAnswer((await getReadingById(reading.id, MEMBER))!)).rejects.toThrow("usage limit");
+      }
+      expect(await rawReading(reading.id)).toMatchObject({ ai_attempts: 0, status: "paid" });
+    } finally {
+      spies.budgetSpent = false;
+    }
+
+    const answered = await generateReadingAnswer((await getReadingById(reading.id, MEMBER))!);
+    expect(answered).toMatchObject({ status: "answered", answer: "GEMINI ANSWER" });
   });
 
   it("never lets concurrent retries slip past the cap", async () => {

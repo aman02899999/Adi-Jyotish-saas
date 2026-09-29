@@ -6,8 +6,17 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
  * not create a reading or charge the wallet while the key is missing.
  */
 
-const calls = vi.hoisted(() => ({ created: 0, walletQuoted: 0, bypassed: 0 }));
-vi.mock("@/lib/firestore", () => ({ db: {} }));
+const calls = vi.hoisted(() => ({ created: 0, walletQuoted: 0, bypassed: 0, usageToday: 0 }));
+// Today's Gemini call count, as the guard reads it on the Firestore path.
+vi.mock("@/lib/firestore", () => ({
+  db: { collection: () => ({ doc: () => ({ get: async () => ({ data: () => ({ count: calls.usageToday }) }) }) }) },
+}));
+// ...and on the Postgres path, so the suite means the same thing whichever provider it runs under.
+vi.mock("@/lib/gemini-usage-supabase", () => ({
+  getGeminiUsageInSupabase: async () => calls.usageToday,
+  claimGeminiCallInSupabase: async () => true,
+  releaseGeminiCallInSupabase: async () => undefined,
+}));
 vi.mock("@/lib/member-auth", () => ({ getCurrentMember: async () => ({ id: "m1", email: "m1@example.test" }) }));
 vi.mock("@/lib/rate-limit", () => ({ checkRateLimit: async () => ({ allowed: true, retryAfter: 0 }), rateLimitResponse: () => new Response(null, { status: 429 }) }));
 vi.mock("@/lib/payment-bypass", () => ({ memberBypassesPayment: () => false }));
@@ -35,7 +44,7 @@ const member = { id: "m1", email: "m1@example.test" } as never;
 const reading = (readingType: string) => ({ id: "r1", readingType, price: 199 }) as never;
 
 describe("AI readings without a Gemini key", () => {
-  beforeEach(() => { calls.created = 0; calls.walletQuoted = 0; calls.bypassed = 0; });
+  beforeEach(() => { calls.created = 0; calls.walletQuoted = 0; calls.bypassed = 0; calls.usageToday = 0; });
   afterEach(() => vi.unstubAllEnvs());
 
   it("refuses to create a paid AI reading, before anything is created", async () => {
@@ -64,6 +73,29 @@ describe("AI readings without a Gemini key", () => {
 
   it("lets the purchase through once the key is set", async () => {
     vi.stubEnv("GEMINI_API_KEY", "set");
+    expect((await createTarot(tarotRequest())).status).not.toBe(503);
+    expect(calls.created).toBe(1);
+  });
+
+  it("refuses a new paid reading once today's call cap is used up", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "set");
+    calls.usageToday = 200;
+    const response = await createTarot(tarotRequest());
+    expect(response.status).toBe(503);
+    await expect(response.json()).resolves.toMatchObject({ error: expect.stringContaining("not been charged") });
+    expect(calls.created).toBe(0);
+  });
+
+  it("refuses to settle from the wallet once today's cap is used up, before the wallet is touched", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "set");
+    calls.usageToday = 200;
+    expect((await settleReadingFromWallet(member, reading("tarot"))).status).toBe(503);
+    expect(calls.walletQuoted).toBe(0);
+  });
+
+  it("still sells readings while calls remain today", async () => {
+    vi.stubEnv("GEMINI_API_KEY", "set");
+    calls.usageToday = 199;
     expect((await createTarot(tarotRequest())).status).not.toBe(503);
     expect(calls.created).toBe(1);
   });

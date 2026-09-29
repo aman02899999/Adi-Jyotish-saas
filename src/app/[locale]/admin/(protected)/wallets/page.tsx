@@ -1,5 +1,8 @@
 import { CircleDollarSign, ReceiptText, Users, Wallet as WalletIcon } from "lucide-react";
 import { AdminShell } from "@/components/admin-shell";
+import { AdminWalletCredit } from "@/components/admin-wallet-credit";
+import { listMembersForAdmin } from "@/lib/admin-directory";
+import { getStudioSettings } from "@/lib/studio-settings";
 import { requireAdminPage } from "@/lib/admin-page";
 import { getAdminWalletBalances, getAdminWalletLedger, getAdminWalletSummary } from "@/lib/wallet";
 
@@ -7,7 +10,7 @@ export const dynamic = "force-dynamic";
 
 export default async function AdminWalletsPage() {
   await requireAdminPage("billing");
-  const [summary, balances, ledger] = await Promise.all([getAdminWalletSummary(), getAdminWalletBalances(), getAdminWalletLedger()]);
+  const [summary, balances, ledger, members, settings] = await Promise.all([getAdminWalletSummary(), getAdminWalletBalances(), getAdminWalletLedger(), listMembersForAdmin(), getStudioSettings()]);
 
   return (
     <AdminShell active="Wallets">
@@ -19,6 +22,8 @@ export default async function AdminWalletsPage() {
           <article><span><Users size={20} /></span><div><small>Active wallets</small><strong>{summary.walletCount}</strong><p>Members with a wallet</p></div></article>
           <article><span><ReceiptText size={20} /></span><div><small>Ledger entries</small><strong>{ledger.length}</strong><p>Most recent shown below</p></div></article>
         </section>
+
+        <AdminWalletCredit members={members.filter((member) => member.active).map(({ id, name, email }) => ({ id, name, email }))} currency={settings.currency} />
 
         <section className="admin-table-card">
           <div className="admin-table-header"><div><h2>Member balances</h2><p>Current wallet balance per member.</p></div></div>
@@ -35,7 +40,7 @@ export default async function AdminWalletsPage() {
         </section>
 
         <section className="admin-table-card">
-          <div className="admin-table-header"><div><h2>Ledger</h2><p>Most recent recharge, hold, and release entries.</p></div><span className="finance-live"><i />Live ledger</span></div>
+          <div className="admin-table-header"><div><h2>Ledger</h2><p>Most recent recharge, hold, release, and credit entries.</p></div><span className="finance-live"><i />Live ledger</span></div>
           <div className="wallet-table wallet-table--ledger">
             <div className="wallet-table__head"><span>Member</span><span>Type</span><span>Amount</span><span>Balance after</span><span>Date</span></div>
             {ledger.map((entry) => (

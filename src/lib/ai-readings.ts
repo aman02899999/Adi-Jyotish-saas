@@ -3,7 +3,7 @@ import "server-only";
 import { FieldValue } from "firebase-admin/firestore";
 import { bucket, db } from "@/lib/firestore";
 import { debitWallet, InsufficientBalanceError, quoteWalletPayment } from "@/lib/wallet";
-import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiConfigured } from "@/lib/gemini";
+import { getAiReadingAnswer, getFaceReadingAnswer, getLalKitabReadingAnswer, getPalmReadingAnswer, getPersonaReadingAnswer, getTarotReadingAnswer, getVastuReadingAnswer, isGeminiBudgetError, isGeminiConfigured } from "@/lib/gemini";
 import { freeAiReadingsEnabled } from "@/lib/free-ai";
 import { getPersonaById } from "@/lib/ai-personas";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
@@ -827,7 +827,9 @@ export async function generateReadingAnswer(reading: AiReading): Promise<AiReadi
       return getAiReadingAnswer({ name: reading.clientName, birthDate: reading.birthDate, birthTime: reading.birthTime, birthPlace: reading.birthPlace, question: reading.question ?? "" });
     })();
   } catch (error) {
-    await recordFailedAttempt(reading, error);
+    // A spent daily cap is not a fault in this reading: it stays paid and succeeds on a later
+    // retry. Counting it would let a busy day turn paid readings permanently "failed".
+    if (!isGeminiBudgetError(error)) await recordFailedAttempt(reading, error);
     throw error;
   }
 
