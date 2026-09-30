@@ -43,7 +43,14 @@ import { getDailyHoroscope, ZODIAC_SIGNS } from "@/lib/horoscopes";
 import { getHomeHeroContent } from "@/lib/site-content";
 import { HomeHoroscopeTeaser } from "@/components/home-horoscope-teaser";
 import { HeroVideo } from "@/components/hero-video";
-import { StartHerePicker } from "@/components/start-here-picker";
+import { FreeChartTeaser } from "@/components/free-chart-teaser";
+import { LiveOfferRail } from "@/components/live-offer-rail";
+import { StickyTryCta } from "@/components/sticky-try-cta";
+import { buildRailItems } from "@/lib/homepage-rail";
+import { getTodayPanchang } from "@/lib/panchang";
+import { GIFT_AMOUNTS } from "@/lib/gift-cards";
+import { AI_KUNDLI_PRICE, AI_READING_CURRENCY } from "@/lib/ai-readings";
+import { getCurrentMember } from "@/lib/member-auth";
 
 // framer-motion (the animation library behind both of these) is ~150KB and otherwise only used
 // on this page — dynamic() splits it into its own chunk loaded alongside, instead of inline in the
@@ -110,7 +117,17 @@ const freeToolGroups = [
 export default async function HomePage() {
   const t = await getTranslations("Home");
   const defaultSign = ZODIAC_SIGNS[0];
-  const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope, hero] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null), getHomeHeroContent()]);
+  const [services, stats, liveExperts, testimonials, seniorAstrologers, onlineCount, defaultHoroscope, hero, member, panchang] = await Promise.all([getPublishedServices(), getHomepageStats(), getLivePractitioners(), getFeaturedTestimonials(), getSeniorAstrologers(), getOnlineNowCount(), getDailyHoroscope(defaultSign.key).catch(() => null), getHomeHeroContent(), getCurrentMember().catch(() => null), getTodayPanchang().catch(() => null)]);
+  const railItems = buildRailItems({
+    onlineCount,
+    averageRating: stats.averageRating,
+    reviewCount: stats.reviewCount,
+    abhijit: panchang?.muhurta.abhijit ?? null,
+    moonNakshatra: panchang?.nakshatra.name ?? null,
+    refereeReward: REFERRAL_REFEREE_REWARD,
+    referrerReward: REFERRAL_REFERRER_REWARD,
+    giftFrom: Math.min(...GIFT_AMOUNTS),
+  });
   const seniorMain = seniorAstrologers.slice(0, 2);
   const seniorRest = seniorAstrologers.slice(2);
 
@@ -128,7 +145,6 @@ export default async function HomePage() {
         // engines' review-snippet policies penalise.
         aggregateRating: stats.averageRating && stats.reviewCount ? { "@type": "AggregateRating", ratingValue: stats.averageRating, reviewCount: stats.reviewCount } : undefined,
       }} />
-      <StartHerePicker />
       <SiteHeader />
 
       <section className="hero-cosmic">
@@ -159,15 +175,12 @@ export default async function HomePage() {
           </div>
 
           <div className="reveal reveal--delay">
-            <HeroVideo
-              posterSrc="/images/homepage-hero-poster.jpg"
-              mp4Src="/videos/homepage-hero.mp4"
-              webmSrc="/videos/homepage-hero.webm"
-              label="brand video"
-            />
+            <FreeChartTeaser kundliPrice={AI_KUNDLI_PRICE} currency={AI_READING_CURRENCY} signedIn={Boolean(member)} />
           </div>
         </div>
       </section>
+
+      <LiveOfferRail items={railItems} />
 
       <section className="trust-strip" aria-label={t("aria.trustStrip")}>
         <div className="shell trust-grid">
@@ -303,16 +316,6 @@ export default async function HomePage() {
         </div>
       </div>
 
-      <div className="shell" style={{ paddingBlock: "10px 20px" }}>
-        <div className="cta-banner reveal">
-          <div className="cta-banner__copy">
-            <strong>{t("ctaGemstones.title")}</strong>
-            <span>{t("ctaGemstones.body")}</span>
-          </div>
-          <Link href="/gemstones/recommend" className="button button--light">{t("ctaGemstones.cta")} <ArrowRight size={16} /></Link>
-        </div>
-      </div>
-
       <section className="section shell" id="services" aria-label={t("aria.services")}>
         <div className="section-heading reveal">
           <div><p className="eyebrow"><span /> {t("services.eyebrow")}</p><h2>{t("services.headline")}<br /><em>{t("services.headlineEm")}</em></h2></div>
@@ -399,16 +402,6 @@ export default async function HomePage() {
         </div>
       </section>
 
-      <div className="shell" style={{ paddingTop: 70 }}>
-        <div className="promo-banner reveal">
-          <div className="promo-banner__copy">
-            <strong>{t("ctaGuide.title")}</strong>
-            <span>{t("ctaGuide.body")}</span>
-          </div>
-          <Link href="/astrologers" className="button button--light">{t("ctaGuide.cta")} <ArrowRight size={16} /></Link>
-        </div>
-      </div>
-
       {testimonials.length > 0 && (
         <section className="section shell stories" id="stories">
           <div className="section-heading section-heading--center reveal">
@@ -443,6 +436,7 @@ export default async function HomePage() {
         <Link href="/book" className="button button--light">{t("finalCta.cta")} <ArrowRight size={17} /></Link>
       </section>
 
+      <StickyTryCta />
       <SiteFooter />
     </main>
   );

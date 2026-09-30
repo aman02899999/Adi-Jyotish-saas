@@ -4,9 +4,11 @@ import {
   ArrowUpRight,
   BarChart3,
   CalendarCheck2,
+  CheckCircle2,
+  Circle,
   CircleDollarSign,
   Clock3,
-  ShieldCheck,
+  Rocket,
   Sparkles,
   TrendingDown,
   TrendingUp,
@@ -15,7 +17,7 @@ import {
 import { AdminShell } from "@/components/admin-shell";
 import { getAnalytics } from "@/lib/analytics";
 import { requireAdminPage } from "@/lib/admin-page";
-import { isGeminiConfigured } from "@/lib/gemini";
+import { getLaunchChecklist } from "@/lib/launch-checklist";
 
 export const dynamic = "force-dynamic";
 
@@ -25,7 +27,8 @@ function Change({ value, suffix = "%" }: { value: number; suffix?: string }) {
 }
 
 export default async function AdminOverviewPage() {
-  const [analytics, admin] = await Promise.all([getAnalytics("30d"), requireAdminPage("overview")]);
+  const [analytics, admin, checklist] = await Promise.all([getAnalytics("30d"), requireAdminPage("overview"), getLaunchChecklist()]);
+  const ready = checklist.filter((item) => item.done).length;
   const { metrics } = analytics;
   const maxRevenue = Math.max(1, ...analytics.timeline.map((point) => point.revenue));
   const maxService = Math.max(1, ...analytics.topServices.map((service) => service.bookings));
@@ -33,14 +36,27 @@ export default async function AdminOverviewPage() {
   return <AdminShell active="Overview"><div className="admin-content admin-overview-content">
     <div className="overview-welcome"><div><p>Studio intelligence</p><h1>Welcome back, {admin?.name.split(" ")[0] ?? "administrator"}.</h1><span>Here is what is happening across Jyotish this month.</span></div><div><small>{new Date().toLocaleDateString("en",{weekday:"long",month:"long",day:"numeric"})}</small><Link href="/admin/insights">Open full report <ArrowUpRight size={14}/></Link></div></div>
 
-    {!isGeminiConfigured() && (
-      <div className="finance-config-note">
-        <ShieldCheck size={18} />
-        <div>
-          <strong>Live readings are not configured</strong>
-          <span>GEMINI_API_KEY is not set — members who pay for a Live reading (Ask, Palm, Tarot, Face, Vastu, Lal Kitab, or any AI persona) will see &ldquo;still being prepared&rdquo; forever until it&rsquo;s added in your hosting provider&rsquo;s environment variables. <Link href="/admin/ai-personas">Details</Link></span>
-        </div>
-      </div>
+    {ready < checklist.length && (
+      <section className="launch-checklist" aria-label="Launch checklist">
+        <header>
+          <span className="launch-checklist__icon"><Rocket size={18} /></span>
+          <div><p>Before your first sale</p><h2>Launch checklist</h2></div>
+          <div className="launch-checklist__score"><strong>{ready}<small>/{checklist.length}</small></strong><span>ready</span></div>
+        </header>
+        <div className="launch-checklist__bar" aria-hidden="true"><i style={{ width: `${(ready / checklist.length) * 100}%` }} /></div>
+        <ul>
+          {checklist.map((item) => (
+            <li key={item.key} className={item.done ? "is-done" : undefined}>
+              {item.done ? <CheckCircle2 size={18} /> : <Circle size={18} />}
+              <div>
+                <strong>{item.label}</strong>
+                <small>{item.done ? item.why : item.fix}</small>
+              </div>
+              {!item.done && item.href && <Link href={item.href}>Open <ArrowRight size={13} /></Link>}
+            </li>
+          ))}
+        </ul>
+      </section>
     )}
 
     <section className="overview-kpis">
@@ -54,7 +70,7 @@ export default async function AdminOverviewPage() {
       <section className="overview-card revenue-overview">
         <header><div><p>Financial pulse</p><h2>Revenue movement</h2></div><div><span><i/> Revenue</span><Link href="/admin/insights">Details <ArrowRight size={13}/></Link></div></header>
         <div className="overview-revenue-total"><strong>₹{metrics.revenue.toLocaleString()}</strong><span>Last 30 days</span></div>
-        <div className="revenue-bars" aria-label="Revenue trend chart">{analytics.timeline.map((point,index)=><div key={`${point.label}-${index}`}><span className="revenue-bar-value">{point.revenue?`$${point.revenue}`:""}</span><i style={{height:`${Math.max(3,point.revenue/maxRevenue*100)}%`}}/><small>{index%2===0?point.label:""}</small></div>)}</div>
+        <div className="revenue-bars" aria-label="Revenue trend chart">{analytics.timeline.map((point,index)=><div key={`${point.label}-${index}`}><span className="revenue-bar-value">{point.revenue?`₹${point.revenue.toLocaleString("en-IN")}`:""}</span><i style={{height:`${Math.max(3,point.revenue/maxRevenue*100)}%`}}/><small>{index%2===0?point.label:""}</small></div>)}</div>
       </section>
 
       <section className="overview-card pulse-card">
