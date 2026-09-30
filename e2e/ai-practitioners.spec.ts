@@ -15,6 +15,8 @@ const AUTH_EMULATOR = "http://127.0.0.1:9099";
 const HEADERS = { origin: BASE_URL, "content-type": "application/json" };
 const BIRTH = { clientName: "AI Test Member", birthDate: "1994-06-15", birthTime: "07:45", birthPlace: "Jaipur, Rajasthan, India" };
 const QUESTION = "What does this year hold for my career and finances?";
+// A 1x1 PNG: enough for the upload routes to decode, resize and store as a real photo.
+const TINY_PNG = "iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAQAAAC1HAwCAAAAC0lEQVR42mNkYAAAAAYAAjCB0C8AAAAASUVORK5CYII=";
 
 async function newMember(): Promise<{ context: APIRequestContext; email: string }> {
   const email = `e2e.ai.${Date.now()}@adijyotishgurus.test`;
@@ -113,6 +115,24 @@ test.describe("AI astrologers and readings", () => {
       expect(paid.ok(), `${label}: ${await paid.text()}`).toBe(true);
       const { answer } = (await paid.json()) as { answer: string | null };
       expect(answer, `${label} is answered by ${persona}`).toBe(`E2E stub reply from ${persona}.`);
+      expect(before - (await balanceOf(member)), `${label} is charged once`).toBeGreaterThan(0);
+    }
+
+    // The two photo readings: the photos are stored, then every one of them reaches the persona.
+    const photo = { name: "photo.png", mimeType: "image/png", buffer: Buffer.from(TINY_PNG, "base64") };
+    const photoReadings: Array<[string, string, Record<string, string | typeof photo>, string]> = [
+      ["Palm", "/api/ai-readings/palm", { clientName: BIRTH.clientName, leftPalmImage: photo, rightPalmImage: photo }, "Pandit Trilochan Shashtri (2 photos)"],
+      ["Face", "/api/ai-readings/face", { clientName: BIRTH.clientName, question: QUESTION, faceImages: photo }, "Acharya Devraj Bhardwaj (1 photo)"],
+    ];
+    for (const [label, route, multipart, persona] of photoReadings) {
+      const created = await member.post(route, { multipart });
+      expect(created.ok(), `${label}: ${await created.text()}`).toBe(true);
+      const { readingId } = (await created.json()) as { readingId: string };
+      const before = await balanceOf(member);
+      const paid = await member.post(`/api/ai-readings/${readingId}/pay-from-wallet`, { headers: HEADERS });
+      expect(paid.ok(), `${label}: ${await paid.text()}`).toBe(true);
+      const { answer } = (await paid.json()) as { answer: string | null };
+      expect(answer, `${label} is answered by its persona, with every photo`).toBe(`E2E stub reply from ${persona}.`);
       expect(before - (await balanceOf(member)), `${label} is charged once`).toBeGreaterThan(0);
     }
 

@@ -26,7 +26,7 @@ export default defineConfig({
   }],
   webServer: [
     {
-      command: "node_modules/.bin/firebase emulators:start --project=demo-jyotish --only auth,firestore",
+      command: "node_modules/.bin/firebase emulators:start --project=demo-jyotish --only auth,firestore,storage",
       url: "http://127.0.0.1:8080",
       reuseExistingServer: !process.env.CI,
       timeout: 60_000,
@@ -50,6 +50,10 @@ export default defineConfig({
         NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "demo-jyotish.appspot.com",
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "1234567890",
         NEXT_PUBLIC_FIREBASE_APP_ID: "1:1234567890:web:abcdef",
+        // Palm and face readings keep their photos in Storage; the emulator stands in for the bucket.
+        FIREBASE_STORAGE_BUCKET: "demo-jyotish.appspot.com",
+        FIREBASE_STORAGE_EMULATOR_HOST: "127.0.0.1:9199",
+        STORAGE_EMULATOR_HOST: "http://127.0.0.1:9199",
         // The AI astrologers and readings run against e2e/support/mock-gemini.mjs, which answers
         // in-process: no request reaches Google, so the key below is never valid anywhere.
         GEMINI_API_KEY: "e2e-stub-key",

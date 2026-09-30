@@ -1,0 +1,12 @@
+rules_version = "2";
+
+// Palm and face photos are written and read only by the server, through the Admin SDK, which
+// these rules do not apply to. No browser ever touches Storage directly, so every client request
+// is refused.
+service firebase.storage {
+  match /b/{bucket}/o {
+    match /{allPaths=**} {
+      allow read, write: if false;
+    }
+  }
+}
