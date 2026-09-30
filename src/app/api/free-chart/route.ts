@@ -13,7 +13,10 @@ export async function POST(request: Request) {
 
   const body = (await readJsonBody(request)) as Record<string, unknown>;
   const birthDate = asText(body.birthDate)?.trim() ?? "";
-  const birthTime = asText(body.birthTime)?.trim() ?? "";
+  // An unknown birth time is sent as such, never guessed: the preview then states only what holds
+  // for the whole day.
+  const timeUnknown = body.timeUnknown === true;
+  const birthTime = timeUnknown ? null : asText(body.birthTime)?.trim() ?? "";
   const birthPlace = asText(body.birthPlace)?.trim().slice(0, 160) ?? "";
 
   if (!/^\d{4}-\d{2}-\d{2}$/.test(birthDate) || Number.isNaN(Date.parse(`${birthDate}T00:00:00Z`))) {
@@ -23,7 +26,7 @@ export async function POST(request: Request) {
   if (year < 1900 || new Date(`${birthDate}T00:00:00Z`) > new Date()) {
     return Response.json({ error: "Please choose a birth date between 1900 and today." }, { status: 400 });
   }
-  if (!/^([01]\d|2[0-3]):[0-5]\d$/.test(birthTime)) return Response.json({ error: "Please choose your time of birth." }, { status: 400 });
+  if (birthTime !== null && !/^([01]\d|2[0-3]):[0-5]\d$/.test(birthTime)) return Response.json({ error: "Please choose your time of birth." }, { status: 400 });
   if (birthPlace.length < 2) return Response.json({ error: "Please enter the city you were born in." }, { status: 400 });
 
   try {

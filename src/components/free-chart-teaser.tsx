@@ -6,13 +6,18 @@ import { ArrowRight, CalendarDays, Clock3, Lock, LoaderCircle, MapPin, Sparkles 
 import { PlaceAutocomplete } from "@/components/place-autocomplete";
 import { trackEvent } from "@/lib/track-event";
 
+type Sign = { name: string; english: string };
+/** Mirrors lib/free-chart.ts: without a birth time, a fact can have two or three possible values. */
 type Preview = {
   matchedPlace: string;
-  ascendant: { name: string; english: string; degree: number };
-  moon: { name: string; english: string; nakshatra: string; pada: number };
-  sun: { name: string; english: string };
-  mahadasha: { lord: string; endsOn: string } | null;
+  timeKnown: boolean;
+  ascendant: { name: string; english: string; degree: number } | null;
+  moon: { signs: Sign[]; nakshatras: string[]; pada: number | null };
+  sun: { signs: Sign[] };
+  mahadasha: { lord: string; endsOn: string | null } | null;
 };
+
+const either = (values: string[]) => values.join(" or ");
 
 /** Read by the Kundli report form, so a visitor who unlocks the full report doesn't type it twice. */
 export const FREE_CHART_BIRTH_KEY = "ajg.freeChartBirth";
@@ -50,9 +55,9 @@ function FreeChartBody({ kundliPrice, currency, signedIn }: { kundliPrice: numbe
     event.preventDefault();
     setError("");
     setLoading(true);
-    const details = { birthDate, birthTime: timeUnknown ? "12:00" : birthTime, birthPlace };
+    const details = { birthDate, birthTime: timeUnknown ? "" : birthTime, birthPlace };
     try {
-      const response = await fetch("/api/free-chart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify(details) });
+      const response = await fetch("/api/free-chart", { method: "POST", headers: { "Content-Type": "application/json" }, body: JSON.stringify({ ...details, timeUnknown }) });
       const data = await response.json().catch(() => ({}));
       if (!response.ok) {
         setError(data.error || "Your chart could not be calculated. Please try again.");
@@ -70,11 +75,17 @@ function FreeChartBody({ kundliPrice, currency, signedIn }: { kundliPrice: numbe
   }
 
   if (preview) {
+    const { ascendant, moon, sun, mahadasha } = preview;
+    const needsTime = "Depends on your birth time";
     const facts = [
-      { label: "Lagna (Ascendant)", value: timeUnknown ? "Needs your birth time" : `${preview.ascendant.name} · ${preview.ascendant.degree}°`, note: timeUnknown ? "It changes every two hours" : preview.ascendant.english },
-      { label: "Moon sign (Rashi)", value: preview.moon.name, note: preview.moon.english },
-      { label: "Birth nakshatra", value: preview.moon.nakshatra, note: `Pada ${preview.moon.pada}` },
-      { label: "Running Mahadasha", value: preview.mahadasha?.lord.replace(/ \(.*\)/, "") ?? "—", note: preview.mahadasha ? `until ${new Date(`${preview.mahadasha.endsOn}T00:00:00`).toLocaleDateString("en", { month: "short", year: "numeric" })}` : "" },
+      { label: "Lagna (Ascendant)", value: ascendant ? `${ascendant.name} · ${ascendant.degree}°` : "Needs your birth time", note: ascendant ? ascendant.english : "It changes every two hours" },
+      { label: "Moon sign (Rashi)", value: either(moon.signs.map((entry) => entry.name)), note: moon.signs.length > 1 ? needsTime : moon.signs[0].english },
+      { label: "Birth nakshatra", value: either(moon.nakshatras), note: moon.pada ? `Pada ${moon.pada}` : moon.nakshatras.length > 1 ? needsTime : "The same all that day" },
+      {
+        label: "Running Mahadasha",
+        value: mahadasha ? mahadasha.lord.replace(/ \(.*\)/, "") : preview.timeKnown ? "—" : "Needs your birth time",
+        note: mahadasha?.endsOn ? `until ${new Date(`${mahadasha.endsOn}T00:00:00`).toLocaleDateString("en", { month: "short", year: "numeric" })}` : mahadasha ? "Its end date needs your birth time" : "",
+      },
     ];
     return (
       <div className="free-chart free-chart--result" aria-live="polite">
@@ -88,7 +99,7 @@ function FreeChartBody({ kundliPrice, currency, signedIn }: { kundliPrice: numbe
             </div>
           ))}
         </div>
-        <p className="free-chart__sun">Sun in {preview.sun.name} ({preview.sun.english}), sidereal: the zodiac Vedic astrology uses, which is why it may differ from your Western sign.</p>
+        <p className="free-chart__sun">Sun in {either(sun.signs.map((entry) => `${entry.name} (${entry.english})`))}, sidereal: the zodiac Vedic astrology uses, which is why it may differ from your Western sign.</p>
         <ul className="free-chart__locked" aria-label="In the full Kundli report">
           {LOCKED.map((item) => <li key={item}><Lock size={13} /> {item}</li>)}
         </ul>

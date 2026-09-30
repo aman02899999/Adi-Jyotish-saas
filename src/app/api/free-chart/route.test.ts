@@ -15,7 +15,7 @@ describe("POST /api/free-chart", () => {
   it("returns the chart preview for valid birth details", async () => {
     const response = await post(valid);
     expect(response.status).toBe(200);
-    await expect(response.json()).resolves.toMatchObject({ ascendant: { name: "Mithuna" }, moon: { nakshatra: "Magha" } });
+    await expect(response.json()).resolves.toMatchObject({ timeKnown: true, ascendant: { name: "Mithuna" }, moon: { nakshatras: ["Magha"] } });
   });
 
   it.each([
@@ -29,6 +29,12 @@ describe("POST /api/free-chart", () => {
     ["a date sent as a number", { birthDate: 19940615 }],
   ])("rejects %s", async (_label, change) => {
     expect((await post({ ...valid, ...change })).status).toBe(400);
+  });
+
+  it("accepts an unknown birth time without a time, and answers without guessing one", async () => {
+    const response = await post({ ...valid, birthTime: "", timeUnknown: true });
+    expect(response.status).toBe(200);
+    await expect(response.json()).resolves.toMatchObject({ timeKnown: false, ascendant: null, moon: { pada: null } });
   });
 
   it("explains a place it cannot find instead of failing", async () => {
