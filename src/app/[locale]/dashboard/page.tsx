@@ -26,7 +26,7 @@ import { buildHouseGrid, buildKundliChart, KundliEngineError } from "@/lib/kundl
 import { formatDegree, NAKSHATRAS } from "@/lib/astro-engine";
 import { getVariant, recordExperimentImpression } from "@/lib/experiments";
 import { buildMemberToday, runningDasha, windowStatus } from "@/lib/member-today";
-import { todayCivilDate } from "@/lib/horoscopes";
+import { dateInTimeZone } from "@/lib/scheduling";
 import { REFERENCE_LOCATION } from "@/lib/panchang";
 import { computeLifePathNumber, computeDestinyNumber, computePersonalYearNumber, LUCKY_COLOR_BY_NUMBER } from "@/lib/numerology";
 
@@ -66,7 +66,8 @@ export default async function DashboardPage() {
   const timeZone = kundli?.chart.timezone ?? REFERENCE_LOCATION.timeZone;
   const now = new Date();
   const todaySky = buildMemberToday({
-    civilDate: await todayCivilDate(),
+    // The date in that city, not the studio's: west of India, the studio's day turns over first.
+    civilDate: dateInTimeZone(now, timeZone),
     latitude: kundli?.chart.latitude ?? REFERENCE_LOCATION.latitude,
     longitude: kundli?.chart.longitude ?? REFERENCE_LOCATION.longitude,
     timeZone,
