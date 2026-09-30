@@ -50,6 +50,10 @@ export default defineConfig({
         NEXT_PUBLIC_FIREBASE_STORAGE_BUCKET: "demo-jyotish.appspot.com",
         NEXT_PUBLIC_FIREBASE_MESSAGING_SENDER_ID: "1234567890",
         NEXT_PUBLIC_FIREBASE_APP_ID: "1:1234567890:web:abcdef",
+        // The AI astrologers and readings run against e2e/support/mock-gemini.mjs, which answers
+        // in-process: no request reaches Google, so the key below is never valid anywhere.
+        GEMINI_API_KEY: "e2e-stub-key",
+        NODE_OPTIONS: "--import ./e2e/support/mock-gemini.mjs",
       },
     },
   ],
