@@ -28,7 +28,7 @@ const { db } = await import("@/lib/firestore");
 const { findFirstBookableDate, getAvailableSlots, getPractitionerDirectory } = await import("@/lib/scheduling");
 const { getMarketplacePractitioners } = await import("@/lib/marketplace");
 const { getSeniorAstrologers } = await import("@/lib/homepage");
-const { seedServices } = await import("@/lib/services");
+const { starterServices } = await import("@/lib/services");
 const { POST } = await import("@/app/api/bookings/route");
 
 const AI_PERSONA = "anika-sharma";
@@ -46,11 +46,13 @@ function upcomingWeekday(): string {
   return date.toISOString().slice(0, 10);
 }
 
+/** Written directly: seedServices() seeds once per server instance, and these tests clear the
+ * emulator between cases. */
 async function anyServiceId(): Promise<string> {
-  await seedServices();
-  const snap = await db.collection("services").where("active", "==", true).limit(1).get();
-  if (snap.empty) throw new Error("seedServices produced no active service");
-  return snap.docs[0].id;
+  const service = starterServices.find((entry) => entry.active);
+  if (!service) throw new Error("No active starter service to book");
+  await db.collection("services").doc(service.slug).set({ ...service, createdAt: new Date(), updatedAt: new Date() });
+  return service.slug;
 }
 
 describeFirestore("AI personas on the live Firestore path", () => {
