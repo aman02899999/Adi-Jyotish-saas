@@ -4,6 +4,8 @@ import { Link } from "@/i18n/navigation";
 import { useEffect, useRef, useState } from "react";
 import { Bell, Check } from "lucide-react";
 
+const POLL_MS = 60_000;
+
 type NotificationItem = { id: string; type: string; title: string; body: string | null; link: string | null; readAt: string | null; createdAt: string };
 
 function timeAgo(iso: string) {
@@ -22,7 +24,11 @@ export function NotificationBell({ apiBase }: { apiBase: "/api/member/notificati
   const [unreadCount, setUnreadCount] = useState(0);
   const rootRef = useRef<HTMLDivElement>(null);
 
-  async function load() {
+  // The list costs up to 30 Firestore reads, so it loads only when the panel opens. While closed,
+  // the bell polls just the unread count, and only while the tab is visible. It used to re-read
+  // the whole list every minute in every open tab, visible or not: a tab left open all day spent
+  // tens of thousands of reads, close to the free plan's daily quota.
+  async function loadList() {
     const response = await fetch(apiBase);
     if (!response.ok) return;
     const data = await response.json();
@@ -30,13 +36,30 @@ export function NotificationBell({ apiBase }: { apiBase: "/api/member/notificati
     setUnreadCount(data.unreadCount);
   }
 
+  async function loadCount() {
+    if (document.visibilityState !== "visible") return;
+    const response = await fetch(`${apiBase}?count=1`);
+    if (!response.ok) return;
+    const data = await response.json();
+    setUnreadCount(data.unreadCount);
+  }
+
   useEffect(() => {
     // eslint-disable-next-line react-hooks/set-state-in-effect
-    load();
-    const interval = setInterval(load, 60000);
-    return () => clearInterval(interval);
+    loadCount();
+    const interval = setInterval(loadCount, POLL_MS);
+    document.addEventListener("visibilitychange", loadCount);
+    return () => {
+      clearInterval(interval);
+      document.removeEventListener("visibilitychange", loadCount);
+    };
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, []);
+
+  function toggle() {
+    if (!open) loadList();
+    setOpen((value) => !value);
+  }
 
   useEffect(() => {
     function handleClick(event: MouseEvent) {
@@ -62,7 +85,7 @@ export function NotificationBell({ apiBase }: { apiBase: "/api/member/notificati
 
   return (
     <div className="notification-bell" ref={rootRef}>
-      <button type="button" className="notification-bell__trigger" aria-label="Notifications" onClick={() => setOpen((value) => !value)}>
+      <button type="button" className="notification-bell__trigger" aria-label="Notifications" onClick={toggle}>
         <Bell size={18} />
         {unreadCount > 0 && <span className="notification-bell__badge">{unreadCount > 99 ? "99+" : unreadCount}</span>}
       </button>

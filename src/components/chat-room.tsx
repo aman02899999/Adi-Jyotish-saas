@@ -48,6 +48,9 @@ export function ChatRoom({ sessionId, initialMessages, initialStatus, startedAt,
     function startPolling() {
       if (pollTimer) return;
       pollTimer = setInterval(async () => {
+        // Each poll re-reads the session and every message, so a chat left open in a background
+        // tab would keep spending Firestore reads for nobody. It catches up on the next visible tick.
+        if (document.visibilityState !== "visible") return;
         const response = await fetch(`/api/chat/sessions/${sessionId}`);
         if (!response.ok) return;
         const data = await response.json();
