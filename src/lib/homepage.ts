@@ -51,7 +51,7 @@ export const getHomepageStats = unstable_cache(
     }
   },
   ["homepage-stats"],
-  { tags: ["homepage-stats"], revalidate: 300 },
+  { tags: ["homepage-stats"], revalidate: 3600 },
 );
 
 // "Online now" count changes far more often than the stats above (practitioners toggle live), so
@@ -94,7 +94,7 @@ export const getFeaturedTestimonials = unstable_cache(
   async (limit = 3) => {
     type Testimonial = { reviewerName: string; body: string; rating: number };
     // Only the fields a testimonial and its cursor need are read, so a page is cheap. The scan is bounded at
-    // 1,000 documents per cache refresh (every five minutes at most): enough to reach past a few
+    // 1,000 documents per cache refresh (hourly at most): enough to reach past a few
     // hundred synthetic reviews, while a table that is still mostly synthetic cannot turn one
     // homepage render into an unbounded read. Past the bound it shows no testimonial rather than a
     // synthetic one, and the admin reviews screen flags the rows to delete.
@@ -145,5 +145,5 @@ export const getFeaturedTestimonials = unstable_cache(
     }
   },
   ["homepage-testimonials"],
-  { tags: ["homepage-testimonials"], revalidate: 300 },
+  { tags: ["homepage-testimonials"], revalidate: 3600 },
 );

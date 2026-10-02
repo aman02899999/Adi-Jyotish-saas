@@ -221,7 +221,8 @@ describeFirestore("synthetic reviews on the live Firestore path", () => {
       await purgeSyntheticReviews();
 
       const tags = vi.mocked(revalidateTag).mock.calls.map(([tag]) => tag);
-      expect(tags).toEqual(expect.arrayContaining(["homepage-stats", "homepage-testimonials", "marketplace-practitioners"]));
+      // marketplace-review-scores is cached for an hour, so a moderation decision must expire it too.
+      expect(tags).toEqual(expect.arrayContaining(["homepage-stats", "homepage-testimonials", "marketplace-practitioners", "marketplace-review-scores"]));
     });
 
     it("reports zero and deletes nothing when there are none", async () => {
