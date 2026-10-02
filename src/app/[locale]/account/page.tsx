@@ -14,7 +14,8 @@ export const metadata: Metadata = {
 };
 
 export default async function AccountPage({ searchParams }: { searchParams: Promise<{ mode?: string }> }) {
-  const [member, query, locale] = await Promise.all([getCurrentMember(), searchParams, getLocale()]);
+  // A database outage leaves the sign-in form showing rather than failing the page.
+  const [member, query, locale] = await Promise.all([getCurrentMember().catch(() => null), searchParams, getLocale()]);
   if (member) redirect({ href: member.onboardingComplete ? "/dashboard" : "/onboarding", locale });
   const initialMode = query.mode === "register" ? "register" : "login";
 

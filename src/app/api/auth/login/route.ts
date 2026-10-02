@@ -1,3 +1,4 @@
+import { isDatabaseUnavailable, withSignInOutageHandling } from "@/lib/sign-in-errors";
 import { createAdminSession, getCurrentAdmin, recordAudit } from "@/lib/admin-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
@@ -12,6 +13,10 @@ export const dynamic = "force-dynamic";
  * account has 2FA enabled, in which case this stops short and hands back a challenge token for
  * /api/auth/login/verify-2fa instead. */
 export async function POST(request: Request) {
+  return withSignInOutageHandling(() => signIn(request));
+}
+
+async function signIn(request: Request) {
   const throttle = await checkRateLimit("admin-login", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
@@ -36,7 +41,8 @@ export async function POST(request: Request) {
 
   try {
     await createAdminSession(body.idToken);
-  } catch {
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) throw error;
     await recordAuthFailure(authThrottle.keyHash);
     return Response.json({ error: "This account does not have administrator access." }, { status: 403 });
   }

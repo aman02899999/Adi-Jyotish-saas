@@ -31,6 +31,11 @@ jobs:
       - name: Build
         run: npm run build
 
+      # Chart calculations need @swisseph/node's native addon in every deployed function. Local and
+      # CI runs read node_modules directly, so only the build's trace shows whether it ships.
+      - name: Check native files ship with the build
+        run: node scripts/check-native-trace.mjs
+
   e2e:
     runs-on: ubuntu-latest
     steps:

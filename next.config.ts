@@ -39,6 +39,14 @@ const nextConfig: NextConfig = {
   // @swisseph/node is a native addon and must remain on the Node side of the server bundle;
   // bundling it into page-data collection triggers the missing-prebuild error in production builds.
   serverExternalPackages: ["firebase-admin", "google-gax", "@grpc/grpc-js", "@sentry/nextjs", "@swisseph/node"],
+  // @swisseph/node loads its compiled addon and its ephemeris data through computed paths
+  // (node-gyp-build, path.join(__dirname, ...)), which file tracing cannot follow. Without these
+  // includes the deployed functions had the package's JavaScript but neither file, so every chart
+  // calculation (Kundli, the free chart, the member dashboard) failed in production with "No
+  // native build was found". scripts/check-native-trace.mjs fails the build if they go missing.
+  outputFileTracingIncludes: {
+    "/**": ["./node_modules/@swisseph/node/prebuilds/linux-x64/**", "./node_modules/@swisseph/node/ephemeris/**"],
+  },
   // AVIF isn't in Next's default format list (slower to encode) but is typically 20-30% smaller
   // than WebP for photographic content — worth it here since gemstone/blog/practitioner photos
   // make up most of the page weight on this site. Next still falls back to WebP/original per the

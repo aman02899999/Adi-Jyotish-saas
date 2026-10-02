@@ -1,3 +1,4 @@
+import { isDatabaseUnavailable, withSignInOutageHandling } from "@/lib/sign-in-errors";
 import { createPractitionerSession, getCurrentPractitioner, hasPractitionerForUid } from "@/lib/practitioner-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
@@ -13,6 +14,10 @@ export const dynamic = "force-dynamic";
  * account has 2FA enabled, in which case this stops short and hands back a challenge token for
  * /api/auth/practitioner-login/verify-2fa instead. */
 export async function POST(request: Request) {
+  return withSignInOutageHandling(() => signIn(request));
+}
+
+async function signIn(request: Request) {
   const throttle = await checkRateLimit("practitioner-login", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
@@ -39,7 +44,8 @@ export async function POST(request: Request) {
 
   try {
     await createPractitionerSession(body.idToken);
-  } catch {
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) throw error;
     await recordAuthFailure(authThrottle.keyHash);
     return Response.json({ error: "Email or password is incorrect." }, { status: 401 });
   }

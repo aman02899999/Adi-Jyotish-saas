@@ -1,3 +1,4 @@
+import { isDatabaseUnavailable, withSignInOutageHandling } from "@/lib/sign-in-errors";
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { checkTwoFactorGate } from "@/lib/two-factor";
@@ -11,6 +12,10 @@ export const dynamic = "force-dynamic";
  * account-linking step — createMemberSession creates the Firestore profile on first sign-in. An
  * existing account with 2FA enabled stops here and hands back a challenge token instead. */
 export async function POST(request: Request) {
+  return withSignInOutageHandling(() => signIn(request));
+}
+
+async function signIn(request: Request) {
   const throttle = await checkRateLimit("member-google-login", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 
@@ -29,7 +34,8 @@ export async function POST(request: Request) {
 
   try {
     await createMemberSession(body.idToken, undefined, asText(body.ref)?.trim().slice(0, 20));
-  } catch {
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) throw error;
     return Response.json({ error: "Google sign-in could not be verified. Please try again." }, { status: 401 });
   }
 
