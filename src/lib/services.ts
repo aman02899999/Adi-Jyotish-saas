@@ -26,7 +26,7 @@ export type Service = {
 
 type NewService = Omit<Service, "id" | "createdAt" | "updatedAt">;
 
-const starterServices: NewService[] = [
+export const starterServices: readonly NewService[] = [
   {
     title: "Birth Chart Reading",
     slug: "birth-chart-reading",
@@ -107,20 +107,42 @@ function fromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | FirebaseFirestor
 }
 
 /** Services collection is keyed by slug (stable, human-readable, matches the old unique-slug
- * constraint) rather than an auto-generated ID. */
-export async function seedServices() {
+ * constraint) rather than an auto-generated ID.
+ *
+ * Starter services are written once, into an empty catalogue, and never again. This used to run
+ * before every catalogue read and re-create any missing starter service. That undid an admin's
+ * delete on the next page view, and it cost one Firestore read per starter service on every
+ * homepage view. A marker document records that seeding happened, and each server instance checks
+ * it only once. */
+let seeding: Promise<void> | null = null;
+
+export function seedServices(): Promise<void> {
+  seeding ??= seedServicesOnce().catch((error) => {
+    // Not remembered, so the next request tries again.
+    seeding = null;
+    throw error;
+  });
+  return seeding;
+}
+
+async function seedServicesOnce() {
   if (isSupabaseCutoverActive()) {
     for (const service of starterServices) await seedServiceInSupabase(service);
     return;
   }
+  const marker = db.collection("siteContent").doc("services-seeded");
+  if ((await marker.get()).exists) return;
   const collection = db.collection("services");
-  for (const service of starterServices) {
-    const ref = collection.doc(service.slug);
-    const snap = await ref.get();
-    if (!snap.exists) {
-      await ref.set({ ...service, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
+  // A catalogue that already has services, including one from before this marker existed, is
+  // the admin's; only an empty one gets the starter set.
+  if ((await collection.limit(1).get()).empty) {
+    const batch = db.batch();
+    for (const service of starterServices) {
+      batch.set(collection.doc(service.slug), { ...service, createdAt: FieldValue.serverTimestamp(), updatedAt: FieldValue.serverTimestamp() });
     }
+    await batch.commit();
   }
+  await marker.set({ seededAt: FieldValue.serverTimestamp() });
 }
 
 function seedDefaults() {

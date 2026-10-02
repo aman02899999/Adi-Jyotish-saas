@@ -147,11 +147,12 @@ export function isMissingFirebaseProjectError(error: unknown): boolean {
   const code = "code" in error ? (error as { code: unknown }).code : undefined;
   const normalised = message.trim().toLowerCase();
   // Firebase/Admin SDK error codes: 7=PERMISSION_DENIED, 16=UNAUTHENTICATED,
-  // 14=UNAVAILABLE, 13=INTERNAL, 9=FAILED_PRECONDITION, 3=INVALID_ARGUMENT,
-  // 2=UNKNOWN. For public read fallbacks this is intentionally a broad set so a
-  // missing IAM grant, an unreachable backend, or a misconfigured project all
-  // degrade the optional section rather than 500ing a marketing page.
-  if ([2, 3, 7, 9, 13, 14, 16].includes(Number(code))) return true;
+  // 14=UNAVAILABLE, 13=INTERNAL, 9=FAILED_PRECONDITION, 8=RESOURCE_EXHAUSTED,
+  // 4=DEADLINE_EXCEEDED, 3=INVALID_ARGUMENT, 2=UNKNOWN. For public read fallbacks this is
+  // intentionally a broad set so a missing IAM grant, an unreachable backend, a spent daily
+  // quota or a misconfigured project all degrade the optional section rather than 500ing a
+  // marketing page. A spent quota (8) once took the whole homepage and sitemap down.
+  if ([2, 3, 4, 7, 8, 9, 13, 14, 16].includes(Number(code))) return true;
   return (
     normalised.includes("unable to detect a project id") ||
     normalised.includes("project id") ||
