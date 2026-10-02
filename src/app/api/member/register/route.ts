@@ -1,3 +1,4 @@
+import { isDatabaseUnavailable, withSignInOutageHandling } from "@/lib/sign-in-errors";
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { verifyTurnstileToken } from "@/lib/turnstile";
@@ -9,6 +10,10 @@ export const dynamic = "force-dynamic";
  * (createUserWithEmailAndPassword) and hands us the resulting ID token, plus the display name,
  * to create the Firestore profile document and mint a session cookie. */
 export async function POST(request: Request) {
+  return withSignInOutageHandling(() => signIn(request));
+}
+
+async function signIn(request: Request) {
   const ip = requestIp(request);
   const throttle = await checkRateLimit("member-register", ip, 8, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
@@ -23,7 +28,8 @@ export async function POST(request: Request) {
 
   try {
     await createMemberSession(body.idToken, name, asText(body.ref)?.trim().slice(0, 20));
-  } catch {
+  } catch (error) {
+    if (isDatabaseUnavailable(error)) throw error;
     return Response.json({ error: "Your account could not be created." }, { status: 401 });
   }
 

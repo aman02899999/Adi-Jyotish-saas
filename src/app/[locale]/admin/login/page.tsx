@@ -14,8 +14,15 @@ export const metadata: Metadata = {
 };
 
 export default async function AdminLoginPage() {
-  if (await getCurrentAdmin()) redirect({ href: "/admin", locale: await getLocale() });
-  const setup = await getAdminCount() === 0;
+  // Both reads hit the database, which can be unreachable or out of its daily quota. The page then
+  // still renders, with a notice, instead of failing. An outage must never read as "no
+  // administrators yet": that would offer the owner set-up form to anyone.
+  if (await getCurrentAdmin().catch(() => null)) redirect({ href: "/admin", locale: await getLocale() });
+  const adminCount = await getAdminCount().catch((error: unknown) => {
+    console.error("Admin sign-in: could not count administrators", error);
+    return null;
+  });
+  const setup = adminCount === 0;
 
   return (
     <main className="admin-auth-page">
@@ -36,6 +43,7 @@ export default async function AdminLoginPage() {
           <p className="eyebrow"><span /> {setup ? "First-run security" : "Protected administration"}</p>
           <h1>{setup ? <>Create your<br /><em>owner account.</em></> : <>Welcome back,<br /><em>administrator.</em></>}</h1>
           <p className="admin-auth-intro">{setup ? "Establish the first and only workspace owner. No default credentials have been created for you." : "Sign in to manage readings, customer bookings, payments, and studio operations."}</p>
+          {adminCount === null && <p className="admin-auth-error" role="alert">We can&rsquo;t reach the studio database right now, so signing in may not work. Please try again in a few minutes.</p>}
           <AdminAuthForm setup={setup} />
           <div className="admin-auth-trust"><span><LockKeyhole size={13} /> Encrypted password</span><span><Check size={13} /> Revocable sessions</span></div>
         </div>

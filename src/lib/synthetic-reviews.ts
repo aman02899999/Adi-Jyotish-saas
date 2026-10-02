@@ -11,11 +11,11 @@ import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 const DELETE_BATCH = 450;
 
 /** Every cache holding something derived from practitioner reviews. */
-const REVIEW_DERIVED_CACHE_TAGS = ["homepage-stats", "homepage-testimonials", "marketplace-practitioners"];
+const REVIEW_DERIVED_CACHE_TAGS = ["homepage-stats", "homepage-testimonials", "marketplace-practitioners", "marketplace-review-scores"];
 
 /**
  * Expires every review-derived cache immediately, so a moderation decision is live now rather than
- * after the next TTL (up to five minutes on the homepage). That matters most for the case this
+ * after the next TTL (up to an hour for review scores). That matters most for the case this
  * codebase already alerts admins about: a review that leaks a phone number or email is hidden
  * because it should stop being visible, not because it should stop being visible eventually.
  */

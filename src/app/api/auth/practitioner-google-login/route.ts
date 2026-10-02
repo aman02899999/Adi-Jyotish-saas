@@ -1,3 +1,4 @@
+import { withSignInOutageHandling } from "@/lib/sign-in-errors";
 import { FieldValue } from "firebase-admin/firestore";
 import { db } from "@/lib/firestore";
 import { signInProviderIsGoogle, verifyAuthToken } from "@/lib/auth-verify";
@@ -16,6 +17,10 @@ import { readJsonBody } from "@/lib/request-body";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  return withSignInOutageHandling(() => signIn(request));
+}
+
+async function signIn(request: Request) {
   const throttle = await checkRateLimit("practitioner-google-login", requestIp(request), 15, 3600);
   if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
 

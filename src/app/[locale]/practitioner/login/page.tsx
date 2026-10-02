@@ -14,7 +14,8 @@ export const metadata: Metadata = {
 };
 
 export default async function PractitionerLoginPage() {
-  if (await getCurrentPractitioner()) redirect({ href: "/practitioner", locale: await getLocale() });
+  // A database outage leaves the sign-in form showing rather than failing the page.
+  if (await getCurrentPractitioner().catch(() => null)) redirect({ href: "/practitioner", locale: await getLocale() });
 
   return (
     <main className="admin-auth-page">

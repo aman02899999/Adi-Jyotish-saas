@@ -1,3 +1,4 @@
+import { withSignInOutageHandling } from "@/lib/sign-in-errors";
 import { createMemberSession, getCurrentMember } from "@/lib/member-auth";
 import { checkAuthThrottle, clearAuthFailures, recordAuthFailure } from "@/lib/auth-throttle";
 import { checkSignInCode, getTwoFactorState, peekTwoFactorChallenge, resolveTwoFactorAccount } from "@/lib/two-factor";
@@ -6,6 +7,10 @@ import { asText, readJsonBody } from "@/lib/request-body";
 export const dynamic = "force-dynamic";
 
 export async function POST(request: Request) {
+  return withSignInOutageHandling(() => signIn(request));
+}
+
+async function signIn(request: Request) {
   const body = (await readJsonBody(request)) as { challengeToken?: string; code?: string };
   const challengeToken = body.challengeToken ?? "";
   const code = (asText(body.code) ?? "").trim();

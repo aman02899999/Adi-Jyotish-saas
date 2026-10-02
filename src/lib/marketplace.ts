@@ -72,14 +72,15 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   sessionDiscountPercent: number | null;
 };
 
-async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
-  // Reviews fall back to empty (practitioners still list, just without ratings) if the
-  // (status, createdAt) composite index isn't built yet.
+type ReviewScore = { practitionerId: string; count: number; rating: number; clarity: number; empathy: number; usefulness: number };
+type AccuracyEntry = [string, { accuracyPercent: number; resolvedCount: number }];
+
+/** Per-practitioner review sums and prediction accuracy: the expensive part of the marketplace. */
+async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: AccuracyEntry[] }> {
   // Reviews fall back to empty (practitioners still list, just without ratings) if the
   // (status, createdAt) composite index isn't built yet. Postgres has no equivalent
   // failure mode, so the cutover branch needs no fallback wrapper.
-  const [directory, publishedReviews, accuracyMap] = await Promise.all([
-    getPractitionerDirectory(true),
+  const [publishedReviews, accuracyMap] = await Promise.all([
     isSupabaseCutoverActive()
       ? getPublishedReviewsInSupabase()
       : withIndexFallback(
@@ -88,20 +89,43 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
         ).then((snap) => snap.docs.map(reviewFromDoc)),
     getPractitionerAccuracyMap(),
   ]);
-  // Ratings and review counts below set both what is displayed and what is charged (the
+  // Ratings and review counts set both what is displayed and what is charged (the
   // new-practitioner discount and the AI persona price bands), so synthetic reviews are removed
   // before either is computed. The Postgres query already excludes them; filtering again is free.
-  const reviews = genuineReviews(publishedReviews);
+  const sums = new Map<string, ReviewScore>();
+  for (const review of genuineReviews(publishedReviews)) {
+    const score = sums.get(review.practitionerId) ?? { practitionerId: review.practitionerId, count: 0, rating: 0, clarity: 0, empathy: 0, usefulness: 0 };
+    score.count += 1;
+    score.rating += review.rating;
+    score.clarity += review.clarity;
+    score.empathy += review.empathy;
+    score.usefulness += review.usefulness;
+    sums.set(review.practitionerId, score);
+  }
+  return { scores: [...sums.values()], accuracy: [...accuracyMap.entries()] };
+}
+
+// Reading every published review is what made the marketplace expensive: the old seeder left
+// thousands of synthetic rows, and every refresh re-read all of them, which emptied the free daily
+// Firestore quota within hours. Scores change only when a review does, and moderation expires this
+// tag at once (expireReviewDerivedCaches), so an hour costs nothing in freshness. Who is online
+// still refreshes on the marketplace's own short TTL below.
+const getReviewScores = unstable_cache(fetchReviewScores, ["marketplace-review-scores"], { tags: ["marketplace-review-scores"], revalidate: 3600 });
+
+async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
+  const [directory, { scores, accuracy }] = await Promise.all([getPractitionerDirectory(true), getReviewScores()]);
+  const scoreById = new Map(scores.map((score) => [score.practitionerId, score]));
+  const accuracyMap = new Map(accuracy);
   const scored = directory.map((person) => {
-    const personReviews = reviews.filter((review) => review.practitionerId === person.id);
-    const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => personReviews.length ? personReviews.reduce((sum, review) => sum + review[field], 0) / personReviews.length : null;
+    const score = scoreById.get(person.id);
+    const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => score ? score[field] / score.count : null;
     const rawRating = average("rating");
     const rating = rawRating === null ? null : Math.round(rawRating * 10) / 10;
     return {
       person,
       rating,
-      reviewCount: personReviews.length,
-      dimensions: personReviews.length ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
+      reviewCount: score?.count ?? 0,
+      dimensions: score ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
     };
   });
   // One batch computation across every AI-powered practitioner (see computeTieredSessionPrices) —
