@@ -5,7 +5,7 @@ import { db, withIndexFallback } from "@/lib/firestore";
 import { getMarketplacePractitioners, getReviewScores } from "@/lib/marketplace";
 import { isSyntheticReview, MEMBER_REVIEW_SOURCE } from "@/lib/review-provenance";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
-import { getFeaturedTestimonialsInSupabase, getHomepageStatsInSupabase, getOnlineNowCountInSupabase } from "@/lib/cms-supabase";
+import { getFeaturedTestimonialsInSupabase, getHomepageStatsInSupabase } from "@/lib/cms-supabase";
 
 async function fetchHomepageStats() {
   if (isSupabaseCutoverActive()) return getHomepageStatsInSupabase();
@@ -56,22 +56,12 @@ export const getHomepageStats = unstable_cache(
   { tags: ["homepage-stats"], revalidate: 3600 },
 );
 
-// "Online now" count changes far more often than the stats above (practitioners toggle live), so
-// a much shorter TTL — still a real win over reading fresh on every single homepage request.
-export const getOnlineNowCount = unstable_cache(
-  async () => {
-    try {
-      if (isSupabaseCutoverActive()) return await getOnlineNowCountInSupabase();
-      const snap = await db.collection("practitioners").where("active", "==", true).where("online", "==", true).select("isDemoAccount").get();
-      return snap.docs.filter((doc) => !doc.data().isDemoAccount).length;
-    } catch (error) {
-      console.error("getOnlineNowCount: falling back to 0 —", error);
-      return 0;
-    }
-  },
-  ["online-now-count"],
-  { tags: ["online-now-count"], revalidate: 30 },
-);
+// Counted from the marketplace list, which already holds the active, non-demo practitioners and
+// is expired the moment one goes online or offline. This used to read every online practitioner
+// every 30 seconds: up to about 98,000 reads a day, nearly twice the free Firestore quota.
+export async function getOnlineNowCount(): Promise<number> {
+  return (await getMarketplacePractitioners()).filter((person) => person.online).length;
+}
 
 export async function getLivePractitioners(limit = 6) {
   const people = await getMarketplacePractitioners();

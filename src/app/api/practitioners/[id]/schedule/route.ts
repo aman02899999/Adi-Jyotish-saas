@@ -1,6 +1,6 @@
 import { db } from "@/lib/firestore";
 import { getCurrentAdmin,hasAdminPermission,recordAudit } from "@/lib/admin-auth";
-import { getPractitionerDirectory } from "@/lib/scheduling";
+import { expirePractitionerDirectoryCaches, getPractitionerDirectory } from "@/lib/scheduling";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getPractitionerAvailabilityInSupabase } from "@/lib/practitioners-supabase";
 import { replacePortalScheduleInSupabase } from "@/lib/practitioner-portal-supabase";
@@ -46,6 +46,7 @@ export async function PUT(request:Request,{params}:{params:Promise<{id:string}>}
     for (const item of timeOff) batch.set(timeOffCol.doc(), item);
     await batch.commit();
   }
+  expirePractitionerDirectoryCaches();
 
   await recordAudit(admin,"practitioner.schedule_updated","practitioner",id,{weeklyRules:rules.length,timeOffBlocks:timeOff.length});
   const all=await getPractitionerDirectory(false,true);

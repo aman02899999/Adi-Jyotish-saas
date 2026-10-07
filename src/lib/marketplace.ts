@@ -1,5 +1,6 @@
 import "server-only";
 
+import { cache } from "react";
 import { unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
@@ -128,13 +129,30 @@ async function firestoreReviewScores(practitionerIds: string[]): Promise<ReviewS
     .filter((score) => score.count > 0);
 }
 
-/** Per-practitioner genuine review sums and prediction accuracy: the expensive part of the marketplace. */
+/**
+ * The active, non-demo practitioners with their schedules. Reading it costs about 270 Firestore
+ * reads (see expirePractitionerDirectoryCaches), so it is cached for an hour and expired by every
+ * change to a practitioner.
+ */
+const getPublicDirectory = unstable_cache(() => getPractitionerDirectory(true), ["public-practitioner-directory"], { tags: ["practitioner-directory"], revalidate: 3600 });
+
+/**
+ * Per-practitioner genuine review sums and prediction accuracy: the expensive part of the
+ * marketplace. Both reads run under one Promise.all. The accuracy read used to start first and be
+ * awaited last, so when the scores failed first (the Firestore quota running out) its own failure
+ * went unhandled, and an unhandled rejection ends the Node process serving the request.
+ */
 async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: AccuracyEntry[] }> {
-  const accuracy = getPractitionerAccuracyMap();
-  if (!isSupabaseCutoverActive()) {
-    const directory = await getPractitionerDirectory(true);
-    return { scores: await firestoreReviewScores(directory.map((person) => person.id)), accuracy: [...(await accuracy).entries()] };
-  }
+  const [scores, accuracy] = await Promise.all([
+    isSupabaseCutoverActive()
+      ? postgresReviewScores()
+      : getPublicDirectory().then((directory) => firestoreReviewScores(directory.map((person) => person.id))),
+    getPractitionerAccuracyMap(),
+  ]);
+  return { scores, accuracy: [...accuracy.entries()] };
+}
+
+async function postgresReviewScores(): Promise<ReviewScore[]> {
   // The Postgres query already excludes synthetic reviews; filtering again is free.
   const sums = new Map<string, ReviewScore>();
   for (const review of genuineReviews(await getPublishedReviewsInSupabase())) {
@@ -146,7 +164,7 @@ async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: A
     score.dimensions!.usefulness += review.usefulness;
     sums.set(review.practitionerId, score);
   }
-  return { scores: [...sums.values()], accuracy: [...(await accuracy).entries()] };
+  return [...sums.values()];
 }
 
 // Reading every published review is what made the marketplace expensive: the old seeder left
@@ -157,7 +175,7 @@ async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: A
 export const getReviewScores = unstable_cache(fetchReviewScores, ["marketplace-review-scores"], { tags: ["marketplace-review-scores"], revalidate: 3600 });
 
 async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
-  const [directory, { scores, accuracy }] = await Promise.all([getPractitionerDirectory(true), getReviewScores()]);
+  const [directory, { scores, accuracy }] = await Promise.all([getPublicDirectory(), getReviewScores()]);
   const scoreById = new Map(scores.map((score) => [score.practitionerId, score]));
   const accuracyMap = new Map(accuracy);
   const scored = directory.map((person) => {
@@ -196,24 +214,26 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
   });
 }
 
-// The full directory + every published review + prediction accuracy, joined and scored — expensive
-// enough (and identical for every visitor) that reading it fresh on every request/page is wasteful.
-// Cached at runtime with a short TTL; falls back to an empty list instead of crashing the page (or
-// the build — nothing here runs at build time without Firebase credentials to read with anyway).
-export const getMarketplacePractitioners = unstable_cache(
-  async () => {
-    try {
-      return await fetchMarketplacePractitioners();
-    } catch (error) {
-      console.error("getMarketplacePractitioners: falling back to empty list —", error);
-      return [] as MarketplacePractitioner[];
-    }
-  },
-  ["marketplace-practitioners"],
-  { tags: ["marketplace-practitioners"], revalidate: 120 },
-);
+// The directory, review scores and prediction accuracy, joined and scored, identical for every
+// visitor. A refresh reads only the caches beneath it, so the short TTL costs no Firestore reads
+// until one of those expires.
+const getCachedMarketplacePractitioners = unstable_cache(fetchMarketplacePractitioners, ["marketplace-practitioners"], { tags: ["marketplace-practitioners"], revalidate: 120 });
 
-export async function getMarketplacePractitioner(slug: string) {
+// Falls back to an empty list instead of crashing the page (or the build, which has no Firebase
+// credentials). The fallback is outside the cache on purpose: when a refresh fails (the free
+// Firestore quota running out, say), the cache keeps serving the last list it built instead of
+// storing the empty one, so the astrologers stay listed through the outage.
+export async function getMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
+  try {
+    return await getCachedMarketplacePractitioners();
+  } catch (error) {
+    console.error("getMarketplacePractitioners: falling back to empty list —", error);
+    return [];
+  }
+}
+
+// Per request: a profile page asks twice, once for its metadata and once to render.
+export const getMarketplacePractitioner = cache(async (slug: string) => {
   const people = await getMarketplacePractitioners();
   const practitioner = people.find((person) => person.slug === slug);
   if (!practitioner) return null;
@@ -227,7 +247,7 @@ export async function getMarketplacePractitioner(slug: string) {
     return { practitioner: { ...practitioner, dimensions: averageDimensions(sums, reviews.length) }, reviews };
   }
   return { practitioner, reviews };
-}
+});
 
 /**
  * The genuine reviews listed on a profile page. This used to read every published review of the
