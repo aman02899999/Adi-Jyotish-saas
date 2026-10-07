@@ -158,6 +158,31 @@ describeFirestore("synthetic reviews on the live Firestore path", () => {
       expect(result?.reviews[0].reviewerName).toBe("Real Client 0");
     });
 
+    // The cheap path: every genuine review is member-stamped, so the profile list and testimonials
+    // are read with a member-only query instead of every published review.
+    it("lists member-stamped reviews on the profile page, newest first, without the synthetic ones", async () => {
+      await addReviews(HUMAN, [
+        { rating: 5, source: "member", createdAt: new Date(Date.now() - 86_400_000) },
+        { rating: 3, source: "member" },
+        ...synthetic(20),
+      ]);
+      const result = await getMarketplacePractitioner(HUMAN);
+
+      expect(result?.practitioner.reviewCount).toBe(2);
+      expect(result?.reviews.map((review) => review.rating)).toEqual([3, 5]);
+    });
+
+    it("quotes the best member-stamped testimonial past synthetic ones", async () => {
+      await addReviews(HUMAN, [
+        { rating: 4, source: "member", body: "A thoughtful reading that gave me practical steps for the months ahead." },
+        { rating: 5, source: "member", body: "Clear, patient and specific about timing; it helped me decide calmly." },
+        ...synthetic(60, 5),
+      ]);
+      expect(await getFeaturedTestimonials(1)).toEqual([
+        { reviewerName: "Real Client 1", body: "Clear, patient and specific about timing; it helped me decide calmly.", rating: 5 },
+      ]);
+    });
+
     it("computes the homepage average and review count from genuine reviews", async () => {
       await addReviews(HUMAN, [{ rating: 4 }, { rating: 2 }, ...synthetic(50, 5)]);
       const stats = await getHomepageStats();
