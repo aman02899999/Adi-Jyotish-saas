@@ -1,7 +1,7 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
-import { AggregateField, FieldValue } from "firebase-admin/firestore";
+import { FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import {
   getAllReviewsInSupabase,
@@ -72,38 +72,60 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   sessionDiscountPercent: number | null;
 };
 
-type ReviewScore = { practitionerId: string; count: number; rating: number; clarity: number; empathy: number; usefulness: number };
+/** Genuine review totals for one practitioner. The dimension sums are only known on the Postgres
+ * path; on Firestore the profile page derives them from the reviews it lists. */
+type ReviewScore = { practitionerId: string; count: number; rating: number; dimensions?: { clarity: number; empathy: number; usefulness: number } };
+function averageDimensions(sums: { clarity: number; empathy: number; usefulness: number }, count: number) {
+  return { clarity: sums.clarity / count, empathy: sums.empathy / count, usefulness: sums.usefulness / count };
+}
+
 type AccuracyEntry = [string, { accuracyPercent: number; resolvedCount: number }];
 
-const SCORE_SUMS = {
-  count: AggregateField.count(),
-  rating: AggregateField.sum("rating"),
-  clarity: AggregateField.sum("clarity"),
-  empathy: AggregateField.sum("empathy"),
-  usefulness: AggregateField.sum("usefulness"),
-};
+const STARS = [1, 2, 3, 4, 5] as const;
+
+/** How many reviews the query matches at each star rating, one count aggregation per star. */
+async function countsByStar(query: FirebaseFirestore.Query): Promise<number[]> {
+  return Promise.all(STARS.map(async (stars) => (await query.where("rating", "==", stars).count().get()).data().count));
+}
 
 /**
- * Genuine review totals per practitioner, from aggregation queries rather than review documents.
- * Firestore bills an aggregation about one read per thousand entries, where fetching the reviews
- * cost one read each, and the table still holds thousands of synthetic ones. Genuine totals are all
- * published reviews minus the synthetic ones: genuine reviews written before provenance existed
- * carry no `source`, so they cannot be selected directly (see review-provenance.ts).
+ * Per-star counts of each practitioner's synthetic reviews. Synthetic reviews can no longer be
+ * created, so these only change when an admin purges them, and the purge expires this tag.
+ */
+const getSyntheticStarCounts = unstable_cache(
+  async (practitionerIds: string[]) => Promise.all(practitionerIds.map(async (practitionerId) => [
+    practitionerId,
+    await countsByStar(db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published").where("source", "==", SYNTHETIC_REVIEW_SOURCE)),
+  ] as const)),
+  ["marketplace-synthetic-star-counts"],
+  { tags: ["marketplace-review-scores"], revalidate: 86_400 },
+);
+
+/**
+ * Genuine review totals per practitioner from count aggregations, not review documents. A count is
+ * billed about one read per thousand matches, where fetching the reviews cost one read each, and
+ * the table still holds thousands of synthetic ones. Ratings are whole stars (the review route
+ * accepts only integers 1-5), so counting per star gives the exact sum. Counts with equality
+ * filters run on Firestore's automatic indexes; a sum aggregation would need a composite index.
+ * Genuine reviews from before provenance existed carry no `source`, so genuine totals are all
+ * published reviews minus the synthetic ones rather than a selection of genuine ones.
  */
 async function firestoreReviewScores(practitionerIds: string[]): Promise<ReviewScore[]> {
-  const reviews = db.collection("practitionerReviews");
-  const scores = await Promise.all(practitionerIds.map(async (practitionerId) => {
-    const published = reviews.where("practitionerId", "==", practitionerId).where("status", "==", "published");
-    const [all, synthetic] = await Promise.all([
-      published.aggregate(SCORE_SUMS).get(),
-      published.where("source", "==", SYNTHETIC_REVIEW_SOURCE).aggregate(SCORE_SUMS).get(),
-    ]);
-    const total = all.data();
-    const fake = synthetic.data();
-    const genuine = (field: "rating" | "clarity" | "empathy" | "usefulness") => (total[field] ?? 0) - (fake[field] ?? 0);
-    return { practitionerId, count: total.count - fake.count, rating: genuine("rating"), clarity: genuine("clarity"), empathy: genuine("empathy"), usefulness: genuine("usefulness") };
-  }));
-  return scores.filter((score) => score.count > 0);
+  const [totals, synthetic] = await Promise.all([
+    Promise.all(practitionerIds.map((practitionerId) => countsByStar(db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published")))),
+    getSyntheticStarCounts(practitionerIds).then((rows) => new Map(rows)),
+  ]);
+  return practitionerIds
+    .map((practitionerId, index) => {
+      const fake = synthetic.get(practitionerId) ?? [0, 0, 0, 0, 0];
+      const genuine = totals[index].map((count, star) => Math.max(0, count - fake[star]));
+      return {
+        practitionerId,
+        count: genuine.reduce((sum, count) => sum + count, 0),
+        rating: genuine.reduce((sum, count, star) => sum + count * STARS[star], 0),
+      };
+    })
+    .filter((score) => score.count > 0);
 }
 
 /** Per-practitioner genuine review sums and prediction accuracy: the expensive part of the marketplace. */
@@ -116,12 +138,12 @@ async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: A
   // The Postgres query already excludes synthetic reviews; filtering again is free.
   const sums = new Map<string, ReviewScore>();
   for (const review of genuineReviews(await getPublishedReviewsInSupabase())) {
-    const score = sums.get(review.practitionerId) ?? { practitionerId: review.practitionerId, count: 0, rating: 0, clarity: 0, empathy: 0, usefulness: 0 };
+    const score = sums.get(review.practitionerId) ?? { practitionerId: review.practitionerId, count: 0, rating: 0, dimensions: { clarity: 0, empathy: 0, usefulness: 0 } };
     score.count += 1;
     score.rating += review.rating;
-    score.clarity += review.clarity;
-    score.empathy += review.empathy;
-    score.usefulness += review.usefulness;
+    score.dimensions!.clarity += review.clarity;
+    score.dimensions!.empathy += review.empathy;
+    score.dimensions!.usefulness += review.usefulness;
     sums.set(review.practitionerId, score);
   }
   return { scores: [...sums.values()], accuracy: [...(await accuracy).entries()] };
@@ -140,14 +162,13 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
   const accuracyMap = new Map(accuracy);
   const scored = directory.map((person) => {
     const score = scoreById.get(person.id);
-    const average = (field: "rating" | "clarity" | "empathy" | "usefulness") => score ? score[field] / score.count : null;
-    const rawRating = average("rating");
+    const rawRating = score ? score.rating / score.count : null;
     const rating = rawRating === null ? null : Math.round(rawRating * 10) / 10;
     return {
       person,
       rating,
       reviewCount: score?.count ?? 0,
-      dimensions: score ? { clarity: average("clarity")!, empathy: average("empathy")!, usefulness: average("usefulness")! } : null,
+      dimensions: score?.dimensions ? averageDimensions(score.dimensions, score.count) : null,
     };
   });
   // One batch computation across every AI-powered practitioner (see computeTieredSessionPrices) —
@@ -199,6 +220,12 @@ export async function getMarketplacePractitioner(slug: string) {
   const reviews = genuineReviews(isSupabaseCutoverActive()
     ? await getPublishedReviewsForPractitionerInSupabase(practitioner.id)
     : await genuineReviewsForProfile(practitioner.id, practitioner.reviewCount));
+  // On Firestore the cached scores carry star counts only, so the clarity, empathy and usefulness
+  // bars come from the reviews this page lists.
+  if (!practitioner.dimensions && reviews.length) {
+    const sums = reviews.reduce((total, review) => ({ clarity: total.clarity + review.clarity, empathy: total.empathy + review.empathy, usefulness: total.usefulness + review.usefulness }), { clarity: 0, empathy: 0, usefulness: 0 });
+    return { practitioner: { ...practitioner, dimensions: averageDimensions(sums, reviews.length) }, reviews };
+  }
   return { practitioner, reviews };
 }
 
