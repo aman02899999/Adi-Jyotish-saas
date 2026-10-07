@@ -42,7 +42,7 @@ import { decryptPayoutField, encryptPayoutField } from "@/lib/payout-crypto";
 import { getAdminIdsWithPermission } from "@/lib/admin-roles";
 import { notifyAdmins } from "@/lib/notifications";
 import { scanForContactInfo } from "@/lib/content-moderation";
-import { sanitizeMediaUrl } from "@/lib/scheduling";
+import { expirePractitionerDirectoryCaches, sanitizeMediaUrl } from "@/lib/scheduling";
 
 // A request at or below this amount, from a practitioner with at least one prior *paid* payout
 // and zero rejections ever, is auto-approved instead of sitting in the "requested" queue —
@@ -273,6 +273,7 @@ export async function updatePractitionerSchedule(practitionerId: string, input: 
 
   if (isSupabaseCutoverActive()) {
     await replacePortalScheduleInSupabase(practitionerId, rules, timeOff);
+    expirePractitionerDirectoryCaches();
     return;
   }
 
@@ -292,6 +293,7 @@ export async function updatePractitionerSchedule(practitionerId: string, input: 
     for (const rule of rules) tx.set(rulesCol.doc(), { ...rule, active: rule.active ?? true });
     for (const item of timeOff) tx.set(timeOffCol.doc(), item);
   });
+  expirePractitionerDirectoryCaches();
 }
 
 export async function updatePractitionerProfile(practitionerId: string, input: {
@@ -325,6 +327,7 @@ export async function updatePractitionerProfile(practitionerId: string, input: {
     practitionerName = ((updated.data() as { name?: string } | undefined)?.name) ?? "A practitioner";
     response = { id: updated.id, ...updated.data() };
   }
+  expirePractitionerDirectoryCaches();
 
   if (typeof patch.bio === "string") {
     const contactFlag = scanForContactInfo(patch.bio);
@@ -366,10 +369,12 @@ export async function getPractitionerPortalProfile(practitionerId: string): Prom
 export async function setPractitionerOnline(practitionerId: string, online: boolean) {
   if (isSupabaseCutoverActive()) {
     await setPortalOnlineInSupabase(practitionerId, online);
+    expirePractitionerDirectoryCaches();
     return { id: practitionerId, online };
   }
   const ref = db.collection("practitioners").doc(practitionerId);
   await ref.update({ online, updatedAt: FieldValue.serverTimestamp() });
+  expirePractitionerDirectoryCaches();
   return { id: practitionerId, online };
 }
 
