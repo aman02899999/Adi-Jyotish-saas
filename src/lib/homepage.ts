@@ -2,8 +2,8 @@ import "server-only";
 
 import { unstable_cache } from "next/cache";
 import { db, withIndexFallback } from "@/lib/firestore";
-import { getMarketplacePractitioners } from "@/lib/marketplace";
-import { isSyntheticReview } from "@/lib/review-provenance";
+import { getMarketplacePractitioners, getReviewScores } from "@/lib/marketplace";
+import { isSyntheticReview, MEMBER_REVIEW_SOURCE } from "@/lib/review-provenance";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getFeaturedTestimonialsInSupabase, getHomepageStatsInSupabase, getOnlineNowCountInSupabase } from "@/lib/cms-supabase";
 
@@ -12,20 +12,22 @@ async function fetchHomepageStats() {
   // Demo accounts (isDemoAccount:true, seeded for internal testing only) are filtered out in JS
   // rather than via a Firestore `!=` query, which would wrongly exclude every real practitioner
   // that never has the field set at all — see getPractitionerDirectory in scheduling.ts.
-  const [completedBookingsAgg, practitionersSnap, reviewsSnap] = await Promise.all([
+  // Review totals come from the marketplace's cached aggregation (getReviewScores), not from
+  // reading every review document: the table still holds thousands of synthetic reviews, and
+  // scanning them each hour helped empty the free daily Firestore quota.
+  const [completedBookingsAgg, practitionersSnap, { scores }] = await Promise.all([
     db.collection("bookings").where("status", "==", "completed").count().get(),
     db.collection("practitioners").select("active", "isDemoAccount").get(),
-    db.collection("practitionerReviews").where("status", "==", "published").select("rating", "practitionerId", "source").get(),
+    getReviewScores(),
   ]);
 
   const demoIds = new Set(practitionersSnap.docs.filter((doc) => doc.data().isDemoAccount).map((doc) => doc.id));
   const practitionerCount = practitionersSnap.docs.filter((doc) => doc.data().active && !demoIds.has(doc.id)).length;
-  // Synthetic reviews are excluded for the same reason demo accounts are: this is the site-wide
-  // rating a visitor weighs the whole service by. See review-provenance.ts.
-  const ratings = reviewsSnap.docs
-    .filter((doc) => !demoIds.has(doc.data().practitionerId as string) && !isSyntheticReview(doc.data()))
-    .map((doc) => doc.data().rating as number);
-  const average = ratings.length ? ratings.reduce((sum, value) => sum + value, 0) / ratings.length : 0;
+  // Scores already exclude synthetic reviews; demo accounts are left out here, because this is the
+  // site-wide rating a visitor weighs the whole service by.
+  const genuine = scores.filter((score) => !demoIds.has(score.practitionerId));
+  const reviewCount = genuine.reduce((sum, score) => sum + score.count, 0);
+  const average = reviewCount ? genuine.reduce((sum, score) => sum + score.rating, 0) / reviewCount : 0;
 
   return {
     consultationsDelivered: completedBookingsAgg.data().count,
@@ -34,7 +36,7 @@ async function fetchHomepageStats() {
     // Kept separate from consultationsDelivered: the homepage's AggregateRating structured data
     // used to report the consultation count as its reviewCount, which tells search engines a
     // number of reviews that does not exist.
-    reviewCount: ratings.length,
+    reviewCount,
   };
 }
 
@@ -102,6 +104,23 @@ export const getFeaturedTestimonials = unstable_cache(
     const MAX_PAGES = 20;
     try {
       if (isSupabaseCutoverActive()) return await getFeaturedTestimonialsInSupabase(limit);
+      // Member-written reviews are stamped and can be fetched on their own. Only when the cached
+      // genuine count says older, unstamped genuine reviews exist is the bounded scan below needed.
+      const published = db.collection("practitionerReviews").where("status", "==", "published");
+      const [{ scores }, memberCount] = await Promise.all([
+        getReviewScores(),
+        published.where("source", "==", MEMBER_REVIEW_SOURCE).count().get().then((snap) => snap.data().count),
+      ]);
+      const genuineCount = scores.reduce((sum, score) => sum + score.count, 0);
+      if (memberCount >= genuineCount) {
+        const snap = await published.where("source", "==", MEMBER_REVIEW_SOURCE).limit(PAGE_SIZE).get();
+        return snap.docs
+          .map((doc) => doc.data() as Testimonial & { createdAt?: FirebaseFirestore.Timestamp })
+          .filter((review) => review.body.length > 40)
+          .sort((a, b) => b.rating - a.rating || (b.createdAt?.toMillis() ?? 0) - (a.createdAt?.toMillis() ?? 0))
+          .slice(0, limit)
+          .map(({ reviewerName, body, rating }) => ({ reviewerName, body, rating }));
+      }
       // Pages until it has enough genuine testimonials. A single top-N query is not enough while
       // synthetic reviews are still in the table: they are overwhelmingly 5-star, so the highest
       // rated dozen can all be synthetic and filtering them would leave the homepage with nothing

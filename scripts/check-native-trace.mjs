@@ -5,7 +5,9 @@
 import { readdirSync, readFileSync, statSync } from "node:fs";
 import { join } from "node:path";
 
-const REQUIRED = ["@swisseph/node/prebuilds/linux-x64/swisseph.node", "@swisseph/node/ephemeris/sepl_18.se1"];
+// The addon may be the prebuilt one or one compiled on the build machine (scripts/build-native.mjs).
+const ADDONS = ["@swisseph/node/build/Release/swisseph.node", "@swisseph/node/prebuilds/linux-x64/swisseph.node"];
+const EPHEMERIS = "@swisseph/node/ephemeris/sepl_18.se1";
 
 function* traces(dir) {
   for (const entry of readdirSync(dir)) {
@@ -21,7 +23,9 @@ for (const trace of traces(".next/server/app")) {
   const files = JSON.parse(readFileSync(trace, "utf8")).files;
   if (!files.some((file) => file.includes("@swisseph/node/dist/index.js"))) continue;
   checked += 1;
-  const absent = REQUIRED.filter((required) => !files.some((file) => file.endsWith(required)));
+  const absent = [];
+  if (!ADDONS.some((addon) => files.some((file) => file.endsWith(addon)))) absent.push("the swisseph.node addon");
+  if (!files.some((file) => file.endsWith(EPHEMERIS))) absent.push(EPHEMERIS);
   if (absent.length) missing.push(`${trace}: ${absent.join(", ")}`);
 }
 

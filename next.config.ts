@@ -45,7 +45,9 @@ const nextConfig: NextConfig = {
   // calculation (Kundli, the free chart, the member dashboard) failed in production with "No
   // native build was found". scripts/check-native-trace.mjs fails the build if they go missing.
   outputFileTracingIncludes: {
-    "/**": ["./node_modules/@swisseph/node/prebuilds/linux-x64/**", "./node_modules/@swisseph/node/ephemeris/**"],
+    // build/Release holds the addon scripts/build-native.mjs compiles when the prebuilt one needs a
+    // newer GLIBC than the build machine has; node-gyp-build loads it in preference to prebuilds/.
+    "/**": ["./node_modules/@swisseph/node/build/Release/swisseph.node", "./node_modules/@swisseph/node/prebuilds/linux-x64/**", "./node_modules/@swisseph/node/ephemeris/**"],
   },
   // AVIF isn't in Next's default format list (slower to encode) but is typically 20-30% smaller
   // than WebP for photographic content — worth it here since gemstone/blog/practitioner photos

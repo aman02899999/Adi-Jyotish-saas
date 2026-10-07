@@ -1,7 +1,7 @@
 import "server-only";
 
 import { unstable_cache } from "next/cache";
-import { FieldValue } from "firebase-admin/firestore";
+import { AggregateField, FieldValue } from "firebase-admin/firestore";
 import { db, withIndexFallback } from "@/lib/firestore";
 import {
   getAllReviewsInSupabase,
@@ -14,7 +14,7 @@ import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
 import { computeSessionPriceAnchor, computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
-import { genuineReviews } from "@/lib/review-provenance";
+import { genuineReviews, MEMBER_REVIEW_SOURCE, SYNTHETIC_REVIEW_SOURCE } from "@/lib/review-provenance";
 import { listFavoritePractitionerIdsInSupabase } from "@/lib/member-favorites-supabase";
 import { getUnreviewedCompletedBookingsInSupabase } from "@/lib/bookings-supabase";
 
@@ -75,25 +75,47 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
 type ReviewScore = { practitionerId: string; count: number; rating: number; clarity: number; empathy: number; usefulness: number };
 type AccuracyEntry = [string, { accuracyPercent: number; resolvedCount: number }];
 
-/** Per-practitioner review sums and prediction accuracy: the expensive part of the marketplace. */
+const SCORE_SUMS = {
+  count: AggregateField.count(),
+  rating: AggregateField.sum("rating"),
+  clarity: AggregateField.sum("clarity"),
+  empathy: AggregateField.sum("empathy"),
+  usefulness: AggregateField.sum("usefulness"),
+};
+
+/**
+ * Genuine review totals per practitioner, from aggregation queries rather than review documents.
+ * Firestore bills an aggregation about one read per thousand entries, where fetching the reviews
+ * cost one read each, and the table still holds thousands of synthetic ones. Genuine totals are all
+ * published reviews minus the synthetic ones: genuine reviews written before provenance existed
+ * carry no `source`, so they cannot be selected directly (see review-provenance.ts).
+ */
+async function firestoreReviewScores(practitionerIds: string[]): Promise<ReviewScore[]> {
+  const reviews = db.collection("practitionerReviews");
+  const scores = await Promise.all(practitionerIds.map(async (practitionerId) => {
+    const published = reviews.where("practitionerId", "==", practitionerId).where("status", "==", "published");
+    const [all, synthetic] = await Promise.all([
+      published.aggregate(SCORE_SUMS).get(),
+      published.where("source", "==", SYNTHETIC_REVIEW_SOURCE).aggregate(SCORE_SUMS).get(),
+    ]);
+    const total = all.data();
+    const fake = synthetic.data();
+    const genuine = (field: "rating" | "clarity" | "empathy" | "usefulness") => (total[field] ?? 0) - (fake[field] ?? 0);
+    return { practitionerId, count: total.count - fake.count, rating: genuine("rating"), clarity: genuine("clarity"), empathy: genuine("empathy"), usefulness: genuine("usefulness") };
+  }));
+  return scores.filter((score) => score.count > 0);
+}
+
+/** Per-practitioner genuine review sums and prediction accuracy: the expensive part of the marketplace. */
 async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: AccuracyEntry[] }> {
-  // Reviews fall back to empty (practitioners still list, just without ratings) if the
-  // (status, createdAt) composite index isn't built yet. Postgres has no equivalent
-  // failure mode, so the cutover branch needs no fallback wrapper.
-  const [publishedReviews, accuracyMap] = await Promise.all([
-    isSupabaseCutoverActive()
-      ? getPublishedReviewsInSupabase()
-      : withIndexFallback(
-          () => db.collection("practitionerReviews").where("status", "==", "published").orderBy("createdAt", "desc").get(),
-          { docs: [] as FirebaseFirestore.QueryDocumentSnapshot[] } as FirebaseFirestore.QuerySnapshot,
-        ).then((snap) => snap.docs.map(reviewFromDoc)),
-    getPractitionerAccuracyMap(),
-  ]);
-  // Ratings and review counts set both what is displayed and what is charged (the
-  // new-practitioner discount and the AI persona price bands), so synthetic reviews are removed
-  // before either is computed. The Postgres query already excludes them; filtering again is free.
+  const accuracy = getPractitionerAccuracyMap();
+  if (!isSupabaseCutoverActive()) {
+    const directory = await getPractitionerDirectory(true);
+    return { scores: await firestoreReviewScores(directory.map((person) => person.id)), accuracy: [...(await accuracy).entries()] };
+  }
+  // The Postgres query already excludes synthetic reviews; filtering again is free.
   const sums = new Map<string, ReviewScore>();
-  for (const review of genuineReviews(publishedReviews)) {
+  for (const review of genuineReviews(await getPublishedReviewsInSupabase())) {
     const score = sums.get(review.practitionerId) ?? { practitionerId: review.practitionerId, count: 0, rating: 0, clarity: 0, empathy: 0, usefulness: 0 };
     score.count += 1;
     score.rating += review.rating;
@@ -102,7 +124,7 @@ async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: A
     score.usefulness += review.usefulness;
     sums.set(review.practitionerId, score);
   }
-  return { scores: [...sums.values()], accuracy: [...accuracyMap.entries()] };
+  return { scores: [...sums.values()], accuracy: [...(await accuracy).entries()] };
 }
 
 // Reading every published review is what made the marketplace expensive: the old seeder left
@@ -110,7 +132,7 @@ async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: A
 // Firestore quota within hours. Scores change only when a review does, and moderation expires this
 // tag at once (expireReviewDerivedCaches), so an hour costs nothing in freshness. Who is online
 // still refreshes on the marketplace's own short TTL below.
-const getReviewScores = unstable_cache(fetchReviewScores, ["marketplace-review-scores"], { tags: ["marketplace-review-scores"], revalidate: 3600 });
+export const getReviewScores = unstable_cache(fetchReviewScores, ["marketplace-review-scores"], { tags: ["marketplace-review-scores"], revalidate: 3600 });
 
 async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
   const [directory, { scores, accuracy }] = await Promise.all([getPractitionerDirectory(true), getReviewScores()]);
@@ -176,12 +198,25 @@ export async function getMarketplacePractitioner(slug: string) {
   if (!practitioner) return null;
   const reviews = genuineReviews(isSupabaseCutoverActive()
     ? await getPublishedReviewsForPractitionerInSupabase(practitioner.id)
-    : (await db.collection("practitionerReviews")
-        .where("practitionerId", "==", practitioner.id)
-        .where("status", "==", "published")
-        .orderBy("createdAt", "desc")
-        .get()).docs.map(reviewFromDoc));
+    : await genuineReviewsForProfile(practitioner.id, practitioner.reviewCount));
   return { practitioner, reviews };
+}
+
+/**
+ * The genuine reviews listed on a profile page. This used to read every published review of the
+ * practitioner on each view, up to a thousand synthetic ones for a featured astrologer, with no
+ * cache. Member-written reviews are stamped `source: "member"` and can be fetched on their own, at
+ * most PROFILE_REVIEWS of them. Genuine reviews from before provenance existed carry no source and
+ * cannot be selected directly, so only when the cached genuine count says some exist does this
+ * fall back to reading the practitioner's published reviews.
+ */
+const PROFILE_REVIEWS = 50;
+async function genuineReviewsForProfile(practitionerId: string, genuineCount: number): Promise<PractitionerReview[]> {
+  const published = db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).where("status", "==", "published");
+  // Equality filters only, so no composite index is needed; the newest-first order is applied here.
+  const member = (await published.where("source", "==", MEMBER_REVIEW_SOURCE).limit(PROFILE_REVIEWS).get()).docs.map(reviewFromDoc);
+  if (member.length >= Math.min(genuineCount, PROFILE_REVIEWS)) return member.sort((a, b) => b.createdAt.getTime() - a.createdAt.getTime());
+  return (await published.orderBy("createdAt", "desc").get()).docs.map(reviewFromDoc);
 }
 
 /** Favorites are stored as members/{memberId}/favorites/{practitionerId} — doc existence IS the
@@ -194,16 +229,22 @@ export async function getFavoritePractitionerIds(memberId: string) {
 
 export async function getEligibleReviewBookings(memberEmail: string, practitionerId: string) {
   if (isSupabaseCutoverActive()) return getUnreviewedCompletedBookingsInSupabase(memberEmail, practitionerId);
-  const [completedSnap, existingSnap] = await Promise.all([
-    db.collection("bookings")
-      .where("clientEmail", "==", memberEmail)
-      .where("practitionerId", "==", practitionerId)
-      .where("status", "==", "completed")
-      .orderBy("scheduledAt", "desc")
-      .get(),
-    db.collection("practitionerReviews").where("practitionerId", "==", practitionerId).get(),
-  ]);
-  const reviewed = new Set(existingSnap.docs.map((doc) => doc.data().bookingId as string));
+  const completedSnap = await db.collection("bookings")
+    .where("clientEmail", "==", memberEmail)
+    .where("practitionerId", "==", practitionerId)
+    .where("status", "==", "completed")
+    .orderBy("scheduledAt", "desc")
+    .get();
+  // Almost every profile view comes from a member with no completed consultation here, and the
+  // practitioner's reviews can run to a thousand documents, so they are read only when needed,
+  // and then only the ones for these bookings.
+  if (completedSnap.empty) return [];
+  const bookingIds = completedSnap.docs.map((doc) => doc.id);
+  const reviewed = new Set<string>();
+  for (let index = 0; index < bookingIds.length; index += 30) {
+    const existingSnap = await db.collection("practitionerReviews").where("bookingId", "in", bookingIds.slice(index, index + 30)).select("bookingId").get();
+    for (const doc of existingSnap.docs) reviewed.add(doc.data().bookingId as string);
+  }
   return completedSnap.docs
     .filter((doc) => !reviewed.has(doc.id))
     .map((doc) => {
