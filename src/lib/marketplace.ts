@@ -136,13 +136,23 @@ async function firestoreReviewScores(practitionerIds: string[]): Promise<ReviewS
  */
 const getPublicDirectory = unstable_cache(() => getPractitionerDirectory(true), ["public-practitioner-directory"], { tags: ["practitioner-directory"], revalidate: 3600 });
 
-/** Per-practitioner genuine review sums and prediction accuracy: the expensive part of the marketplace. */
+/**
+ * Per-practitioner genuine review sums and prediction accuracy: the expensive part of the
+ * marketplace. Both reads run under one Promise.all. The accuracy read used to start first and be
+ * awaited last, so when the scores failed first (the Firestore quota running out) its own failure
+ * went unhandled, and an unhandled rejection ends the Node process serving the request.
+ */
 async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: AccuracyEntry[] }> {
-  const accuracy = getPractitionerAccuracyMap();
-  if (!isSupabaseCutoverActive()) {
-    const directory = await getPublicDirectory();
-    return { scores: await firestoreReviewScores(directory.map((person) => person.id)), accuracy: [...(await accuracy).entries()] };
-  }
+  const [scores, accuracy] = await Promise.all([
+    isSupabaseCutoverActive()
+      ? postgresReviewScores()
+      : getPublicDirectory().then((directory) => firestoreReviewScores(directory.map((person) => person.id))),
+    getPractitionerAccuracyMap(),
+  ]);
+  return { scores, accuracy: [...accuracy.entries()] };
+}
+
+async function postgresReviewScores(): Promise<ReviewScore[]> {
   // The Postgres query already excludes synthetic reviews; filtering again is free.
   const sums = new Map<string, ReviewScore>();
   for (const review of genuineReviews(await getPublishedReviewsInSupabase())) {
@@ -154,7 +164,7 @@ async function fetchReviewScores(): Promise<{ scores: ReviewScore[]; accuracy: A
     score.dimensions!.usefulness += review.usefulness;
     sums.set(review.practitionerId, score);
   }
-  return { scores: [...sums.values()], accuracy: [...(await accuracy).entries()] };
+  return [...sums.values()];
 }
 
 // Reading every published review is what made the marketplace expensive: the old seeder left
