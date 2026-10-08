@@ -1,4 +1,5 @@
 import { db } from "@/lib/firestore";
+import { checkRateLimit, rateLimitResponse, requestIp } from "@/lib/rate-limit";
 import { getAvailableSlots } from "@/lib/scheduling";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getServiceByIdInSupabase } from "@/lib/services-supabase";
@@ -6,6 +7,13 @@ import { getServiceByIdInSupabase } from "@/lib/services-supabase";
 export const dynamic = "force-dynamic";
 
 export async function GET(request: Request) {
+  // Unauthenticated, force-dynamic, and every call runs an uncached bookings-window query on top
+  // of the service lookup — the one public route here that had no ceiling on how often a stranger
+  // could trigger that. The limit is generous enough for the booking form, which re-queries on
+  // each date or practitioner change: a visitor comparing a month of dates stays well inside it.
+  const throttle = await checkRateLimit("availability", requestIp(request), 60, 300);
+  if (!throttle.allowed) return rateLimitResponse(throttle.retryAfter);
+
   const url = new URL(request.url);
   const date = url.searchParams.get("date") ?? "";
   const serviceId = url.searchParams.get("serviceId") ?? "";
