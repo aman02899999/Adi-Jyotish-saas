@@ -200,18 +200,23 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
 // enough (and identical for every visitor) that reading it fresh on every request/page is wasteful.
 // Cached at runtime with a short TTL; falls back to an empty list instead of crashing the page (or
 // the build — nothing here runs at build time without Firebase credentials to read with anyway).
-export const getMarketplacePractitioners = unstable_cache(
-  async () => {
-    try {
-      return await fetchMarketplacePractitioners();
-    } catch (error) {
-      console.error("getMarketplacePractitioners: falling back to empty list —", error);
-      return [] as MarketplacePractitioner[];
-    }
-  },
+const getMarketplacePractitionersCached = unstable_cache(
+  fetchMarketplacePractitioners,
   ["marketplace-practitioners"],
   { tags: ["marketplace-practitioners"], revalidate: 120 },
 );
+
+/** The catch is outside the cache on purpose: inside, the empty list was a resolved value the
+ * cache stored and replayed for the rest of the 120s window, so one failed read emptied the
+ * marketplace for every visitor rather than for one request. */
+export async function getMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
+  try {
+    return await getMarketplacePractitionersCached();
+  } catch (error) {
+    console.error("getMarketplacePractitioners: falling back to empty list —", error);
+    return [] as MarketplacePractitioner[];
+  }
+}
 
 export async function getMarketplacePractitioner(slug: string) {
   const people = await getMarketplacePractitioners();
