@@ -53,18 +53,21 @@ async function fetchPromoBanner(): Promise<PromoBanner> {
 // at runtime with a short TTL instead of hitting Firestore on every single request. Falls back to
 // the disabled-banner defaults (rather than a 500) if Firestore is unreachable, matching
 // getStudioSettings' philosophy in studio-settings.ts.
-export const getPromoBanner = unstable_cache(
-  async () => {
-    try {
-      return await fetchPromoBanner();
-    } catch (error) {
-      console.error("getPromoBanner: falling back to defaults —", error);
-      return { ...defaults, updatedAt: new Date(0).toISOString() };
-    }
-  },
-  ["promo-banner"],
-  { tags: ["promo-banner"], revalidate: 60 },
-);
+const getPromoBannerCached = unstable_cache(fetchPromoBanner, ["promo-banner"], {
+  tags: ["promo-banner"],
+  revalidate: 60,
+});
+
+/** Catch outside the cache — see getStudioSettings. A cached fallback would pin the banner to
+ * its disabled defaults for the full TTL after a single failed read. */
+export async function getPromoBanner() {
+  try {
+    return await getPromoBannerCached();
+  } catch (error) {
+    console.error("getPromoBanner: falling back to defaults —", error);
+    return { ...defaults, updatedAt: new Date(0).toISOString() };
+  }
+}
 
 export async function updatePromoBanner(patch: Partial<Omit<PromoBanner, "updatedAt">>) {
   if (isSupabaseCutoverActive()) {
