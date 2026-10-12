@@ -2472,6 +2472,12 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 @media (prefers-reduced-motion: reduce) {
   html { scroll-behavior:auto; }
   *,*::before,*::after { animation-duration:.01ms !important; animation-iteration-count:1 !important; transition-duration:.01ms !important; }
+  /* The rule above collapses a time-based animation to its end state, but animation-duration is
+     ignored on a scroll-driven one: progress comes from the timeline, not the clock. .reveal is the
+     only animation here on `animation-timeline: view()`, so it alone slipped through this guard and
+     kept fading ~20 sections of the homepage on scroll for someone who asked for no motion. It
+     needs dropping outright; with no animation, opacity returns to its own value of 1. */
+  .reveal { animation:none; }
 }
 
 /* pricing */
