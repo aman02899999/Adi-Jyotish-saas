@@ -21,6 +21,12 @@ test("every listed practitioner has a profile that names its price", async ({ pa
   );
   expect(slugs.length).toBeGreaterThan(10);
 
+  // This test navigates to a full, server-rendered profile per practitioner, so its cost grows
+  // with the roster while the default 45s budget does not. When it runs out, Playwright reports
+  // the timeout against whichever visibility assertion it was mid-way through — which reads as a
+  // practitioner missing its pricing panel rather than as a test that simply ran out of time.
+  test.setTimeout(15_000 + slugs.length * 10_000);
+
   for (const slug of slugs) {
     const response = await page.goto(`/astrologers/${slug}`);
     expect(response?.status(), `${slug} profile status`).toBe(200);
