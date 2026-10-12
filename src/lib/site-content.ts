@@ -1,8 +1,8 @@
 import "server-only";
 
-import { unstable_cache } from "next/cache";
+import { revalidateTag, unstable_cache } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
-import { db, withFirebaseFallback } from "@/lib/firestore";
+import { db, isMissingFirebaseProjectError } from "@/lib/firestore";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getSiteContentInSupabase, mergeSiteContentInSupabase } from "@/lib/cms-supabase";
 
@@ -71,31 +71,60 @@ const CTA_HREF_FIELDS = new Set<keyof HomeHeroContent>(["primaryCtaHref", "secon
 
 /** Every field falls back to the current hardcoded copy if the admin has never edited it, so a
  * fresh deploy (or a doc that only has some fields set) renders identically to before this
- * system existed — nothing on the homepage can go blank from a missing Firestore doc. */
+ * system existed — nothing on the homepage can go blank from a missing Firestore doc.
+ *
+ * A *read failure* is different from a missing field and deliberately throws out of here, so the
+ * cache below never stores the defaults as though they were the saved copy. getHomeHeroContent
+ * does that degrading, outside the cache. */
 async function fetchHomeHeroContent(): Promise<HomeHeroContent> {
-  return withFirebaseFallback(async () => {
-    const data = await readContent<HomeHeroContent>("home-hero");
-    if (!data) return DEFAULT_HERO;
-    // Only pull the fields HomeHeroContent actually declares — the doc also carries an
-    // updatedAt Firestore Timestamp (see updateHomeHeroContent) that has no place leaking into
-    // this plain content object.
-    const result = { ...DEFAULT_HERO };
-    for (const key of Object.keys(DEFAULT_HERO) as (keyof HomeHeroContent)[]) {
-      const value = data[key];
-      if (typeof value === "string" && value !== "") result[key] = value;
-    }
-    return result;
-  }, DEFAULT_HERO, "getHomeHeroContent");
+  const data = await readContent<HomeHeroContent>("home-hero");
+  if (!data) return DEFAULT_HERO;
+  // Only pull the fields HomeHeroContent actually declares — the doc also carries an
+  // updatedAt Firestore Timestamp (see updateHomeHeroContent) that has no place leaking into
+  // this plain content object.
+  const result = { ...DEFAULT_HERO };
+  for (const key of Object.keys(DEFAULT_HERO) as (keyof HomeHeroContent)[]) {
+    const value = data[key];
+    if (typeof value === "string" && value !== "") result[key] = value;
+  }
+  return result;
 }
 
 // Same content for every visitor — cached at runtime (not build time, so no Firebase credentials
 // needed during `next build`) rather than read fresh from Firestore on every single homepage hit.
-// An admin save reads back fresh (see updateHomeHeroContent below); other visitors may see the
-// previous version for up to the revalidate window.
-export const getHomeHeroContent = unstable_cache(fetchHomeHeroContent, ["home-hero-content"], {
+// An admin save expires the tag below, so an edit is live immediately rather than after the TTL.
+const getHomeHeroContentCached = unstable_cache(fetchHomeHeroContent, ["home-hero-content"], {
   tags: ["home-hero-content"],
   revalidate: 300,
 });
+
+/**
+ * The degrade-to-defaults step sits outside the cache on purpose, and the predicate is the same
+ * broad one withFirebaseFallback used — a spent quota or an unreachable backend still renders the
+ * built-in copy rather than 500ing the homepage. What changed is that the fallback is no longer
+ * produced *inside* the cached callback, where it was an ordinary resolved value that
+ * unstable_cache stored and replayed for the rest of the 300s window.
+ *
+ * That mattered beyond the homepage looking wrong: the admin editor seeds its form from this read
+ * and PUTs every field back (see AdminWebsiteContent), so an admin who opened /admin/website
+ * during that window saw the defaults and could save them straight over real copy. Admin reads
+ * now go through getHomeHeroContentForAdmin, which never substitutes defaults for a failure.
+ */
+export async function getHomeHeroContent(): Promise<HomeHeroContent> {
+  try {
+    return await getHomeHeroContentCached();
+  } catch (error) {
+    if (!isMissingFirebaseProjectError(error)) throw error;
+    console.warn("getHomeHeroContent: Firebase unavailable; using fallback.", error);
+    return DEFAULT_HERO;
+  }
+}
+
+/** Uncached and never falls back: a read failure must reach the admin as an error, because
+ * whatever this returns is what the editor will write back. */
+export async function getHomeHeroContentForAdmin(): Promise<HomeHeroContent> {
+  return fetchHomeHeroContent();
+}
 
 export async function updateHomeHeroContent(patch: Partial<HomeHeroContent>): Promise<HomeHeroContent> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
@@ -106,26 +135,44 @@ export async function updateHomeHeroContent(patch: Partial<HomeHeroContent>): Pr
     update[key] = value;
   }
   await writeContent("home-hero", update);
+  revalidateTag("home-hero-content", { expire: 0 });
   return fetchHomeHeroContent();
 }
 
+/** Throws on a read failure, for the same reason as fetchHomeHeroContent above. */
 async function fetchFooterContent(): Promise<FooterContent> {
-  return withFirebaseFallback(async () => {
-    const data = await readContent<FooterContent>("footer");
-    if (!data) return DEFAULT_FOOTER;
-    return { ...DEFAULT_FOOTER, ...(data.blurb ? { blurb: data.blurb } : {}) };
-  }, DEFAULT_FOOTER, "getFooterContent");
+  const data = await readContent<FooterContent>("footer");
+  if (!data) return DEFAULT_FOOTER;
+  return { ...DEFAULT_FOOTER, ...(data.blurb ? { blurb: data.blurb } : {}) };
 }
 
 // Rendered via SiteFooter on nearly every page — same rationale as getHomeHeroContent above.
-export const getFooterContent = unstable_cache(fetchFooterContent, ["footer-content"], {
+const getFooterContentCached = unstable_cache(fetchFooterContent, ["footer-content"], {
   tags: ["footer-content"],
   revalidate: 300,
 });
+
+/** Catch outside the cache — see getHomeHeroContent. This one reaches further: SiteFooter pulls it
+ * on nearly every page, so a cached fallback replaced the footer blurb site-wide. */
+export async function getFooterContent(): Promise<FooterContent> {
+  try {
+    return await getFooterContentCached();
+  } catch (error) {
+    if (!isMissingFirebaseProjectError(error)) throw error;
+    console.warn("getFooterContent: Firebase unavailable; using fallback.", error);
+    return DEFAULT_FOOTER;
+  }
+}
+
+/** Uncached and never falls back — see getHomeHeroContentForAdmin. */
+export async function getFooterContentForAdmin(): Promise<FooterContent> {
+  return fetchFooterContent();
+}
 
 export async function updateFooterContent(patch: Partial<FooterContent>): Promise<FooterContent> {
   const update: Record<string, unknown> = { updatedAt: FieldValue.serverTimestamp() };
   if (typeof patch.blurb === "string") update.blurb = patch.blurb.trim().slice(0, 400);
   await writeContent("footer", update);
+  revalidateTag("footer-content", { expire: 0 });
   return fetchFooterContent();
 }

@@ -60,7 +60,10 @@ describeFirestore("two-factor sign-in on the live Firestore path", () => {
     expect(await twoFactor.recordTwoFactorFailure(admin)).toBeGreaterThan(0);
   });
 
-  it("lets a backup code work once, even when it is replayed simultaneously", async () => {
+  // Same contention as the five-at-once case above, on one adminUsers document, so it needs the
+  // same allowance: it runs ~3.5s locally and was measured at 5.009s on a CI runner, against the
+  // 5s default. Nothing was wrong with it — it simply had no margin.
+  it("lets a backup code work once, even when it is replayed simultaneously", { timeout: 20_000 }, async () => {
     const { codes, hashed } = twoFactor.generateBackupCodes();
     await db.collection("adminUsers").doc("a1").set({ totpEnabled: true, totpSecret: secret, totpBackupCodes: hashed });
     const results = await Promise.all(Array.from({ length: 5 }, () => twoFactor.consumeBackupCode(admin, codes[0])));

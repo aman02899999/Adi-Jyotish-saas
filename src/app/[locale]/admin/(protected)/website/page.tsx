@@ -3,13 +3,13 @@ import { AdminShell } from "@/components/admin-shell";
 import { AdminWebsiteContent } from "@/components/admin-website-content";
 import { requireAdminPage } from "@/lib/admin-page";
 import { getAllCustomPagesAdmin } from "@/lib/custom-pages";
-import { getFooterContent, getHomeHeroContent } from "@/lib/site-content";
+import { getFooterContentForAdmin, getHomeHeroContentForAdmin } from "@/lib/site-content";
 
 export const dynamic = "force-dynamic";
 
 export default async function AdminWebsitePage() {
   await requireAdminPage("website");
-  const [hero, footer, pages] = await Promise.all([getHomeHeroContent(), getFooterContent(), getAllCustomPagesAdmin()]);
+  const [hero, footer, pages] = await Promise.all([getHomeHeroContentForAdmin(), getFooterContentForAdmin(), getAllCustomPagesAdmin()]);
   return (
     <AdminShell active="Website">
       <div className="admin-content">
