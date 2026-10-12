@@ -84,25 +84,31 @@ export async function getAllPersonasAdmin(): Promise<AiPersona[]> {
 // Same list for every visitor (no auth check) — cached instead of read fresh on every request.
 // Falls back to an empty list instead of crashing the page (or the credential-less `next build`
 // static-generation pass).
-export const getActivePersonas = unstable_cache(
+const getActivePersonasCached = unstable_cache(
   async () => {
-    try {
-      if (isSupabaseCutoverActive()) {
-        const rows = await getActivePersonasInSupabase();
-        // Sorted here rather than in SQL: localeCompare and the database collation
-        // disagree on accented names.
-        return rows.sort((a, b) => a.name.localeCompare(b.name));
-      }
-      const snap = await collection.where("active", "==", true).get();
-      return snap.docs.map(toPersona).sort((a, b) => a.name.localeCompare(b.name));
-    } catch (error) {
-      console.error("getActivePersonas: falling back to empty list —", error);
-      return [] as AiPersona[];
+    if (isSupabaseCutoverActive()) {
+      const rows = await getActivePersonasInSupabase();
+      // Sorted here rather than in SQL: localeCompare and the database collation
+      // disagree on accented names.
+      return rows.sort((a, b) => a.name.localeCompare(b.name));
     }
+    const snap = await collection.where("active", "==", true).get();
+    return snap.docs.map(toPersona).sort((a, b) => a.name.localeCompare(b.name));
   },
   ["active-ai-personas"],
   { tags: ["active-ai-personas"], revalidate: 300 },
 );
+
+/** Catch outside the cache — see getStudioSettings. Cached inside, one failed read dropped every
+ * persona from the sitemap and the public pages for the full 5-minute window. */
+export async function getActivePersonas(): Promise<AiPersona[]> {
+  try {
+    return await getActivePersonasCached();
+  } catch (error) {
+    console.error("getActivePersonas: falling back to empty list —", error);
+    return [] as AiPersona[];
+  }
+}
 
 export async function getPersonaBySlug(slug: string): Promise<AiPersona | null> {
   if (isSupabaseCutoverActive()) return getPersonaBySlugInSupabase(slug);

@@ -33,28 +33,34 @@ async function fetchStudioSettings(): Promise<StudioSettings> {
   return { ...defaults, ...data, updatedAt: (data.updatedAt?.toDate() ?? new Date()).toISOString() };
 }
 
+// Same content for every visitor (not personalized), read on nearly every page via SiteFooter —
+// without this, that's a real Firestore round-trip on every single request. unstable_cache keeps
+// this cached at runtime with a 5-minute TTL. An admin save reads back fresh (below); other
+// visitors may see the previous version for up to the revalidate window.
+const getStudioSettingsCached = unstable_cache(fetchStudioSettings, ["studio-settings"], {
+  tags: ["studio-settings"],
+  revalidate: 300,
+});
+
 /** Falls back to defaults instead of throwing — both so a transient Firestore hiccup degrades one
  * section instead of 500ing an entire marketing page (same philosophy as withIndexFallback in
  * firestore.ts), and so pages using this can be statically/ISR-prerendered: `next build` has no
  * Firebase credentials (CI has none at all; this app's deploy config only grants them at runtime),
- * so the very first call here happens with no credentials and must not crash the build. */
-async function fetchStudioSettingsSafely(): Promise<StudioSettings> {
+ * so the very first call here happens with no credentials and must not crash the build.
+ *
+ * The catch sits outside the cache deliberately. Inside, the defaults returned here were an
+ * ordinary resolved value, so the cache stored them and served every visitor the fallback for the
+ * rest of the 5-minute window — one blip became five minutes of the wrong studio name and contact
+ * details sitewide. Letting the failure escape the cached callback means nothing is written and
+ * the next request retries. */
+export async function getStudioSettings(): Promise<StudioSettings> {
   try {
-    return await fetchStudioSettings();
+    return await getStudioSettingsCached();
   } catch (error) {
     console.error("getStudioSettings: falling back to defaults —", error);
     return { ...defaults, updatedAt: new Date().toISOString() };
   }
 }
-
-// Same content for every visitor (not personalized), read on nearly every page via SiteFooter —
-// without this, that's a real Firestore round-trip on every single request. unstable_cache keeps
-// this cached at runtime with a 5-minute TTL. An admin save reads back fresh (below); other
-// visitors may see the previous version for up to the revalidate window.
-export const getStudioSettings = unstable_cache(fetchStudioSettingsSafely, ["studio-settings"], {
-  tags: ["studio-settings"],
-  revalidate: 300,
-});
 
 export async function updateStudioSettings(patch: Partial<StudioSettings>) {
   if (isSupabaseCutoverActive()) return updateStudioSettingsInSupabase(patch);

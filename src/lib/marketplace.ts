@@ -214,21 +214,26 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
   });
 }
 
-// The directory, review scores and prediction accuracy, joined and scored, identical for every
-// visitor. A refresh reads only the caches beneath it, so the short TTL costs no Firestore reads
-// until one of those expires.
-const getCachedMarketplacePractitioners = unstable_cache(fetchMarketplacePractitioners, ["marketplace-practitioners"], { tags: ["marketplace-practitioners"], revalidate: 120 });
+// The full directory + every published review + prediction accuracy, joined and scored — expensive
+// enough (and identical for every visitor) that reading it fresh on every request/page is wasteful.
+// Cached at runtime with a short TTL; falls back to an empty list instead of crashing the page (or
+// the build — nothing here runs at build time without Firebase credentials to read with anyway).
+const getMarketplacePractitionersCached = unstable_cache(
+  fetchMarketplacePractitioners,
+  ["marketplace-practitioners"],
+  { tags: ["marketplace-practitioners"], revalidate: 120 },
+);
 
-// Falls back to an empty list instead of crashing the page (or the build, which has no Firebase
-// credentials). The fallback is outside the cache on purpose: when a refresh fails (the free
-// Firestore quota running out, say), the cache keeps serving the last list it built instead of
-// storing the empty one, so the astrologers stay listed through the outage.
+/** The catch is outside the cache on purpose: inside, the empty list was a resolved value the
+ * cache stored and replayed for the rest of the 120s window, so one failed read emptied the
+ * marketplace for every visitor rather than for one request. When a refresh fails, Next keeps
+ * serving the last list it built, so the astrologers stay listed through a quota outage. */
 export async function getMarketplacePractitioners(): Promise<MarketplacePractitioner[]> {
   try {
-    return await getCachedMarketplacePractitioners();
+    return await getMarketplacePractitionersCached();
   } catch (error) {
     console.error("getMarketplacePractitioners: falling back to empty list —", error);
-    return [];
+    return [] as MarketplacePractitioner[];
   }
 }
 
