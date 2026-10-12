@@ -45,6 +45,9 @@ export function BlockRenderer({ blocks }: { blocks: PageBlock[] }) {
           case "imagetext":
             return (
               <section className="cp-imagetext shell" key={block.id}>
+                {/* Same reason as AvatarImage: an admin pastes this URL into the page builder, and
+                    no remotePatterns are configured for next/image to serve it through. */}
+                {/* eslint-disable-next-line @next/next/no-img-element */}
                 {asString(block.data.imageUrl) && <img src={asString(block.data.imageUrl)} alt={asString(block.data.heading)} />}
                 <div>
                   {asString(block.data.heading) && <h2>{asString(block.data.heading)}</h2>}

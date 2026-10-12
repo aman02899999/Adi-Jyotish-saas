@@ -1,5 +1,5 @@
 import { getCurrentAdmin, hasAdminPermission, recordAudit } from "@/lib/admin-auth";
-import { getFooterContent, getHomeHeroContent, updateFooterContent, updateHomeHeroContent } from "@/lib/site-content";
+import { getFooterContentForAdmin, getHomeHeroContentForAdmin, updateFooterContent, updateHomeHeroContent } from "@/lib/site-content";
 import { readJsonBody } from "@/lib/request-body";
 
 export const dynamic = "force-dynamic";
@@ -8,7 +8,7 @@ export async function GET() {
   const admin = await getCurrentAdmin();
   if (!admin) return Response.json({ error: "Administrator access required." }, { status: 401 });
   if (!hasAdminPermission(admin, "website")) return Response.json({ error: "Website permission required." }, { status: 403 });
-  const [hero, footer] = await Promise.all([getHomeHeroContent(), getFooterContent()]);
+  const [hero, footer] = await Promise.all([getHomeHeroContentForAdmin(), getFooterContentForAdmin()]);
   return Response.json({ hero, footer });
 }
 
@@ -24,8 +24,8 @@ export async function PUT(request: Request) {
 
   const body = (await readJsonBody(request)) as UpdatePayload;
   const [hero, footer] = await Promise.all([
-    body.hero ? updateHomeHeroContent(body.hero) : getHomeHeroContent(),
-    body.footer ? updateFooterContent(body.footer) : getFooterContent(),
+    body.hero ? updateHomeHeroContent(body.hero) : getHomeHeroContentForAdmin(),
+    body.footer ? updateFooterContent(body.footer) : getFooterContentForAdmin(),
   ]);
   await recordAudit(admin, "site_content.updated", "site_content", "home", {});
   return Response.json({ hero, footer });

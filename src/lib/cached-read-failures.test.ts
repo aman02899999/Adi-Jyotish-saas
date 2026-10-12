@@ -48,24 +48,55 @@ function flakyOnce<T>(value: T) {
 
 const STATS = { consultationsDelivered: 7, practitionerCount: 3, averageRating: 4.6, reviewCount: 11 };
 
+/** Same shape as flakyOnce, but the rejection carries the gRPC status code Firestore sets on a
+ * spent quota — which is what the site-content fallbacks key off. */
+function flakyOnceWithQuotaCode<T>(value: T) {
+  let failed = false;
+  const fn = vi.fn(async (..._args: unknown[]) => {
+    if (!failed) {
+      failed = true;
+      throw Object.assign(new Error("8 RESOURCE_EXHAUSTED: Quota exceeded."), { code: 8 });
+    }
+    return value;
+  });
+  return Object.assign(fn, { resetFailure: () => { failed = false; } });
+}
+
 vi.mock("@/lib/supabase-config", () => ({ isSupabaseCutoverActive: () => true }));
-vi.mock("@/lib/firestore", () => ({ db: {}, withIndexFallback: vi.fn() }));
+vi.mock("@/lib/firestore", () => ({
+  // site-content.ts resolves db.collection("siteContent") at module scope, so this needs to be
+  // callable even though every read below goes down the Supabase path.
+  db: { collection: () => ({ doc: () => ({}) }) },
+  withIndexFallback: vi.fn(),
+  // Mirrors the code branch of the real predicate in firestore.ts. Only the gRPC status codes
+  // matter here: 8 is RESOURCE_EXHAUSTED, the spent-quota error these reads actually see.
+  isMissingFirebaseProjectError: (error: unknown) =>
+    typeof error === "object" && error !== null && "code" in error &&
+    [2, 3, 4, 7, 8, 9, 13, 14, 16].includes(Number((error as { code: unknown }).code)),
+}));
 vi.mock("@/lib/marketplace", () => ({ getMarketplacePractitioners: vi.fn(), getReviewScores: vi.fn() }));
 vi.mock("@/lib/review-provenance", () => ({ isSyntheticReview: () => false, MEMBER_REVIEW_SOURCE: "member" }));
 
 const getHomepageStatsInSupabase = flakyOnce(STATS);
 const getOnlineNowCountInSupabase = flakyOnce(4);
 const getFeaturedTestimonialsInSupabase = flakyOnce([{ reviewerName: "Asha", body: "x".repeat(60), rating: 5 }]);
+const SAVED_HERO_HEADLINE = "Admin's real headline";
+const SAVED_FOOTER_BLURB = "Admin's real footer blurb";
+const getSiteContentInSupabase = flakyOnceWithQuotaCode<Record<string, string>>({});
 
 vi.mock("@/lib/cms-supabase", () => ({
   getHomepageStatsInSupabase: () => getHomepageStatsInSupabase(),
   getOnlineNowCountInSupabase: () => getOnlineNowCountInSupabase(),
   getFeaturedTestimonialsInSupabase: (limit: number) => getFeaturedTestimonialsInSupabase(limit),
+  getSiteContentInSupabase: (id: string) =>
+    getSiteContentInSupabase(id).then(() =>
+      id === "home-hero" ? { headline: SAVED_HERO_HEADLINE } : { blurb: SAVED_FOOTER_BLURB }),
+  mergeSiteContentInSupabase: vi.fn(),
 }));
 
 beforeEach(() => {
   memo.clear();
-  for (const stub of [getHomepageStatsInSupabase, getOnlineNowCountInSupabase, getFeaturedTestimonialsInSupabase]) {
+  for (const stub of [getHomepageStatsInSupabase, getOnlineNowCountInSupabase, getFeaturedTestimonialsInSupabase, getSiteContentInSupabase]) {
     stub.resetFailure();
     stub.mockClear();
   }
@@ -103,5 +134,47 @@ describe("a failed public read is not cached as if it were a result", () => {
     await getHomepageStats();            // served from cache
     // Two reads reached the database: the failed one and the one that populated the cache.
     expect(getHomepageStatsInSupabase).toHaveBeenCalledTimes(2);
+  });
+});
+
+/**
+ * site-content.ts degraded *inside* the cached callback (via withFirebaseFallback, whose predicate
+ * deliberately covers a spent quota), so one failed read pinned the homepage hero and the
+ * site-wide footer to their built-in defaults for the full 300s window.
+ *
+ * The editor is what makes this more than a cosmetic regression: /admin/website seeded its form
+ * from the same cached read and PUT every field back, so an admin who opened the page during that
+ * window saw the defaults and could save them over their real copy. Hence two separate
+ * guarantees below — the public read still degrades, and the admin read refuses to.
+ */
+describe("editable site content survives a failed read", () => {
+  it("serves the admin's real hero copy on the retry instead of 300s of default copy", async () => {
+    const { getHomeHeroContent } = await import("@/lib/site-content");
+
+    // Still degrades rather than 500ing the homepage — that part was never the bug.
+    expect((await getHomeHeroContent()).headline).toBe("Your stars.");
+    // Before the fix those defaults were cached, and this returned them again.
+    expect((await getHomeHeroContent()).headline).toBe(SAVED_HERO_HEADLINE);
+  });
+
+  it("recovers the footer blurb rather than showing the default site-wide", async () => {
+    const { getFooterContent } = await import("@/lib/site-content");
+    expect((await getFooterContent()).blurb).toContain("Ancient wisdom for modern life.");
+    expect((await getFooterContent()).blurb).toBe(SAVED_FOOTER_BLURB);
+  });
+
+  it("never hands the admin editor defaults it could save over real copy", async () => {
+    const { getHomeHeroContentForAdmin } = await import("@/lib/site-content");
+    // The failure has to surface. Quietly returning DEFAULT_HERO is the data-loss path.
+    await expect(getHomeHeroContentForAdmin()).rejects.toThrow("RESOURCE_EXHAUSTED");
+    expect((await getHomeHeroContentForAdmin()).headline).toBe(SAVED_HERO_HEADLINE);
+  });
+
+  it("does not re-read on every hit once a read succeeds", async () => {
+    const { getHomeHeroContent } = await import("@/lib/site-content");
+    await getHomeHeroContent();   // failure, not cached
+    await getHomeHeroContent();   // success, cached
+    await getHomeHeroContent();   // served from cache
+    expect(getSiteContentInSupabase).toHaveBeenCalledTimes(2);
   });
 });
