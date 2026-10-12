@@ -5,7 +5,7 @@ import { db, withIndexFallback } from "@/lib/firestore";
 import { getMarketplacePractitioners, getReviewScores } from "@/lib/marketplace";
 import { isSyntheticReview, MEMBER_REVIEW_SOURCE } from "@/lib/review-provenance";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
-import { getFeaturedTestimonialsInSupabase, getHomepageStatsInSupabase, getOnlineNowCountInSupabase } from "@/lib/cms-supabase";
+import { getFeaturedTestimonialsInSupabase, getHomepageStatsInSupabase } from "@/lib/cms-supabase";
 
 async function fetchHomepageStats() {
   if (isSupabaseCutoverActive()) return getHomepageStatsInSupabase();
@@ -60,25 +60,15 @@ export async function getHomepageStats() {
   }
 }
 
-// "Online now" count changes far more often than the stats above (practitioners toggle live), so
-// a much shorter TTL — still a real win over reading fresh on every single homepage request.
-const getOnlineNowCountCached = unstable_cache(
-  async () => {
-    if (isSupabaseCutoverActive()) return await getOnlineNowCountInSupabase();
-    const snap = await db.collection("practitioners").where("active", "==", true).where("online", "==", true).select("isDemoAccount").get();
-    return snap.docs.filter((doc) => !doc.data().isDemoAccount).length;
-  },
-  ["online-now-count"],
-  { tags: ["online-now-count"], revalidate: 30 },
-);
-
-export async function getOnlineNowCount() {
-  try {
-    return await getOnlineNowCountCached();
-  } catch (error) {
-    console.error("getOnlineNowCount: falling back to 0 —", error);
-    return 0;
-  }
+// Counted from the marketplace list, which already holds the active, non-demo practitioners and
+// is expired the moment one goes online or offline. This used to read every online practitioner
+// every 30 seconds: up to about 98,000 reads a day, nearly twice the free Firestore quota.
+//
+// No cache or catch of its own on purpose: getMarketplacePractitioners is cached and already
+// degrades to an empty list *outside* that cache, so a failed read counts 0 here and the next
+// request retries rather than replaying a cached 0 for the TTL.
+export async function getOnlineNowCount(): Promise<number> {
+  return (await getMarketplacePractitioners()).filter((person) => person.online).length;
 }
 
 export async function getLivePractitioners(limit = 6) {

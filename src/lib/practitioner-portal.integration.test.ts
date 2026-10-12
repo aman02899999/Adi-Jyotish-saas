@@ -24,6 +24,8 @@ process.env.PAYOUT_ENCRYPTION_KEY = process.env.PAYOUT_ENCRYPTION_KEY || "portal
 
 vi.mock("@/lib/admin-roles", () => ({ getAdminIdsWithPermission: async () => [] }));
 vi.mock("@/lib/notifications", () => ({ notifyAdmins: async () => undefined }));
+// Next's data cache needs a request context; a saved schedule must expire the cached directory.
+vi.mock("next/cache", () => ({ unstable_cache: (fn: unknown) => fn, revalidateTag: vi.fn() }));
 
 // The chart engines are pure CPU and slow, and their output is already covered by
 // astro-engine-swiss.test.ts. Replaced here so these tests exercise the fetch,
@@ -564,6 +566,8 @@ describeCutover("gated portal actions", () => {
   });
 
   it("round-trips a valid schedule through the gated action", async () => {
+    const { revalidateTag } = await import("next/cache");
+    vi.mocked(revalidateTag).mockClear();
     await updatePractitionerSchedule(P, {
       rules: [
         { weekday: 2, startTime: "10:00", endTime: "12:00" },
@@ -578,5 +582,7 @@ describeCutover("gated portal actions", () => {
     ]);
     expect(timeOff).toHaveLength(1);
     expect(timeOff[0].reason).toBe("away");
+    // The public directory is cached for an hour, so the new hours must expire it at once.
+    expect(vi.mocked(revalidateTag).mock.calls.map(([tag]) => tag)).toEqual(expect.arrayContaining(["practitioner-directory", "marketplace-practitioners"]));
   });
 });

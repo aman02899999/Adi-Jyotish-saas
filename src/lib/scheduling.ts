@@ -1,5 +1,6 @@
 import "server-only";
 
+import { revalidateTag } from "next/cache";
 import { FieldValue } from "firebase-admin/firestore";
 import { db, isIndexBuildingError } from "@/lib/firestore";
 import { getBookingsInWindowInSupabase } from "@/lib/bookings-supabase";
@@ -824,6 +825,19 @@ function practitionerFromDoc(doc: FirebaseFirestore.QueryDocumentSnapshot | Fire
 
 export type PractitionerWithSchedule = Practitioner & { rules: AvailabilityRule[]; timeOff: PractitionerTimeOff[] };
 
+/**
+ * Caches built from the practitioner directory: the public directory itself and the marketplace on
+ * top of it, which the homepage's online count also reads. A directory read costs every practitioner, their
+ * availability rules and time off, and the starter-seeding check, about 270 Firestore reads; done
+ * every two minutes it could use up the free daily quota by itself. So those caches are long-lived
+ * and every change to what they show (profile, schedule, online status, adding or removing a
+ * practitioner) expires them here at once.
+ */
+const PRACTITIONER_DIRECTORY_CACHE_TAGS = ["practitioner-directory", "marketplace-practitioners"];
+export function expirePractitionerDirectoryCaches(): void {
+  for (const tag of PRACTITIONER_DIRECTORY_CACHE_TAGS) revalidateTag(tag, { expire: 0 });
+}
+
 export async function getPractitionerDirectory(activeOnly = false, includeDemo = false): Promise<PractitionerWithSchedule[]> {
   if (isSupabaseCutoverActive()) {
     // Seeding writes the demo practitioners into Firestore. Under cutover the
@@ -961,6 +975,7 @@ export async function createPractitionerAdmin(
   if (isSupabaseCutoverActive()) {
     try {
       const id = await insertPractitionerInSupabase({ ...record, slug: base }, weekdays);
+      expirePractitionerDirectoryCaches();
       return (await getPractitionerByIdInSupabase(id))!;
     } catch (error) {
       if (error instanceof PractitionerEmailTakenError) throw new PractitionerAdminError(error.message);
@@ -984,6 +999,7 @@ export async function createPractitionerAdmin(
     batch.set(ref.collection("availabilityRules").doc(`starter-${weekday}`), { weekday, startTime: "09:30", endTime: "17:30", active: true });
   }
   await batch.commit();
+  expirePractitionerDirectoryCaches();
   return practitionerFromDoc(await ref.get());
 }
 
@@ -998,6 +1014,7 @@ export async function updatePractitionerAdmin(id: string, patch: PractitionerPro
   if (isSupabaseCutoverActive()) {
     try {
       await updatePractitionerInSupabase(id, update as Partial<PractitionerInsert>);
+      expirePractitionerDirectoryCaches();
     } catch (error) {
       if (error instanceof PractitionerEmailTakenError) throw new PractitionerAdminError(error.message);
       throw error;
@@ -1011,6 +1028,7 @@ export async function updatePractitionerAdmin(id: string, patch: PractitionerPro
   }
   const ref = db.collection("practitioners").doc(id);
   await ref.update({ ...update, updatedAt: FieldValue.serverTimestamp() });
+  expirePractitionerDirectoryCaches();
   return practitionerFromDoc(await ref.get());
 }
 
@@ -1023,6 +1041,7 @@ export async function deletePractitionerAdmin(id: string) {
     const outcome = await deleteUnusedPractitionerInSupabase(id);
     if (outcome === "not_found") throw new PractitionerAdminError("Practitioner not found.");
     if (outcome === "has_history") throw new PractitionerAdminError(inUse);
+    expirePractitionerDirectoryCaches();
     return;
   }
 
@@ -1040,6 +1059,7 @@ export async function deletePractitionerAdmin(id: string) {
     await db.collection(DELETED_STARTER_COLLECTION).doc(id).set({ name: snap.data()?.name ?? id, deletedAt: FieldValue.serverTimestamp() });
   }
   await db.recursiveDelete(ref);
+  expirePractitionerDirectoryCaches();
 }
 
 /**

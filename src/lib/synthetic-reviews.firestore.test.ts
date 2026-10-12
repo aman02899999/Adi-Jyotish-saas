@@ -34,9 +34,9 @@ vi.mock("next/cache", () => ({
 
 const { db } = await import("@/lib/firestore");
 const { getMarketplacePractitioner, getMarketplacePractitioners } = await import("@/lib/marketplace");
-const { getHomepageStats, getFeaturedTestimonials } = await import("@/lib/homepage");
+const { getHomepageStats, getFeaturedTestimonials, getOnlineNowCount } = await import("@/lib/homepage");
 const { countGenuinePublishedReviews, purgeSyntheticReviews } = await import("@/lib/synthetic-reviews");
-const { getPractitionerReviews, getPractitionerStats } = await import("@/lib/practitioner-portal");
+const { getPractitionerReviews, getPractitionerStats, setPractitionerOnline } = await import("@/lib/practitioner-portal");
 
 const HUMAN = "itest-human-practitioner";
 
@@ -209,6 +209,20 @@ describeFirestore("synthetic reviews on the live Firestore path", () => {
     it("never quotes a synthetic review as a testimonial", async () => {
       await addReviews(HUMAN, synthetic(20, 5));
       expect(await getFeaturedTestimonials(3)).toEqual([]);
+    });
+  });
+
+  describe("the cached practitioner directory", () => {
+    it("counts who is online from the directory and expires it when someone goes offline", async () => {
+      const { revalidateTag } = await import("next/cache");
+      const online = await getOnlineNowCount();
+      vi.mocked(revalidateTag).mockClear();
+
+      await setPractitionerOnline(HUMAN, false);
+
+      expect(await getOnlineNowCount()).toBe(online - 1);
+      // The directory is cached for an hour, so the change has to expire it at once.
+      expect(vi.mocked(revalidateTag).mock.calls.map(([tag]) => tag)).toEqual(expect.arrayContaining(["practitioner-directory", "marketplace-practitioners"]));
     });
   });
 
