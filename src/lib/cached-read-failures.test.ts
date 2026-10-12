@@ -50,22 +50,26 @@ const STATS = { consultationsDelivered: 7, practitionerCount: 3, averageRating: 
 
 vi.mock("@/lib/supabase-config", () => ({ isSupabaseCutoverActive: () => true }));
 vi.mock("@/lib/firestore", () => ({ db: {}, withIndexFallback: vi.fn() }));
-vi.mock("@/lib/marketplace", () => ({ getMarketplacePractitioners: vi.fn(), getReviewScores: vi.fn() }));
+const marketplacePractitioners = vi.fn(async () => [] as { online: boolean }[]);
+vi.mock("@/lib/marketplace", () => ({
+  getMarketplacePractitioners: () => marketplacePractitioners(),
+  getReviewScores: vi.fn(),
+}));
 vi.mock("@/lib/review-provenance", () => ({ isSyntheticReview: () => false, MEMBER_REVIEW_SOURCE: "member" }));
 
 const getHomepageStatsInSupabase = flakyOnce(STATS);
-const getOnlineNowCountInSupabase = flakyOnce(4);
 const getFeaturedTestimonialsInSupabase = flakyOnce([{ reviewerName: "Asha", body: "x".repeat(60), rating: 5 }]);
 
 vi.mock("@/lib/cms-supabase", () => ({
   getHomepageStatsInSupabase: () => getHomepageStatsInSupabase(),
-  getOnlineNowCountInSupabase: () => getOnlineNowCountInSupabase(),
   getFeaturedTestimonialsInSupabase: (limit: number) => getFeaturedTestimonialsInSupabase(limit),
 }));
 
 beforeEach(() => {
   memo.clear();
-  for (const stub of [getHomepageStatsInSupabase, getOnlineNowCountInSupabase, getFeaturedTestimonialsInSupabase]) {
+  marketplacePractitioners.mockReset();
+  marketplacePractitioners.mockResolvedValue([]);
+  for (const stub of [getHomepageStatsInSupabase, getFeaturedTestimonialsInSupabase]) {
     stub.resetFailure();
     stub.mockClear();
   }
@@ -84,10 +88,17 @@ describe("a failed public read is not cached as if it were a result", () => {
     expect(await getHomepageStats()).toEqual(STATS);
   });
 
-  it("recovers the online count rather than pinning it to 0", async () => {
+  it("counts the online practitioners from the marketplace list, with no cache of its own", async () => {
     const { getOnlineNowCount } = await import("@/lib/homepage");
+
+    // This count used to own a 30s cached Firestore read, which is what could pin a 0 for the
+    // window. It now derives from getMarketplacePractitioners, whose empty-list fallback already
+    // sits outside its cache — so a failed read counts 0 for that one request only.
+    marketplacePractitioners.mockResolvedValueOnce([]);
     expect(await getOnlineNowCount()).toBe(0);
-    expect(await getOnlineNowCount()).toBe(4);
+
+    marketplacePractitioners.mockResolvedValue([{ online: true }, { online: false }, { online: true }]);
+    expect(await getOnlineNowCount()).toBe(2);
   });
 
   it("recovers testimonials rather than hiding them for the TTL", async () => {
