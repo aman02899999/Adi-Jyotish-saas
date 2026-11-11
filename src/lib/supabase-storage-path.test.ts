@@ -48,7 +48,7 @@ describe("the copy script and the runtime client agree", () => {
 
 describe("parseArgs", () => {
   it("defaults to a real run with no filters", () => {
-    expect(parseArgs([])).toEqual({ dryRun: false, verify: false, only: null, bucket: null });
+    expect(parseArgs([])).toEqual({ dryRun: false, verify: false, only: null, bucket: null, ensureBucket: false });
   });
 
   it("reads every flag", () => {
@@ -57,6 +57,7 @@ describe("parseArgs", () => {
       verify: true,
       only: "palm-readings/",
       bucket: "staging",
+      ensureBucket: false,
     });
   });
 

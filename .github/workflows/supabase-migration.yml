@@ -1,0 +1,158 @@
+name: Supabase migration (manual)
+
+# Copies the live Firebase data into the Supabase project. Never runs on its own: only from the
+# "Run workflow" button, and the copy only after typing COPY.
+#
+# What it can and cannot touch:
+#   - Firebase is only ever READ. Nothing here writes to or deletes from Firestore, Firebase Auth
+#     or Firebase Storage.
+#   - It does not change which database the site uses. That is SUPABASE_CUTOVER in Vercel, set by
+#     the owner by hand after a rehearsal. Until then nothing reads what this writes.
+#   - "check" writes nothing at all, on either side.
+#
+# This repository is public, so these logs are public. The scripts print counts and table names
+# only: no emails, no member ids, no object paths. Keep it that way when editing them.
+#
+# Secrets (GitHub: Settings → Secrets and variables → Actions). See docs/supabase-migration.md,
+# "Running it from GitHub Actions", for where each value comes from.
+#   SUPABASE_DB_URL               Session pooler connection string, password filled in
+#   SUPABASE_SERVICE_ROLE_KEY     service_role (or sb_secret_…) key
+#   SUPABASE_CA_CERT              the downloaded database certificate, whole file
+#   FIREBASE_SERVICE_ACCOUNT_KEY  Firebase Admin SDK service account JSON
+
+on:
+  workflow_dispatch:
+    inputs:
+      mode:
+        description: "check = look only, writes nothing. copy = copy Firebase into Supabase."
+        type: choice
+        options:
+          - check
+          - copy
+        default: check
+      confirm:
+        description: "For copy only: type COPY"
+        type: string
+        default: ""
+      site_still_on_firebase:
+        description: "For copy only: tick if people have signed in through Supabase on a test site, and the live site is still on Firebase"
+        type: boolean
+        default: false
+
+# Two copies at once would interleave the id remap. Queue them instead.
+concurrency:
+  group: supabase-migration
+  cancel-in-progress: false
+
+permissions:
+  contents: read
+
+jobs:
+  migrate:
+    runs-on: ubuntu-latest
+    timeout-minutes: 90
+    env:
+      # Not a secret: the project URL is in every page the site serves.
+      SUPABASE_URL: ${{ vars.SUPABASE_URL || 'https://qgaklmvkvyljqivvryfs.supabase.co' }}
+      SUPABASE_DB_URL: ${{ secrets.SUPABASE_DB_URL }}
+      SUPABASE_SERVICE_ROLE_KEY: ${{ secrets.SUPABASE_SERVICE_ROLE_KEY }}
+      SUPABASE_CA_CERT: ${{ secrets.SUPABASE_CA_CERT }}
+      FIREBASE_SERVICE_ACCOUNT_KEY: ${{ secrets.FIREBASE_SERVICE_ACCOUNT_KEY }}
+      # Optional. The Firebase project's default bucket is used when unset.
+      FIREBASE_STORAGE_BUCKET: ${{ vars.FIREBASE_STORAGE_BUCKET }}
+      SUPABASE_STORAGE_BUCKET: ${{ vars.SUPABASE_STORAGE_BUCKET }}
+      ALLOW_COPY_AFTER_SIGNINS: ${{ inputs.site_still_on_firebase && 'true' || 'false' }}
+    steps:
+      - name: Check the four secrets are set
+        run: |
+          missing=""
+          [ -n "$SUPABASE_DB_URL" ] || missing="$missing SUPABASE_DB_URL"
+          [ -n "$SUPABASE_SERVICE_ROLE_KEY" ] || missing="$missing SUPABASE_SERVICE_ROLE_KEY"
+          [ -n "$SUPABASE_CA_CERT" ] || missing="$missing SUPABASE_CA_CERT"
+          [ -n "$FIREBASE_SERVICE_ACCOUNT_KEY" ] || missing="$missing FIREBASE_SERVICE_ACCOUNT_KEY"
+          if [ -n "$missing" ]; then
+            {
+              echo "## Not started: secrets missing"
+              echo ""
+              echo "Add these under Settings → Secrets and variables → Actions → New repository secret, then run again:"
+              for name in $missing; do echo "- \`$name\`"; done
+            } >> "$GITHUB_STEP_SUMMARY"
+            echo "Missing secrets:$missing"
+            exit 1
+          fi
+
+      - name: Refuse a copy that was not confirmed
+        if: inputs.mode == 'copy' && inputs.confirm != 'COPY'
+        run: |
+          echo "## Not started: type COPY in the confirm box to run a copy" >> "$GITHUB_STEP_SUMMARY"
+          exit 1
+
+      - uses: actions/checkout@v4
+
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+          cache: npm
+
+      # --ignore-scripts: the copy needs firebase-admin and pg only, not the chart engine's
+      # native build that the install script compiles.
+      - name: Install dependencies
+        run: npm ci --ignore-scripts
+
+      - name: Supabase health check
+        if: inputs.mode == 'check'
+        run: node scripts/supabase-cutover-report.mjs
+
+      - name: "Check: count what Firebase holds (reads only)"
+        if: inputs.mode == 'check'
+        run: |
+          {
+            echo "## Firebase, read only"
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          node scripts/migrate-firestore-to-supabase.mjs --dry-run --strict | tee -a "$GITHUB_STEP_SUMMARY"
+          node scripts/migrate-auth-users.mjs --dry-run | tee -a "$GITHUB_STEP_SUMMARY"
+          node scripts/migrate-storage-to-supabase.mjs --dry-run | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        shell: bash -eo pipefail {0}
+
+      - name: "Copy 1/6: is Supabase safe to overwrite?"
+        if: inputs.mode == 'copy'
+        run: node scripts/supabase-cutover-report.mjs --guard-copy
+
+      # A copy writes rows under their Firebase ids. If an earlier run already renamed members
+      # to their Supabase ids, put the names back first or every member is inserted twice.
+      - name: "Copy 2/6: restore Firebase ids from any earlier run"
+        if: inputs.mode == 'copy'
+        run: node scripts/remap-auth-uids.mjs --reverse
+
+      - name: "Copy 3/6: Firestore documents"
+        if: inputs.mode == 'copy'
+        run: |
+          {
+            echo "## Firestore copy"
+            echo ""
+            echo '```'
+          } >> "$GITHUB_STEP_SUMMARY"
+          node scripts/migrate-firestore-to-supabase.mjs --verify --strict | tee -a "$GITHUB_STEP_SUMMARY"
+          echo '```' >> "$GITHUB_STEP_SUMMARY"
+        shell: bash -eo pipefail {0}
+
+      - name: "Copy 4/6: logins, passwords kept"
+        if: inputs.mode == 'copy'
+        run: node scripts/migrate-auth-users.mjs | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -eo pipefail {0}
+
+      - name: "Copy 5/6: reading photos"
+        if: inputs.mode == 'copy'
+        run: node scripts/migrate-storage-to-supabase.mjs --ensure-bucket --verify | tee -a "$GITHUB_STEP_SUMMARY"
+        shell: bash -eo pipefail {0}
+
+      - name: "Copy 6/6: move every id to its Supabase login"
+        if: inputs.mode == 'copy'
+        run: node scripts/remap-auth-uids.mjs
+
+      - name: Result
+        if: inputs.mode == 'copy'
+        run: node scripts/supabase-cutover-report.mjs --after-copy

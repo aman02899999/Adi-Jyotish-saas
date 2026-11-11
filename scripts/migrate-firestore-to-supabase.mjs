@@ -22,6 +22,13 @@ import pg from "pg";
 
 const DRY_RUN = process.argv.includes("--dry-run");
 const VERIFY = process.argv.includes("--verify");
+// --strict turns the two outcomes that are only printed (a collection that could not be read,
+// a table left short) into a failing exit code. An unattended run has nobody reading the log,
+// and a permission error that skips `members` must not look like a clean copy.
+const STRICT = process.argv.includes("--strict");
+// GitHub Actions logs on a public repository are world-readable, and document ids here include
+// member uids. Print counts there, never the ids themselves.
+const PUBLIC_LOG = Boolean(process.env.GITHUB_ACTIONS);
 const onlyArg = process.argv.find((a) => a.startsWith("--only="));
 const ONLY = onlyArg ? onlyArg.slice(7).split(",").map((s) => s.trim()).filter(Boolean) : null;
 
@@ -314,7 +321,8 @@ async function upsert(client, spec, rows) {
   const deduped = dedupeByPk(rows, pk);
   if (deduped.duplicates.size) {
     const keys = [...deduped.duplicates].sort();
-    log(`  NOTE  ${spec.table.padEnd(34)} ${keys.length} duplicate ${pk} in one batch, last kept: ${keys.slice(0, 10).join(", ")}`);
+    const shown = PUBLIC_LOG ? "(ids hidden in CI logs)" : keys.slice(0, 10).join(", ");
+    log(`  NOTE  ${spec.table.padEnd(34)} ${keys.length} duplicate ${pk} in one batch, last kept: ${shown}`);
   }
   const batch = deduped.rows;
 
@@ -423,6 +431,13 @@ async function main() {
       log(`  ${ok ? "ok      " : "MISMATCH"}  ${spec.table.padEnd(34)} firestore=${r.read}  postgres=${rows[0].n}`);
     }
     log(mismatch ? `\n${mismatch} table(s) short — investigate before cutover.` : "\nAll target tables hold at least as many rows as their source collection.");
+    if (mismatch && STRICT) process.exitCode = 1;
+  }
+
+  const skippedCount = results.filter((r) => r.skipped).length;
+  if (skippedCount && STRICT) {
+    log(`\n--strict: ${skippedCount} collection(s) could not be read. Firestore returns an empty result for a collection that does not exist, so a failed read is a permission or quota problem, not an unused feature.`);
+    process.exitCode = 1;
   }
 
   if (client) await client.end();

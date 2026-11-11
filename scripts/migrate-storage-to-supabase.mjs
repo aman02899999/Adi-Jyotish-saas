@@ -13,9 +13,11 @@
  *   --only=PREFIX  copy only objects whose name starts with PREFIX
  *   --verify       download each object back after upload and compare bytes
  *   --bucket=NAME  destination bucket (default: SUPABASE_STORAGE_BUCKET or "readings")
+ *   --ensure-bucket  create the destination bucket, private, when it is missing
  *
  * Required env:
- *   GOOGLE_APPLICATION_CREDENTIALS, FIREBASE_STORAGE_BUCKET
+ *   FIREBASE_SERVICE_ACCOUNT_KEY (the JSON) or GOOGLE_APPLICATION_CREDENTIALS (a file path)
+ *   FIREBASE_STORAGE_BUCKET is optional; the project's default bucket is used without it
  *   SUPABASE_URL (or NEXT_PUBLIC_SUPABASE_URL), SUPABASE_SERVICE_ROLE_KEY
  *
  * Idempotent: uploads use x-upsert, so a re-run overwrites in place.
@@ -50,6 +52,7 @@ export function parseArgs(argv) {
     verify: argv.includes("--verify"),
     only: (argv.find((a) => a.startsWith("--only=")) ?? "").slice("--only=".length) || null,
     bucket: (argv.find((a) => a.startsWith("--bucket=")) ?? "").slice("--bucket=".length) || null,
+    ensureBucket: argv.includes("--ensure-bucket"),
   };
 }
 
@@ -59,15 +62,53 @@ function requireEnv(name) {
   return value;
 }
 
-function authHeaders(key) {
-  // Non-JWT secret keys are rejected in Authorization, so apikey is always sent.
-  return { apikey: key, Authorization: `Bearer ${key}` };
+export function authHeaders(key) {
+  // A legacy service_role key is a JWT and goes in both headers. A new "sb_secret_…" key is
+  // not a JWT and is rejected in Authorization, so it travels in apikey alone. Same rule as
+  // scripts/migrate-auth-users.mjs; this function used to send Bearer unconditionally.
+  return key.startsWith("eyJ") ? { apikey: key, Authorization: `Bearer ${key}` } : { apikey: key };
+}
+
+/**
+ * Creates the destination bucket, private, if it does not exist yet. Never touches a bucket
+ * that is already there: its visibility and limits are the owner's settings, not this script's.
+ */
+export async function ensurePrivateBucket(projectUrl, key, bucket, fetchImpl = fetch) {
+  const base = `${projectUrl.replace(/\/+$/, "")}/storage/v1/bucket`;
+  const existing = await fetchImpl(`${base}/${encodeURIComponent(bucket)}`, { headers: authHeaders(key) });
+  if (existing.ok) {
+    const info = await existing.json();
+    if (info.public) throw new Error(`Bucket "${bucket}" exists but is PUBLIC. Reading photos must be private; fix it in the dashboard before copying.`);
+    return "exists";
+  }
+  const created = await fetchImpl(base, {
+    method: "POST",
+    headers: { ...authHeaders(key), "content-type": "application/json" },
+    body: JSON.stringify({ id: bucket, name: bucket, public: false }),
+  });
+  if (!created.ok) throw new Error(`Could not create bucket "${bucket}": HTTP ${created.status}`);
+  return "created";
+}
+
+/** The service account, from a file (local use) or straight from the env var CI holds. */
+function loadServiceAccount() {
+  const inline = process.env.FIREBASE_SERVICE_ACCOUNT_KEY?.trim();
+  if (inline) {
+    const sa = JSON.parse(inline);
+    return { ...sa, private_key: sa.private_key.replace(/\\n/g, "\n") };
+  }
+  const credentialsPath = requireEnv("GOOGLE_APPLICATION_CREDENTIALS");
+  if (!existsSync(credentialsPath)) throw new Error(`Service account file not found: ${credentialsPath}`);
+  return JSON.parse(readFileSync(credentialsPath, "utf8"));
 }
 
 async function main() {
   const args = parseArgs(process.argv.slice(2));
 
-  const firebaseBucketName = requireEnv("FIREBASE_STORAGE_BUCKET");
+  const serviceAccount = loadServiceAccount();
+  // Every Firebase project has a default bucket named after it; newer projects use the
+  // firebasestorage.app suffix. Set FIREBASE_STORAGE_BUCKET when the project uses another.
+  const firebaseBucketName = process.env.FIREBASE_STORAGE_BUCKET?.trim() || `${serviceAccount.project_id}.firebasestorage.app`;
   // The server-side scripts all use SUPABASE_URL; only the browser needs the
   // NEXT_PUBLIC_ spelling. Accept either so an operator who has already set up
   // for migrate-firestore-to-supabase.mjs does not need a second variable.
@@ -75,12 +116,23 @@ async function main() {
   const serviceRoleKey = requireEnv("SUPABASE_SERVICE_ROLE_KEY");
   const destBucket = args.bucket || process.env.SUPABASE_STORAGE_BUCKET?.trim() || "readings";
 
-  const credentialsPath = requireEnv("GOOGLE_APPLICATION_CREDENTIALS");
-  if (!existsSync(credentialsPath)) throw new Error(`Service account file not found: ${credentialsPath}`);
-  if (!getApps().length) initializeApp({ credential: cert(JSON.parse(readFileSync(credentialsPath, "utf8"))) });
-  const bucket = getStorage().bucket(firebaseBucketName);
+  if (!getApps().length) initializeApp({ credential: cert(serviceAccount) });
+  let bucket = getStorage().bucket(firebaseBucketName);
+  if (!process.env.FIREBASE_STORAGE_BUCKET?.trim() && !(await bucket.exists())[0]) {
+    // Projects created before late 2024 keep the older default name.
+    bucket = getStorage().bucket(`${serviceAccount.project_id}.appspot.com`);
+  }
+  // Object names contain member ids; a public CI log gets totals only.
+  const quiet = Boolean(process.env.GITHUB_ACTIONS);
+  const say = (line) => {
+    if (!quiet) console.log(line);
+  };
 
-  console.log(`\nCopying gs://${firebaseBucketName} -> Supabase bucket "${destBucket}"`);
+  if (args.ensureBucket && !args.dryRun) {
+    console.log(`Destination bucket "${destBucket}": ${await ensurePrivateBucket(projectUrl, serviceRoleKey, destBucket)}`);
+  }
+
+  console.log(`\nCopying gs://${bucket.name} -> Supabase bucket "${destBucket}"`);
   if (args.only) console.log(`Only prefix: ${args.only}`);
   if (args.dryRun) console.log("DRY RUN — nothing will be written.\n");
   else console.log();
@@ -98,7 +150,7 @@ async function main() {
   for (const file of targets) {
     const path = normalizeStoragePath(file.name);
     if (args.dryRun) {
-      console.log(`  [dry-run] would copy ${path}`);
+      say(`  [dry-run] would copy ${path}`);
       skipped += 1;
       continue;
     }
@@ -114,7 +166,7 @@ async function main() {
     });
     if (!put.ok) {
       failures.push({ path, status: put.status, body: await put.text() });
-      console.log(`  [fail] ${path} -> HTTP ${put.status}`);
+      say(`  [fail] ${path} -> HTTP ${put.status}`);
       continue;
     }
     uploaded += 1;
@@ -124,13 +176,13 @@ async function main() {
       const get = await fetch(url, { headers: authHeaders(serviceRoleKey) });
       if (!get.ok) {
         failures.push({ path, status: get.status, body: "verify: download failed" });
-        console.log(`  [fail] ${path} -> verify HTTP ${get.status}`);
+        say(`  [fail] ${path} -> verify HTTP ${get.status}`);
         continue;
       }
       const back = Buffer.from(await get.arrayBuffer());
       if (!back.equals(buffer)) {
         failures.push({ path, status: 0, body: "verify: bytes differ" });
-        console.log(`  [fail] ${path} -> verify byte mismatch`);
+        say(`  [fail] ${path} -> verify byte mismatch`);
         continue;
       }
       verified += 1;
@@ -142,7 +194,8 @@ async function main() {
   if (args.verify) console.log(`Verified byte-for-byte: ${verified} of ${uploaded}.`);
   if (failures.length) {
     console.log(`\n${failures.length} FAILURE(S):`);
-    for (const failure of failures) console.log(`  - ${failure.path}: ${failure.status} ${failure.body.slice(0, 200)}`);
+    for (const failure of failures) say(`  - ${failure.path}: ${failure.status} ${failure.body.slice(0, 200)}`);
+    if (quiet) console.log(`  HTTP statuses seen: ${[...new Set(failures.map((f) => f.status))].join(", ")}`);
     process.exitCode = 1;
   }
 }

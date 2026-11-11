@@ -45,6 +45,9 @@ const limitArg = process.argv.find((a) => a.startsWith("--limit="));
 const LIMIT = limitArg ? Number(limitArg.slice(8)) : Infinity;
 
 const log = (...a) => console.log(...a);
+// Uids are personal identifiers. In a public CI log show only enough to tell two lines apart.
+const PUBLIC_LOG = Boolean(process.env.GITHUB_ACTIONS);
+const label = (uid) => (PUBLIC_LOG ? `user ${String(uid).slice(0, 4)}…` : uid);
 
 function requireEnv(name) {
   const v = process.env[name];
@@ -199,7 +202,7 @@ async function main() {
 
   const token = await firebaseToken();
   const hashConfig = await getHashConfig(token);
-  log(`Firebase project ${PROJECT_ID}: scrypt rounds=${hashConfig.rounds} memCost=${hashConfig.memCost}`);
+  log(`Firebase project ${PROJECT_ID}: password hashes can be carried over (scrypt).`);
   log(`Supabase: ${SUPABASE_URL}\n`);
 
   const stats = { total: 0, created: 0, hashed: 0, noPassword: 0, skipped: 0, failed: 0, noSalt: 0 };
@@ -216,13 +219,15 @@ async function main() {
       continue;
     }
     if (!email) {
-      log(`  SKIP  ${uid} has no email`);
+      log(`  SKIP  ${label(uid)} has no email`);
       stats.failed++;
       continue;
     }
 
     try {
-      let created = await createSupabaseUser(user);
+      // A dry run must not create anything. It used to call the admin API here regardless and
+      // skip only the SQL, which left real auth.users rows with no auth_uid_map entry behind.
+      let created = DRY_RUN ? { id: null } : await createSupabaseUser(user);
       if (created.conflict) {
         const found = await client.query("select id from auth.users where lower(email) = $1", [email]);
         if (!found.rowCount) throw new Error("create reported a conflict but no auth.users row matches");
@@ -240,7 +245,7 @@ async function main() {
         }
         stats.hashed++;
       } else if (user.passwordHash && !user.salt) {
-        log(`  WARN  ${uid} has a password hash but an empty salt — cannot carry it over; user will need a reset`);
+        log(`  WARN  ${label(uid)} has a password hash but an empty salt — cannot carry it over; user will need a reset`);
         stats.noSalt++;
       } else {
         // OAuth-only account (Google sign-in). No password to carry; the user signs
@@ -257,7 +262,10 @@ async function main() {
       stats.created++;
       if (stats.created % 50 === 0) log(`  …${stats.created} migrated`);
     } catch (error) {
-      log(`  FAIL  ${uid} (${email ?? "no email"}): ${error.message.split("\n")[0]}`);
+      // Never the email, and never GoTrue's response body (it echoes the address back):
+      // these logs are public when the script runs in GitHub Actions on a public repository.
+      const reason = PUBLIC_LOG ? error.message.split("\n")[0].replace(/\):.*$/, ")") : error.message.split("\n")[0];
+      log(`  FAIL  ${label(uid)}: ${reason}`);
       stats.failed++;
     }
   }

@@ -208,7 +208,7 @@ accepts `_` in place of the project ref and redirects to your most recent projec
 | Variable | Dashboard location | Notes |
 |---|---|---|
 | `SUPABASE_URL` | **Settings → API Keys**, "Project URL" | `https://qgaklmvkvyljqivvryfs.supabase.co` — also derivable from the ref alone |
-| `SUPABASE_DB_URL` | **Settings → Database**, "Connection string" | Fill in the database password. Use the direct (port 5432) host, not the pooler, for migrations |
+| `SUPABASE_DB_URL` | **Connect** (top bar) → **Session pooler** | Fill in the database password. The **Direct connection** host (`db.<ref>.supabase.co`) resolves over IPv6 only, and neither GitHub Actions runners nor Vercel functions have IPv6, so it cannot be used from either. The session pooler (`…pooler.supabase.com:5432`) is IPv4 and supports the transactions and DDL the remap needs |
 | `SUPABASE_SERVICE_ROLE_KEY` | **Settings → API Keys** | See the key-format note below |
 
 **Key format matters.** Supabase is deprecating the legacy `anon`/`service_role`
@@ -231,6 +231,63 @@ the platform's secret store (App Hosting / Vercel env vars) and in a local
 `.env.local` that is gitignored — never in the repository, never in a
 `NEXT_PUBLIC_`-prefixed variable, and never pasted into chat.
 
+
+## Running it from GitHub Actions
+
+`.github/workflows/supabase-migration.yml` runs the whole of phase 3 (and the copy steps of
+phase 4) from a button, so the credentials live in GitHub's secret store and never on a laptop
+or in chat. It only runs when someone presses **Run workflow**; nothing schedules it.
+
+**State of the target project on 11 Nov 2026** (queried, not assumed): all 16 migrations applied,
+67 tables, row security on all 67 with no policies, zero rows in every table, one auth user who
+has never signed in, no storage buckets. So the site is not "on Supabase" yet: the schema is
+there and the data is not.
+
+### The four secrets
+
+GitHub → the repository → **Settings → Secrets and variables → Actions → New repository secret**.
+Paste each value into GitHub directly. Never into chat, an issue or a commit.
+
+| Secret | Where to copy it from |
+|---|---|
+| `SUPABASE_DB_URL` | Supabase → **Connect** → **Session pooler** → copy the URI, then replace `[YOUR-PASSWORD]` with the database password |
+| `SUPABASE_SERVICE_ROLE_KEY` | Supabase → **Project Settings → API Keys** → `service_role` (legacy tab) or a secret key |
+| `SUPABASE_CA_CERT` | Supabase → **Project Settings → Database → SSL Configuration → Download certificate**; open the file and paste all of it |
+| `FIREBASE_SERVICE_ACCOUNT_KEY` | Firebase console → **Project settings → Service accounts → Generate new private key**; open the file and paste all of it |
+
+### The two modes
+
+- **check** writes nothing on either side. It reports whether Supabase is complete and closed to
+  the public API key, then counts what Firebase holds: documents per collection, logins, files.
+  Run this first; it is also how a wrong secret is found cheaply.
+- **copy** needs `COPY` typed into the confirm box. In order: refuse if anyone has already signed
+  in through Supabase; restore Firebase ids from any earlier run; copy Firestore with `--verify
+  --strict`; copy logins; create the private `readings` bucket if missing and copy the photos
+  byte-verified; remap ids; print the result table. Any failing step stops the run.
+
+Each run's **Summary** page carries the tables; the raw log is not needed to read the outcome.
+
+### Why a second copy needs the remap undone first
+
+The copy writes members under their Firebase uid and the remap renames them to a uuid. A second
+copy then finds no row under the old uid and tries to insert the member again, which the unique
+email refuses, aborting the batch. The runbook below asks for exactly that sequence (rehearse,
+then copy again at cutover), so before this workflow existed the real cutover copy would have
+failed with writes frozen. `scripts/remap-auth-uids.mjs --reverse` renames everything back
+first; `uid-remap.integration.test.ts` reproduces the failure and the fix against Postgres.
+
+### What the copy does not prove
+
+Counts matching is not sign-in working. After a clean copy the next step is a preview deployment
+with the cutover variables set for **Preview only**, and phase 4 steps 5, 8 and 9 run there by
+hand. Three things outside this workflow still need the owner before that: Google sign-in
+configured in Supabase Auth (Google-only accounts cannot sign in without it), "Confirm email"
+off in Supabase Auth (sign-up throws with it on), and a decision on the Firestore daily read
+quota, since each `check` or `copy` reads every document once.
+
+**Once the live site is on Supabase, never run copy again.** It would overwrite live data with
+Firebase's stale copy. The sign-in guard is there to stop that; the tick-box that overrides it
+is for the rehearsal period only.
 
 ## Phase 1 — provision
 
