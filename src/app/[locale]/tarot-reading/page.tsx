@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import Image from "next/image";
 import { CheckCircle2, Clock3, Layers, ShieldCheck } from "lucide-react";
 import { TarotReadingForm } from "@/components/tarot-reading-form";
+import { AiReadingBadge, AiReadingNotice } from "@/components/ai-persona-badge";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AI_READING_CURRENCY, AI_TAROT_READING_PRICE } from "@/lib/ai-readings";
@@ -10,9 +11,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Tarot Mystic Divya · Tarot Card Reading",
+  title: "Tarot Mystic Divya · AI Tarot Card Reading",
   description: "Ask your question, draw a three-card past-present-future tarot spread, and receive a full Hinglish tarot reading from Tarot Mystic Divya — Divine Light and Vision.",
-  openGraph: { title: "Tarot Mystic Divya · Tarot Reading", description: "Draw your cards, pay once, get your personal Hinglish tarot reading.", url: "/tarot-reading" },
+  openGraph: { title: "Tarot Mystic Divya · AI Tarot Reading", description: "Draw your cards, pay once, get your personal Hinglish tarot reading.", url: "/tarot-reading" },
 };
 
 export default async function TarotReadingPage() {
@@ -37,6 +38,7 @@ export default async function TarotReadingPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Image src="/images/tarot-mystic-divya.jpg" alt="Tarot Mystic Divya" fill sizes="64px" /></div>
             <strong>Tarot Mystic Divya</strong>
+            <AiReadingBadge />
             <span>Divine Light and Vision · Personal reading</span>
             <div className="ask-persona-price">{AI_READING_CURRENCY} {AI_TAROT_READING_PRICE}<small>ek baar ka payment</small></div>
             <ul>
@@ -52,6 +54,7 @@ export default async function TarotReadingPage() {
       </div>
 
       <section className="ask-form-section shell" id="tarot-form">
+        <AiReadingNotice name="Tarot Mystic Divya" />
         <TarotReadingForm
           member={member ? { name: member.name, email: member.email } : null}
           price={AI_TAROT_READING_PRICE}

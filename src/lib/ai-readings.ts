@@ -41,7 +41,6 @@ export const AI_READING_PRICE = 99; // Ask Live — text-only, single question, 
 export const AI_KUNDLI_PRICE = 499;
 export const AI_VARSHPHAL_PRICE = 399;
 export const AI_PALM_READING_PRICE = 349; // two mandatory photos, deepest multi-section analysis
-export const AI_PALM_READING_ORIGINAL_PRICE = 999; // discount anchor, capped at the ₹999 ceiling
 export const AI_TAROT_READING_PRICE = 149; // text-only, structured 3-card spread
 export const AI_FACE_READING_PRICE = 299; // 1-5 photos, multi-section physiognomy report
 export const AI_VASTU_READING_PRICE = 249; // text-only, longest input + 5-section remedy plan
