@@ -9,4 +9,12 @@ export function parseArgs(argv: string[]): {
   verify: boolean;
   only: string | null;
   bucket: string | null;
+  ensureBucket: boolean;
 };
+export function authHeaders(key: string): Record<string, string>;
+export function ensurePrivateBucket(
+  projectUrl: string,
+  key: string,
+  bucket: string,
+  fetchImpl?: typeof fetch,
+): Promise<"exists" | "created">;
