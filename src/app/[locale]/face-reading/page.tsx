@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CheckCircle2, Clock3, ScanFace, ShieldCheck } from "lucide-react";
 import { FaceReadingForm } from "@/components/face-reading-form";
+import { AiReadingBadge, AiReadingNotice } from "@/components/ai-persona-badge";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AI_FACE_READING_PRICE, AI_READING_CURRENCY } from "@/lib/ai-readings";
@@ -9,9 +10,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Acharya Devraj Bhardwaj · Mukh Samudrik Shastra (Face Reading)",
+  title: "Acharya Devraj Bhardwaj · AI Face Reading (Mukh Samudrik Shastra)",
   description: "Upload a clear face photo and receive a full Hinglish Mukh Samudrik Shastra (face reading) report from Acharya Devraj Bhardwaj — personality, career, and relationships, read from your features.",
-  openGraph: { title: "Acharya Devraj Bhardwaj · Face Reading", description: "Upload your photo, pay once, get your personal Hinglish Mukh Samudrik report.", url: "/face-reading" },
+  openGraph: { title: "Acharya Devraj Bhardwaj · AI Face Reading", description: "Upload your photo, pay once, get your personal Hinglish Mukh Samudrik report.", url: "/face-reading" },
 };
 
 export default async function FaceReadingPage() {
@@ -36,6 +37,7 @@ export default async function FaceReadingPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><ScanFace size={26} /></div>
             <strong>Acharya Devraj Bhardwaj</strong>
+            <AiReadingBadge />
             <span>Mukh Samudrik Shastri · Personal reading</span>
             <div className="ask-persona-price">{AI_READING_CURRENCY} {AI_FACE_READING_PRICE}<small>ek baar ka payment</small></div>
             <ul>
@@ -47,6 +49,7 @@ export default async function FaceReadingPage() {
       </section>
 
       <section className="ask-form-section shell" id="face-form">
+        <AiReadingNotice name="Acharya Devraj Bhardwaj" />
         <FaceReadingForm
           member={member ? { name: member.name, email: member.email } : null}
           price={AI_FACE_READING_PRICE}

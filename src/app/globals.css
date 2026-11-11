@@ -530,9 +530,6 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .reading-share-nudge__referral { display:inline-flex; align-items:center; gap:7px; margin-top:14px; color:var(--copper); font:600 13px var(--sans); }
 .reading-share-nudge__referral:hover { text-decoration:underline; }
 
-.palm-price-row { display:flex; align-items:center; gap:9px; margin-top:14px; }
-.palm-price-original { color:var(--faint); font-size:15px; text-decoration:line-through; }
-.palm-price-badge { padding:3px 9px; border-radius:999px; color:#fff; background:#c0553a; font-size:11px; font-weight:700; letter-spacing:.04em; text-transform:uppercase; }
 .palm-upload-grid { display:grid; grid-template-columns:1fr 1fr; gap:16px; margin-top:20px; }
 .palm-upload-slot { display:flex; flex-direction:column; align-items:center; gap:8px; padding:26px 16px; border:1.5px dashed var(--line); border-radius:16px; cursor:pointer; text-align:center; color:var(--muted); background:rgba(255,255,255,.35); transition:.2s; }
 .palm-upload-slot:hover { border-color:var(--copper); color:var(--copper-dark); }
@@ -3134,6 +3131,9 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 
 /* AI persona disclosure — see src/components/ai-persona-badge.tsx */
 .ai-persona-badge { display:inline-flex; align-items:center; gap:5px; width:max-content; padding:3px 9px; border:1px solid rgba(76,116,141,.35); border-radius:999px; background:rgba(76,116,141,.1); color:#3f5f75; font-size:12px; font-weight:600; letter-spacing:.01em; white-space:nowrap; }
+.ask-persona-card .ai-persona-badge { margin-top:8px; }
+.ai-reading-notice { display:flex; align-items:flex-start; gap:10px; margin:0 0 18px; padding:12px 14px; border:1px solid rgba(76,116,141,.35); border-radius:12px; background:rgba(76,116,141,.1); font-size:14px; line-height:1.5; }
+.ai-reading-notice svg { flex:none; margin-top:3px; }
 .ai-persona-note { display:flex; gap:10px; align-items:flex-start; padding:12px 14px; border:1px solid rgba(76,116,141,.28); border-radius:10px; background:rgba(76,116,141,.07); color:#3f5f75; font-size:13px; line-height:1.5; }
 .ai-persona-note svg { flex-shrink:0; margin-top:2px; }
 

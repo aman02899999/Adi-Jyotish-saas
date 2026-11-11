@@ -10,14 +10,14 @@ The quality bar for this repo. A change that breaks one of these is not done. Nu
 |---|---|---|
 | Types | `npm run typecheck` | 0 errors |
 | Lint | `npm run lint` | 0 errors, 2 warnings (`<img>` in `block-renderer.tsx`) |
-| Unit tests | `npm test` | 677 passed, 0 failed |
+| Unit tests | `npm test` | 698 passed, 0 failed |
 | Build | `npm run build` | passes |
 | Integration (Postgres) | CI job `integration` | not run locally; CI is the proof |
 | End to end | `npm run test:e2e` (14 spec files, 21 tests) | not run locally; CI is the proof |
 
 ## Ratchets (these only move one way)
 
-1. **Tests are never reduced.** The unit suite stays at 677 passing or more. No test is deleted,
+1. **Tests are never reduced.** The unit suite stays at 698 passing or more. No test is deleted,
    skipped or weakened to get green. The 694 skipped tests are the Postgres integration suites,
    which skip by design without a database; they must keep running in the CI `integration` job.
 2. **No new lint suppressions** (`eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `as any`)
@@ -47,9 +47,9 @@ area adds one.
 | Rule | Guard today |
 |---|---|
 | Synthetic reviews never reach a public page or a price | `src/lib/review-provenance.test.ts` |
-| Every AI surface says "AI" | none. The six AI reading pages fail it today |
-| No struck-out price that was never charged | none. `computeSessionPriceAnchor` fails it today |
-| "Most chosen" only from real plan counts | none. It is a fixed flag on the Pro plan today |
+| Every AI surface says "AI" | `src/lib/honest-disclosure.test.ts` for the six reading pages. PDFs, emails and checkout receipts not yet guarded |
+| No struck-out price that was never charged | `src/lib/honest-disclosure.test.ts` |
+| "Most chosen" only from real plan counts | `src/lib/honest-disclosure.test.ts` bans the phrase until a count exists |
 | No banned claims (guarantees, fear, death or illness predictions) in published text | none |
 | Crisis words stop the AI and show helplines | none. No such handling exists |
 | Payment bypass flags are off in Production | env-gated in `payment-bypass.ts` and `free-ai.ts`; the Vercel values are unverified |

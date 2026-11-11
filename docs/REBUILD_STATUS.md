@@ -32,12 +32,12 @@ place", never "a customer was watched using it".
 
 | Feature | Status | Evidence |
 |---|---|---|
-| AI label on the six AI reading pages | **Broken** | `/ask`, `/palm-reading`, `/tarot-reading`, `/face-reading`, `/vastu-consultation` and `/lal-kitab-reading`: neither the page file nor its form component contains the word "AI". Each is headed by a human name and title ("Shree Santram Shashtri", "Pandit Trilochan Shashtri", "Tarot Mystic Divya", "Acharya Devraj Bhardwaj", "Vastu Shastri Ramesh Chaturvedi", "Pandit Girish Trivedi") |
+| AI label on the six AI reading pages | **Works** in code, live unverified | Each page now shows an "AI reading · Not a person" badge on the persona card, an AI notice beside the form that takes payment, and "AI" in its title. Guarded by `src/lib/honest-disclosure.test.ts`. Seen in a local browser at 390 and 1280 px. The reading PDFs and emails are not yet checked |
 | AI label on the 30 AI chat astrologers | **Unknown** | The home page copy says "each one labelled" (`messages/en.json`). Cards and profiles not viewed in a browser |
-| Struck-out prices on AI chat cards | **Broken** | `computeSessionPriceAnchor` in `src/lib/practitioner-pricing.ts` invents the "original" price: it picks a 50 to 80% discount from a hash of the astrologer's slug and works the crossed-out price backwards. Nobody was ever charged it |
-| Struck-out price on Palm Reading | **Broken** | `AI_PALM_READING_ORIGINAL_PRICE = 999` in `src/lib/ai-readings.ts` is commented "discount anchor"; the price charged is ₹349 |
+| Struck-out prices on AI chat cards | **Works** in code, live unverified | The invented anchor (`computeSessionPriceAnchor`) is removed; cards, profiles and the home page show the flat session price only. Guarded by the same test |
+| Struck-out price on Palm Reading | **Works** in code, live unverified | The ₹999 anchor and "% OFF" badge are removed; the page shows ₹349 |
 | Discount on the two human astrologers | **Works**, review it | `reviewDiscountPercent`: 30% off with no reviews, 20% under 10, 10% under 25. A real new-astrologer discount off the listed rate, and the same number is billed. Whether the listed rate was ever charged is the owner's to confirm |
-| "Most chosen" on Pro | **Broken** | `highlighted: true` is a fixed flag on the Pro seed in `src/lib/plans.ts`; `pricing-plans.tsx` prints the badge from it. No plan count is read |
+| "Most chosen" on Pro | **Works** in code, live unverified | The badge now reads "Our pick", which is what the admin's highlight switch means. The unsourced "pays for itself by the second session" line is gone. A count-backed "Most chosen" can return once plan numbers exist |
 | Home page counts (consultations, reviews, rating) | **Works** | `getHomepageStats` counts completed bookings and genuine reviews, excluding demo accounts |
 | Synthetic reviews kept off public pages | **Works** | `src/lib/review-provenance.ts` and its tests. The seeded rows are still stored |
 | One brand | **Broken** | "Adi Jyotish" appears in 53 source files; the package is `jyotish-studio`; the domain is astronomers.in. The word "Astronomers" appears in no page |

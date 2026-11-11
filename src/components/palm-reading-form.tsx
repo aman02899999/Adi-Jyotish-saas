@@ -53,10 +53,9 @@ function UploadSlot({ label, hint, file, previewUrl, onSelect }: {
   );
 }
 
-export function PalmReadingForm({ member, price, originalPrice, currency, onlinePaymentsAvailable }: {
+export function PalmReadingForm({ member, price, currency, onlinePaymentsAvailable }: {
   member: MemberPrefill | null;
   price: number;
-  originalPrice: number;
   currency: string;
   onlinePaymentsAvailable: boolean;
 }) {

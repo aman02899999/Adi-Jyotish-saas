@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { CheckCircle2, Clock3, Compass, ShieldCheck } from "lucide-react";
 import { VastuReadingForm } from "@/components/vastu-reading-form";
+import { AiReadingBadge, AiReadingNotice } from "@/components/ai-persona-badge";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AI_READING_CURRENCY, AI_VASTU_READING_PRICE } from "@/lib/ai-readings";
@@ -9,9 +10,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Vastu Shastri Ramesh Chaturvedi · Vastu Consultation",
+  title: "Vastu Shastri Ramesh Chaturvedi · AI Vastu Consultation",
   description: "Describe your home or office layout and receive a full Hinglish Vastu Shastra consultation with practical remedies from Vastu Shastri Ramesh Chaturvedi.",
-  openGraph: { title: "Vastu Shastri Ramesh Chaturvedi · Vastu Consultation", description: "Describe your property, pay once, get your personal Hinglish Vastu consultation.", url: "/vastu-consultation" },
+  openGraph: { title: "Vastu Shastri Ramesh Chaturvedi · AI Vastu Consultation", description: "Describe your property, pay once, get your personal Hinglish Vastu consultation.", url: "/vastu-consultation" },
 };
 
 export default async function VastuConsultationPage() {
@@ -36,6 +37,7 @@ export default async function VastuConsultationPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Compass size={26} /></div>
             <strong>Vastu Shastri Ramesh Chaturvedi</strong>
+            <AiReadingBadge />
             <span>Vastu Salahkar · Personal consultation</span>
             <div className="ask-persona-price">{AI_READING_CURRENCY} {AI_VASTU_READING_PRICE}<small>ek baar ka payment</small></div>
             <ul>
@@ -47,6 +49,7 @@ export default async function VastuConsultationPage() {
       </section>
 
       <section className="ask-form-section shell" id="vastu-form">
+        <AiReadingNotice name="Vastu Shastri Ramesh Chaturvedi" />
         <VastuReadingForm
           member={member ? { name: member.name, email: member.email } : null}
           price={AI_VASTU_READING_PRICE}
