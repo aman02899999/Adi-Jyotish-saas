@@ -1,3 +1,4 @@
+import { crisisResponse } from "@/lib/crisis-response";
 import { AI_READING_CURRENCY, AI_TAROT_READING_PRICE, attachRazorpayOrder, createPendingTarotReading } from "@/lib/ai-readings";
 import { liveReadingsUnavailable } from "@/lib/gemini";
 import { drawTarotSpread } from "@/lib/tarot-deck";
@@ -29,6 +30,8 @@ export async function POST(request: Request) {
 
   if (!clientName) return Response.json({ error: "Please share your name." }, { status: 400 });
   if (question.length < 8) return Response.json({ error: "Please write a fuller question (at least a sentence)." }, { status: 400 });
+  const crisis = await crisisResponse(question, { memberId: member.id, where: "the tarot reading form" });
+  if (crisis) return crisis;
 
   const cards = drawTarotSpread();
   const reading = await createPendingTarotReading({ memberId: member.id, clientName, question, cards });

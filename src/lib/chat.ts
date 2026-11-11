@@ -7,6 +7,8 @@ import { applyDiscount, getMemberDiscountPercent } from "@/lib/subscriptions";
 import { reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { captureHold as captureWalletHold, createHold as createWalletHold, getActiveHold as getWalletHold, getOrCreateWallet, InsufficientBalanceError as WalletInsufficientBalanceError, releaseHold as releaseWalletHold } from "@/lib/wallet";
+import { crisisSupportMessage, detectCrisis, type CrisisKind } from "@/lib/crisis";
+import { flagCrisisToAdmins } from "@/lib/crisis-response";
 import { getPractitionerChatReply, isDailyGeminiCapSpent, isGeminiConfigured } from "@/lib/gemini";
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { countGenuinePublishedReviews } from "@/lib/synthetic-reviews";
@@ -495,7 +497,11 @@ export async function sendMessage({ sessionId, senderType, senderName, body }: {
   // the system messages above), not a recursive sendMessage() call, so an AI reply can never itself
   // trigger another AI reply.
   if (senderType === "member") {
-    await maybeSendAiChatReply(session).catch((error) => console.error(`AI chat reply failed for session ${sessionId}`, error));
+    // Crisis words are checked on every member message, whoever is on the other side: the admins
+    // are told either way, and an AI persona answers with the helpline numbers instead of a reading.
+    const crisis = detectCrisis(truncated);
+    if (crisis) await flagCrisisToAdmins(crisis, { memberId: session.memberId, where: "a chat session", link: "/admin/chat" });
+    await maybeSendAiChatReply(session, crisis).catch((error) => console.error(`AI chat reply failed for session ${sessionId}`, error));
   }
 
   return message;
@@ -503,7 +509,7 @@ export async function sendMessage({ sessionId, senderType, senderName, body }: {
 
 const AI_CHAT_REPLY_HISTORY_LIMIT = 12;
 
-async function maybeSendAiChatReply(session: ChatSession) {
+async function maybeSendAiChatReply(session: ChatSession, crisis: CrisisKind | null = null) {
   const cutover = isSupabaseCutoverActive();
 
   // The persona fields come from the practitioner's own marketplace profile, so
@@ -523,7 +529,9 @@ async function maybeSendAiChatReply(session: ChatSession) {
     isAiPowered = data.isAiPowered ?? false;
     practitioner = { name: data.name, title: data.title, bio: data.bio, specialties: data.specialties };
   }
-  if (!isAiPowered || !isGeminiConfigured()) return;
+  if (!isAiPowered) return;
+  // The helpline message is fixed text, so it goes out even when the AI itself is unavailable.
+  if (!crisis && !isGeminiConfigured()) return;
 
   const memberName = cutover
     ? ((await getMemberContactFromSupabase(session.memberId))?.name ?? "Client")
@@ -534,11 +542,15 @@ async function maybeSendAiChatReply(session: ChatSession) {
   const transcript = turns.map((m) => `${m.senderType === "member" ? memberName : practitioner.name}: ${m.body}`).join("\n");
 
   let reply: string;
-  try {
-    reply = await getPractitionerChatReply({ systemPrompt: buildPractitionerSystemPrompt(practitioner), transcript });
-  } catch (error) {
-    console.error(`Gemini chat reply generation failed for session ${session.id}`, error);
-    return;
+  if (crisis) {
+    reply = crisisSupportMessage(crisis, "chat");
+  } else {
+    try {
+      reply = await getPractitionerChatReply({ systemPrompt: buildPractitionerSystemPrompt(practitioner), transcript });
+    } catch (error) {
+      console.error(`Gemini chat reply generation failed for session ${session.id}`, error);
+      return;
+    }
   }
 
   // The Gemini round-trip above can take long enough for the member (or the stale-session sweep)

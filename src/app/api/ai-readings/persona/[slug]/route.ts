@@ -1,3 +1,4 @@
+import { crisisResponse } from "@/lib/crisis-response";
 import { attachRazorpayOrder, AI_READING_CURRENCY, createFreeReading, createPendingPersonaReading, FreeReadingAlreadyUsedError, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
 import { liveReadingsUnavailable } from "@/lib/gemini";
 import { isPersonaOffered } from "@/lib/free-ai";
@@ -35,6 +36,8 @@ export async function POST(request: Request, { params }: { params: Promise<{ slu
 
   if (!clientName) return Response.json({ error: "Please share your name." }, { status: 400 });
   if (question.length < 8) return Response.json({ error: "Please write a fuller question (at least a sentence)." }, { status: 400 });
+  const crisis = await crisisResponse(question, { memberId: member.id, where: "the AI persona reading form" });
+  if (crisis) return crisis;
 
   // An always-free persona (price 0) never touches Razorpay or the member's one-time free-reading
   // credit at all — it's simply free, every time, for everyone. Checked first so a studio that

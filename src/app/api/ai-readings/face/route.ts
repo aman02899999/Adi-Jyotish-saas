@@ -1,3 +1,4 @@
+import { crisisResponse } from "@/lib/crisis-response";
 import { attachRazorpayOrder, AI_FACE_READING_PRICE, AI_READING_CURRENCY, createPendingFaceReading, reserveReadingId, uploadFaceImage } from "@/lib/ai-readings";
 import { liveReadingsUnavailable } from "@/lib/gemini";
 import { isStorageConfigured } from "@/lib/firestore";
@@ -55,6 +56,8 @@ export async function POST(request: Request) {
   if (!clientName) return Response.json({ error: "Please share your name." }, { status: 400 });
 
   const question = String(form.get("question") ?? "").trim().slice(0, 600);
+  const crisis = await crisisResponse(question, { memberId: member.id, where: "the face reading form" });
+  if (crisis) return crisis;
 
   const files = form.getAll("faceImages");
   if (files.length === 0) return Response.json({ error: "Please upload at least one photo of your face." }, { status: 400 });
