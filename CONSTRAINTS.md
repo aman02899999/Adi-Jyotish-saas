@@ -10,14 +10,14 @@ The quality bar for this repo. A change that breaks one of these is not done. Nu
 |---|---|---|
 | Types | `npm run typecheck` | 0 errors |
 | Lint | `npm run lint` | 0 errors, 2 warnings (`<img>` in `block-renderer.tsx`) |
-| Unit tests | `npm test` | 698 passed, 0 failed |
+| Unit tests | `npm test` | 700 passed, 0 failed |
 | Build | `npm run build` | passes |
 | Integration (Postgres) | CI job `integration` | not run locally; CI is the proof |
 | End to end | `npm run test:e2e` (14 spec files, 21 tests) | not run locally; CI is the proof |
 
 ## Ratchets (these only move one way)
 
-1. **Tests are never reduced.** The unit suite stays at 698 passing or more. No test is deleted,
+1. **Tests are never reduced.** The unit suite stays at 700 passing or more. No test is deleted,
    skipped or weakened to get green. The 694 skipped tests are the Postgres integration suites,
    which skip by design without a database; they must keep running in the CI `integration` job.
 2. **No new lint suppressions** (`eslint-disable`, `@ts-ignore`, `@ts-expect-error`, `as any`)

@@ -46,7 +46,7 @@ place", never "a customer was watched using it".
 | Crisis-word handling in AI chat and readings | **Broken** | No match for suicide, self-harm, helpline or crisis anywhere in `src/` |
 | Minors rule | **Weak** | Mentioned only in the terms, privacy and refund pages. No age check in code |
 | Footer disclaimer | **Works** | `Footer.disclaimer` in `messages/en.json`, plus a legal note on each reading page |
-| AGPL source link in the footer | **Broken** | No link to the source in `site-footer.tsx` |
+| AGPL source link in the footer | **Works** in code, live unverified | The footer links to the public repository as "Source code" on every page. Guarded by `src/lib/honest-disclosure.test.ts` |
 | Privacy page matches what is collected | **Unknown** | Not reviewed yet |
 
 ## Money paths

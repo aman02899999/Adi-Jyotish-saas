@@ -71,3 +71,20 @@ describe("plan badge", () => {
     }
   });
 });
+
+describe("source code link", () => {
+  // The chart engine uses Swiss Ephemeris under the AGPL, which asks that people who use the site
+  // over a network be offered its source. The footer is on every page, so the link lives there.
+  it("the footer links to the public repository", () => {
+    const footer = read("src/components/site-footer.tsx");
+    expect(footer).toContain('href="https://github.com/aman02899999/Adi-Jyotish-saas"');
+    expect(footer).toContain('t("sourceCode")');
+  });
+
+  it("the link has a label in both languages", () => {
+    for (const locale of ["en", "hi"]) {
+      const messages = JSON.parse(read(`messages/${locale}.json`)) as { Footer: Record<string, string> };
+      expect(messages.Footer.sourceCode, locale).toBeTruthy();
+    }
+  });
+});
