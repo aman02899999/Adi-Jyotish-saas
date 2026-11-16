@@ -1,32 +1,44 @@
 name: Uptime check
 
-# Manual only (Actions tab -> Uptime check -> Run workflow). It used to run every 15 minutes, which
-# is about 96 runs a day: billable GitHub Actions minutes on a private repo, and four live page
-# loads each time on the hosting plan. Run it by hand after a deploy instead.
+# Uptime check from outside the host. Every hour it opens the pages money flows through and
+# /api/status. /api/status runs the site's own watchdog, which emails the owner about any problem it
+# finds (once per problem per day). If a page doesn't answer, or the site can't reach its database,
+# this run fails and GitHub emails the repository owner, so a site that is completely down (and
+# can't send its own email) still raises an alarm. Smaller problems don't fail the run: the site's
+# own email covers them.
+#
+# It was manual-only while the repository was private (about 96 runs a day at every 15 minutes cost
+# Actions minutes). The repository is public now, so the runs are free, and hourly is 24 a day.
+# GitHub may start scheduled runs late or skip some when it is busy.
 on:
+  schedule:
+    - cron: "7 * * * *"
   workflow_dispatch: {}
 
+permissions: {}
+
 jobs:
-  # Synthetic uptime check for the handful of routes real money actually flows through — a failed
-  # GitHub Actions run here (visible in the Actions tab, and emailable via GitHub's own workflow-
-  # failure notifications) is the cheapest possible "is the site actually up" alarm, with no new
-  # secrets beyond the SITE_URL this workflow already requires.
   uptime:
     runs-on: ubuntu-latest
+    timeout-minutes: 5
     steps:
       - name: Check critical routes are reachable
+        env:
+          SITE: ${{ secrets.SITE_URL }}
         run: |
-          if [ -z "${{ secrets.SITE_URL }}" ]; then
+          if [ -z "$SITE" ]; then
             echo "SITE_URL repo secret not set — skipping (nothing to check yet)."
             exit 0
           fi
-          failed=0
+          fail=0
           for path in "/" "/pricing" "/book" "/astrologers"; do
-            status=$(curl -sS -o /dev/null -w "%{http_code}" "${{ secrets.SITE_URL }}$path")
-            echo "$path -> $status"
-            if [ "$status" -ge 400 ]; then
-              echo "::error::$path returned $status"
-              failed=1
-            fi
+            code=$(curl -s -o /dev/null -w '%{http_code}' --max-time 30 --retry 2 --retry-delay 20 --retry-all-errors "$SITE$path" || echo 000)
+            echo "$path -> HTTP $code"
+            if [ "$code" != "200" ]; then echo "::error::$path answered HTTP $code"; fail=1; fi
           done
-          exit $failed
+          body=$(curl -s --max-time 60 -w '\n%{http_code}' "$SITE/api/status" || printf '\n000')
+          code=$(echo "$body" | tail -n1)
+          echo "/api/status -> HTTP $code: $(echo "$body" | head -n -1)"
+          # 404 means this check is newer than the deployed site; only a broken site (5xx) fails.
+          if [ "$code" != "200" ] && [ "$code" != "404" ]; then echo "::error::The site is up but broken (HTTP $code)"; fail=1; fi
+          exit $fail
