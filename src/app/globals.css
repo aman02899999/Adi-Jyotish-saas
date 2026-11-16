@@ -1010,6 +1010,22 @@ button.text-link { border: none; background: none; padding: 0; cursor: pointer; 
 .match-score--share { margin:6px 0 18px; }
 .match-score--share strong { font-size:64px; color:var(--copper-pale); }
 .match-score--share span { color:rgba(246,234,215,.6); font-size:18px; }
+/* The way forward at the end of a page or a free-tool result: one main step, one alternative. */
+.next-step { display:flex; flex-direction:column; align-items:center; gap:10px; padding-block:56px; text-align:center; }
+.next-step h2 { margin:0; font:400 28px var(--serif); color:var(--ink); }
+.next-step p { max-width:560px; margin:0 0 10px; color:var(--muted); font-size:15px; line-height:1.65; }
+.next-step__actions { display:flex; flex-wrap:wrap; justify-content:center; gap:12px; }
+.next-step--inline { align-items:flex-start; margin-top:28px; padding:28px; border:1px solid var(--line); border-radius:20px; background:var(--paper-deep); text-align:left; }
+.next-step--inline h2 { font-size:24px; }
+.next-step--inline .next-step__actions { justify-content:flex-start; }
+.blog-post .next-step--inline { max-width:700px; margin:60px 0 80px; padding:40px; }
+.mobile-menu nav a.mobile-menu__cta { display:flex; align-items:center; justify-content:space-between; margin-bottom:6px; background:var(--copper); color:#fffaf4; font-weight:700; }
+.mobile-menu nav a.mobile-menu__cta:hover { background:var(--copper-dark); }
+@media (max-width: 520px) {
+  .next-step__actions { width:100%; flex-direction:column; }
+  .next-step__actions .button { width:100%; justify-content:center; }
+  .blog-post .next-step--inline { padding:26px 22px; }
+}
 .cosmic-card-cta { display:flex; flex-direction:column; align-items:center; gap:10px; padding-block:56px; text-align:center; color:var(--copper); }
 .cosmic-card-cta h2 { margin:0; font:400 28px var(--serif); color:var(--ink); }
 .cosmic-card-cta p { margin:0 0 8px; color:var(--muted); font-size:14px; }

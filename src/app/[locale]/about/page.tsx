@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { getStudioSettings } from "@/lib/studio-settings";
 import { getHomepageStats } from "@/lib/homepage";
+import { NextStep } from "@/components/next-step";
 
 // Same content for every visitor (admin settings + homepage stats, no auth check) — cached
 // instead of rendered fresh on every request. An admin save is visible again within the window.
@@ -58,6 +59,7 @@ export default async function AboutPage() {
         <div><UserCheck size={20} /><span>Team-reviewed practitioner profiles</span></div>
         <div><Sparkles size={20} /><span>Real sidereal chart calculations</span></div>
       </section>
+      <NextStep page="about" />
       <SiteFooter />
     </main>
   );

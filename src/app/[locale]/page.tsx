@@ -397,7 +397,7 @@ export default async function HomePage() {
               <li><span>02</span><div><strong>{t("method.step2Title")}</strong><p>{t("method.step2Body")}</p></div></li>
               <li><span>03</span><div><strong>{t("method.step3Title")}</strong><p>{t("method.step3Body")}</p></div></li>
             </ol>
-            <Link href="/dashboard" className="text-arrow">{t("method.dashboardCta")} <ArrowRight size={16} /></Link>
+            <Link href={member ? "/dashboard" : "/account?mode=register"} className="text-arrow">{t("method.dashboardCta")} <ArrowRight size={16} /></Link>
           </div>
         </div>
       </section>
@@ -425,7 +425,7 @@ export default async function HomePage() {
           <h2 style={{ fontSize: "clamp(30px,3.2vw,42px)" }}>{t("referral.headline")}<br /><em>{t("referral.headlineEm")}</em></h2>
           <p>{t("referral.body", { referrerReward: REFERRAL_REFERRER_REWARD, refereeReward: REFERRAL_REFEREE_REWARD })}</p>
         </div>
-        <Link href="/dashboard/referrals" className="button">{t("referral.cta")} <ArrowRight size={17} /></Link>
+        <Link href={member ? "/dashboard/referrals" : "/account?mode=register"} className="button">{t("referral.cta")} <ArrowRight size={17} /></Link>
       </section>
 
       <section className="cta shell reveal">

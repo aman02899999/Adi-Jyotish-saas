@@ -5,6 +5,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { GlossaryStrip } from "@/components/glossary-strip";
 import { REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
+import { NextStep } from "@/components/next-step";
 
 // No server-side data fetching at all — the form below submits to an API route client-side.
 export const metadata: Metadata = {
@@ -44,7 +45,7 @@ export default function MuhuratConciergePage() {
       </section>
 
       <section className="ask-form-section shell">
-        <MuhuratConciergeForm />
+        <MuhuratConciergeForm afterResult={<NextStep page="muhurat" variant="inline" />} />
         <p className="legal-note">This ranking reflects classical muhurat principles applied to real computed Panchang data — it&rsquo;s guidance for reflection, not a guarantee, and for major life decisions many families also consult a priest.</p>
       </section>
     <SiteFooter />

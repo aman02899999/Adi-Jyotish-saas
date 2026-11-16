@@ -28,7 +28,7 @@ const KOOTA_META: Array<{ key: keyof Breakdown; label: string; max: number }> = 
   { key: "nadi", label: "Nadi", max: 8 },
 ];
 
-export function KundliMatchingForm() {
+export function KundliMatchingForm({ afterResult }: { afterResult?: React.ReactNode }) {
   const [nameA, setNameA] = useState("");
   const [birthDateA, setBirthDateA] = useState("");
   const [birthTimeA, setBirthTimeA] = useState("");
@@ -141,6 +141,7 @@ export function KundliMatchingForm() {
         {pdfError === "other" && (
           <p className="ask-form-card__note">The PDF could not be generated right now. Please try again shortly.</p>
         )}
+        {afterResult}
       </div>
     );
   }

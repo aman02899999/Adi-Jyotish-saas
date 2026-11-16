@@ -24,7 +24,8 @@
     "myAccount": "Mera account",
     "openYourChart": "Apna chart kholein",
     "createYourChart": "Apna chart banayein",
-    "cart": "{count, plural, =0 {Cart dekhein} one {Cart dekhein (# item)} other {Cart dekhein (# items)}}"
+    "cart": "{count, plural, =0 {Cart dekhein} one {Cart dekhein (# item)} other {Cart dekhein (# items)}}",
+    "freeChart": "Free janam kundli"
   },
   "Footer": {
     "about": "About us",
@@ -182,6 +183,56 @@
       "headlineEm": "woh pal jab aap aaye the.",
       "body": "Jaanein ki aapke aage ke safar ke baare mein aasman kya kehta hai.",
       "cta": "Apni reading shuru karein"
+    }
+  },
+  "NextStep": {
+    "about": {
+      "title": "Khud dekh lijiye",
+      "body": "Aapki janam kundli sirf 10 second mein ban jaati hai, bina sign-up ke. Agar aap chahein ki koi astrologer saath baithkar samjhaye, toh hamare astrologers yahin hain.",
+      "primary": "Meri free kundli dekhein",
+      "secondary": "Hamare astrologers se milein"
+    },
+    "blogPost": {
+      "title": "Aapki apni kundli kya kehti hai?",
+      "body": "Yeh lekh aam jaankari hai. Pehle apni kundli free mein dekhiye. Uske baad personal reading chahiye toh astrologer ke saath samay book kar lijiye.",
+      "primary": "Meri free kundli dekhein",
+      "secondary": "Reading book karein"
+    },
+    "festivals": {
+      "title": "Apna koi shubh kaam plan kar rahe hain?",
+      "body": "Tyohaar ki tithi sabke liye ek hoti hai. Shaadi, griha pravesh ya nayi shuruaat ke liye apni suvidha ki dates mein achha din dhoondhiye.",
+      "primary": "Achha din dhoondhein",
+      "secondary": "Aaj ka Panchang dekhein"
+    },
+    "horoscope": {
+      "title": "Apni kundli ke hisaab se guidance chahiye?",
+      "body": "Rashifal us rashi ke sabhi logon ke liye likha jaata hai. Aapki apni kundli aapki janam tithi, samay aur sthaan se banti hai.",
+      "primary": "Meri free kundli dekhein",
+      "secondary": "Hamare AI guide se poochein · ₹{askPrice}"
+    },
+    "panchang": {
+      "title": "Kisi zaroori kaam ke liye din chun rahe hain?",
+      "body": "Aaj ka Panchang ek din dikhata hai. Muhurat tool aapki dates ke sabhi dinon ki tulna karta hai, free mein.",
+      "primary": "Achha din dhoondhein",
+      "secondary": "Poori Kundli report · ₹{kundliPrice}"
+    },
+    "numerology": {
+      "title": "Ek kadam aur gehra jaiye",
+      "body": "Numerology aapke naam aur janam tithi se banti hai. Janam kundli mein samay aur sthaan bhi judta hai, aur Lagna, Chandra rashi aur chal rahi dasha dikhti hai.",
+      "primary": "Meri free kundli dekhein",
+      "secondary": "Hamare AI guide se poochein · ₹{askPrice}"
+    },
+    "muhurat": {
+      "title": "Date pakki karne se pehle ek baar dikha lein?",
+      "body": "Yeh din sirf Panchang ke aadhaar par chune gaye hain. Astrologer inhe aapki apni kundli se mila kar dekh sakte hain.",
+      "primary": "Astrologer book karein",
+      "secondary": "Aaj ka Panchang dekhein"
+    },
+    "kundliMatching": {
+      "title": "Is milan par baat kar lijiye",
+      "body": "Guna Milan, kundli milan ka ek hissa hai. Astrologer dono kundliyan saath dekhkar aapke sawaalon ke jawab de sakte hain.",
+      "primary": "Astrologer se baat karein",
+      "secondary": "Poori Kundli report · ₹{kundliPrice}"
     }
   }
 }

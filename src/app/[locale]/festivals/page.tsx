@@ -4,6 +4,7 @@ import { ArrowUpRight, PartyPopper } from "lucide-react";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { FESTIVALS, getFeaturedFestival } from "@/lib/festivals";
+import { NextStep } from "@/components/next-step";
 
 // FESTIVALS is a static in-code constant, and SiteHeader/SiteFooter no longer touch Firestore
 // during server render (both fetch their DB-driven bits client-side) — nothing left in this
@@ -43,6 +44,8 @@ export default function FestivalsPage() {
           </Link>
         ))}
       </section>
+
+      <NextStep page="festivals" />
 
       <SiteFooter />
     </main>

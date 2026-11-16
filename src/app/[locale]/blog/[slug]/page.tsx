@@ -9,6 +9,7 @@ import { JsonLd } from "@/components/json-ld";
 import { ShareButtons } from "@/components/share-buttons";
 import { getAllPosts, getPostBySlug } from "@/lib/blog";
 import { getSiteUrl } from "@/lib/site-url";
+import { NextStep } from "@/components/next-step";
 
 // Post content is a static in-code list and SiteHeader/SiteFooter no longer touch Firestore
 // during server render — nothing in this page's render tree needs a live request.
@@ -74,12 +75,7 @@ export default async function BlogPostPage({ params }: { params: Promise<{ slug:
           ))}
         </div>
 
-        <div className="blog-post__cta">
-          <p className="eyebrow"><span /> Take it further</p>
-          <h3>Curious what your own chart shows?</h3>
-          <p>This is general guidance. A consultation reads your exact birth chart.</p>
-          <Link href="/book" className="button">Book a reading <ArrowRight size={16} /></Link>
-        </div>
+        <NextStep page="blogPost" variant="inline" />
 
         {others.length > 0 && (
           <div className="blog-post__more">

@@ -4,6 +4,7 @@ import { CheckCircle2, Clock3, Hash, ShieldCheck } from "lucide-react";
 import { NumerologyForm } from "@/components/numerology-form";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
+import { NextStep } from "@/components/next-step";
 
 // No server-side data fetching at all — the form below submits to an API route client-side.
 export const metadata: Metadata = {
@@ -46,7 +47,7 @@ export default function NumerologyPage() {
       </div>
 
       <section className="ask-form-section shell">
-        <NumerologyForm />
+        <NumerologyForm afterResult={<NextStep page="numerology" variant="inline" />} />
         <p className="legal-note">Numerology is offered for guidance and reflection, not a guarantee of any outcome.</p>
       </section>
     <SiteFooter />

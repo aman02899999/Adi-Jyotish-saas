@@ -44,7 +44,7 @@ function formatTime(iso: string | null) {
   return new Date(iso).toLocaleTimeString("en-IN", { timeZone: "Asia/Kolkata", hour: "numeric", minute: "2-digit" });
 }
 
-export function MuhuratConciergeForm() {
+export function MuhuratConciergeForm({ afterResult }: { afterResult?: React.ReactNode }) {
   const [decisionType, setDecisionType] = useState(DECISION_OPTIONS[0].key);
   const [startDate, setStartDate] = useState(todayIso());
   const [endDate, setEndDate] = useState(addDaysIso(todayIso(), 13));
@@ -97,6 +97,7 @@ export function MuhuratConciergeForm() {
         <div className="ask-answer__actions">
           <button type="button" className="button button--ghost" onClick={() => setResult(null)}>Search another range</button>
         </div>
+        {afterResult}
       </div>
     );
   }
