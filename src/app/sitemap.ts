@@ -5,6 +5,7 @@ import { getAllPosts } from "@/lib/blog";
 import { getMarketplacePractitioners } from "@/lib/marketplace";
 import { getPublishedCustomPages } from "@/lib/custom-pages";
 import { FESTIVALS } from "@/lib/festivals";
+import { monthKey, parsePanchangMonth } from "@/lib/panchang-archive";
 import { getSiteUrl } from "@/lib/site-url";
 
 export const dynamic = "force-dynamic";
@@ -15,6 +16,11 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
   const people = await getMarketplacePractitioners();
   const posts = getAllPosts();
   const [personas, customPages] = await Promise.all([getActivePersonas().then((rows) => rows.filter(isPersonaOffered)), getPublishedCustomPages()]);
+  // The monthly Panchang for this year and next: the 24 pages people plan from. Single days and
+  // other years stay out of the sitemap on purpose (see isIndexablePanchangPage).
+  const panchangMonths = [updated.getUTCFullYear(), updated.getUTCFullYear() + 1]
+    .flatMap((year) => Array.from({ length: 12 }, (_, index) => monthKey(year, index + 1)))
+    .filter((key) => parsePanchangMonth(key));
   return [
     { url: new URL("/", site).toString(), lastModified: updated, changeFrequency: "weekly", priority: 1 },
     { url: new URL("/astrologers", site).toString(), lastModified: updated, changeFrequency: "daily", priority: 0.95 },
@@ -51,6 +57,7 @@ export default async function sitemap(): Promise<MetadataRoute.Sitemap> {
     ...posts.map((post) => ({ url: new URL(`/blog/${post.slug}`, site).toString(), lastModified: new Date(post.publishedAt), changeFrequency: "monthly" as const, priority: 0.6 })),
     ...personas.map((persona) => ({ url: new URL(`/ai/${persona.slug}`, site).toString(), lastModified: persona.updatedAt, changeFrequency: "weekly" as const, priority: 0.7 })),
     ...customPages.map((page) => ({ url: new URL(`/p/${page.slug}`, site).toString(), lastModified: page.updatedAt, changeFrequency: "monthly" as const, priority: 0.5 })),
+    ...panchangMonths.map((key) => ({ url: new URL(`/panchang/${key}`, site).toString(), lastModified: updated, changeFrequency: "monthly" as const, priority: 0.5 })),
     ...FESTIVALS.map((festival) => ({ url: new URL(`/festivals/${festival.slug}`, site).toString(), lastModified: updated, changeFrequency: "monthly" as const, priority: 0.6 })),
   ];
 }
