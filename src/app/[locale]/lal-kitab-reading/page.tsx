@@ -1,6 +1,7 @@
 import type { Metadata } from "next";
 import { BookOpen, CheckCircle2, Clock3, ShieldCheck } from "lucide-react";
 import { LalKitabReadingForm } from "@/components/lal-kitab-reading-form";
+import { AiReadingBadge, AiReadingNotice } from "@/components/ai-persona-badge";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AI_LAL_KITAB_READING_PRICE, AI_READING_CURRENCY } from "@/lib/ai-readings";
@@ -9,9 +10,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Pandit Girish Trivedi · Lal Kitab Remedial Reading",
+  title: "Pandit Girish Trivedi · AI Lal Kitab Remedial Reading",
   description: "Share your birth details and concern, and receive a full Hinglish Lal Kitab reading with practical remedies (upay) from Pandit Girish Trivedi.",
-  openGraph: { title: "Pandit Girish Trivedi · Lal Kitab Reading", description: "Share your birth details, pay once, get your personal Hinglish Lal Kitab reading with remedies.", url: "/lal-kitab-reading" },
+  openGraph: { title: "Pandit Girish Trivedi · AI Lal Kitab Reading", description: "Share your birth details, pay once, get your personal Hinglish Lal Kitab reading with remedies.", url: "/lal-kitab-reading" },
 };
 
 export default async function LalKitabReadingPage() {
@@ -36,6 +37,7 @@ export default async function LalKitabReadingPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><BookOpen size={26} /></div>
             <strong>Pandit Girish Trivedi</strong>
+            <AiReadingBadge />
             <span>Lal Kitab Visheshagya · Personal reading</span>
             <div className="ask-persona-price">{AI_READING_CURRENCY} {AI_LAL_KITAB_READING_PRICE}<small>ek baar ka payment</small></div>
             <ul>
@@ -47,6 +49,7 @@ export default async function LalKitabReadingPage() {
       </section>
 
       <section className="ask-form-section shell" id="lalkitab-form">
+        <AiReadingNotice name="Pandit Girish Trivedi" />
         <LalKitabReadingForm
           member={member ? { name: member.name, email: member.email, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace } : null}
           price={AI_LAL_KITAB_READING_PRICE}

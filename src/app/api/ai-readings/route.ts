@@ -1,3 +1,4 @@
+import { crisisResponse } from "@/lib/crisis-response";
 import { AI_READING_CURRENCY, AI_READING_PRICE, attachRazorpayOrder, createFreeReading, createPendingReading, FreeReadingAlreadyUsedError, generateReadingAnswer, isEligibleForFreeReading } from "@/lib/ai-readings";
 import { liveReadingsUnavailable } from "@/lib/gemini";
 import { getCurrentMember } from "@/lib/member-auth";
@@ -37,6 +38,9 @@ export async function POST(request: Request) {
   }
   if (question.length < 8) return Response.json({ error: "Please write a fuller question (at least a sentence)." }, { status: 400 });
   if (question.length > 600) return Response.json({ error: "Please keep your question under 600 characters." }, { status: 400 });
+
+  const crisis = await crisisResponse(question, { memberId: member.id, where: "the Ask Live reading form" });
+  if (crisis) return crisis;
 
   if (await isEligibleForFreeReading(member.id)) {
     try {

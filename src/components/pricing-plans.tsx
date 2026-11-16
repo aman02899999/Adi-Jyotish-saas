@@ -70,7 +70,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
       {razorpayConfigured && <p className="legal-note">Billing is handled securely by Razorpay — cancel anytime from your dashboard.</p>}
 
       <p className="pricing-recommend">
-        <strong>Not sure which to pick?</strong> New here — start on <strong>Free</strong>, no commitment, browse and book anytime. Booking more than once a month — look for the <strong>“Most chosen”</strong> badge below; for most members it pays for itself by the second session&rsquo;s discount.
+        <strong>Not sure which to pick?</strong> New here — start on <strong>Free</strong>, no commitment, browse and book anytime. Booking more than once a month — look for the <strong>“Our pick”</strong> badge below, and compare its consultation discount with how often you book.
       </p>
 
       <div className="pricing-grid">
@@ -87,7 +87,7 @@ export function PricingPlans({ plans, memberSignedIn, member, currentSubscriptio
           const canSubscribe = razorpayConfigured && price != null && (interval === "yearly" ? plan.razorpayPlanIdYearly : plan.razorpayPlanIdMonthly);
           return (
             <article className={`pricing-card ${plan.highlighted ? "pricing-card--highlight" : ""}`} key={plan.id}>
-              {plan.highlighted && <span className="pricing-badge">Most chosen</span>}
+              {plan.highlighted && <span className="pricing-badge">Our pick</span>}
               <header><h2>{plan.name}</h2><p>{plan.tagline}</p></header>
               <div className="pricing-price"><strong>₹{price ?? plan.priceMonthly}</strong><span>/{interval === "yearly" ? "year" : "month"}</span></div>
               <ul>{plan.features.split("\n").filter(Boolean).map((feature) => <li key={feature}><Check size={14} /> {feature}</li>)}</ul>

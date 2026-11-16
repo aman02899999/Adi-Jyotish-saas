@@ -33,6 +33,7 @@ export async function SiteFooter() {
         <Link href="/refund-policy">{t("refundPolicy")}</Link>
         <Link href="/practitioner/login">{t("practitionerSignIn")}</Link>
         <Link href="/admin/login">{t("studioAdmin")}</Link>
+        <a href="https://github.com/aman02899999/Adi-Jyotish-saas" target="_blank" rel="noopener noreferrer">{t("sourceCode")}</a>
         <span>{t("disclaimer")}</span>
       </div>
     </footer>

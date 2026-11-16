@@ -12,7 +12,7 @@ import {
 import { isSupabaseCutoverActive } from "@/lib/supabase-config";
 import { getPractitionerDirectory } from "@/lib/scheduling";
 import { getPractitionerAccuracyMap } from "@/lib/predictions";
-import { computeSessionPriceAnchor, computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
+import { computeTieredSessionPrices, reviewDiscountPercent } from "@/lib/practitioner-pricing";
 import { applyDiscount } from "@/lib/subscriptions";
 import { genuineReviews, MEMBER_REVIEW_SOURCE, SYNTHETIC_REVIEW_SOURCE } from "@/lib/review-provenance";
 import { listFavoritePractitionerIdsInSupabase } from "@/lib/member-favorites-supabase";
@@ -66,10 +66,6 @@ export type MarketplacePractitioner = Awaited<ReturnType<typeof getPractitionerD
   /** Flat instant-chat price for AI-powered practitioners (see isAiPowered); null for the real
    * practitioners, who still charge per-minute via discountedRatePerMinute above. */
   sessionPrice: number | null;
-  /** Display-only "worth ₹X" anchor and the 50-80% discount off it that sessionPrice represents
-   * (see computeSessionPriceAnchor) — null wherever sessionPrice is null. Doesn't affect billing. */
-  sessionOriginalPrice: number | null;
-  sessionDiscountPercent: number | null;
 };
 
 /** Genuine review totals for one practitioner. The dimension sums are only known on the Postgres
@@ -180,7 +176,6 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
   return scored.map(({ person, rating, reviewCount, dimensions }) => {
     const discountPercent = reviewDiscountPercent(reviewCount);
     const sessionPrice = sessionPriceById.get(person.id) ?? null;
-    const sessionAnchor = sessionPrice !== null ? computeSessionPriceAnchor(sessionPrice, person.slug) : null;
     return {
       ...person,
       rating,
@@ -190,8 +185,6 @@ async function fetchMarketplacePractitioners(): Promise<MarketplacePractitioner[
       reviewDiscountPercent: discountPercent,
       discountedRatePerMinute: Math.max(1, applyDiscount(person.chatRatePerMinute, discountPercent)),
       sessionPrice,
-      sessionOriginalPrice: sessionAnchor?.originalPrice ?? null,
-      sessionDiscountPercent: sessionAnchor?.discountPercent ?? null,
     } satisfies MarketplacePractitioner;
   });
 }

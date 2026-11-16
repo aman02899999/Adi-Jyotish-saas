@@ -229,7 +229,7 @@ export default async function HomePage() {
                       <h3>{expert.name}</h3>
                       <div className="senior-main-card__meta">
                         <span>{t("seniors.yearsExperience", { years: expert.experienceYears })}</span>
-                        <span>{expert.sessionPrice != null ? `₹${expert.sessionOriginalPrice} → ₹${expert.sessionPrice} (${expert.sessionDiscountPercent}% off)` : `₹${expert.chatRatePerMinute}/min`}</span>
+                        <span>{expert.sessionPrice != null ? `₹${expert.sessionPrice} per session` : `₹${expert.chatRatePerMinute}/min`}</span>
                       </div>
                       <p className="senior-main-card__bio">{expert.bio}</p>
                       <div className="senior-main-card__tags">
@@ -254,7 +254,7 @@ export default async function HomePage() {
                   </div>
                   <strong>{expert.name}</strong>
                   <span>{expert.title}</span>
-                  <small>{t("seniors.yrsShort", { years: expert.experienceYears })} · {expert.sessionPrice != null ? `${expert.sessionDiscountPercent}% off, ₹${expert.sessionPrice}` : `₹${expert.chatRatePerMinute}/min`}</small>
+                  <small>{t("seniors.yrsShort", { years: expert.experienceYears })} · {expert.sessionPrice != null ? `₹${expert.sessionPrice} per session` : `₹${expert.chatRatePerMinute}/min`}</small>
                 </Link>
               ))}
             </div>
@@ -289,7 +289,7 @@ export default async function HomePage() {
                 <div className="live-card__tags">{expert.specialties.split(",").slice(0, 3).map((tag, tagIndex) => <span key={tag} className={tagIndex === 0 ? "primary-specialty" : undefined}>{tag.trim()}</span>)}</div>
                 <div className="live-card__foot">
                   <div className="live-card__price">{expert.sessionPrice != null ? (
-                    <strong><s style={{ color: "var(--faint)", fontSize: 12 }}>₹{expert.sessionOriginalPrice}</s> ₹{expert.sessionPrice}<small style={{ display: "inline", fontSize: 11 }}>·{expert.sessionDiscountPercent}% off</small></strong>
+                    <strong>₹{expert.sessionPrice}<small style={{ display: "inline", fontSize: 11 }}> per session</small></strong>
                   ) : expert.reviewDiscountPercent > 0 ? (
                     <strong><s style={{ color: "var(--faint)", fontSize: 12 }}>₹{expert.chatRatePerMinute}</s> ₹{expert.discountedRatePerMinute}<small style={{ display: "inline", fontSize: 11 }}>/min</small></strong>
                   ) : (

@@ -1,3 +1,4 @@
+import { crisisResponse } from "@/lib/crisis-response";
 import { AI_LAL_KITAB_READING_PRICE, AI_READING_CURRENCY, attachRazorpayOrder, createPendingLalKitabReading } from "@/lib/ai-readings";
 import { liveReadingsUnavailable } from "@/lib/gemini";
 import { getCurrentMember } from "@/lib/member-auth";
@@ -36,6 +37,8 @@ export async function POST(request: Request) {
     return Response.json({ error: "Please share your name and exact birth date, time, and place." }, { status: 400 });
   }
   if (question.length < 8) return Response.json({ error: "Please write your concern in a bit more detail (at least a sentence)." }, { status: 400 });
+  const crisis = await crisisResponse(question, { memberId: member.id, where: "the Lal Kitab reading form" });
+  if (crisis) return crisis;
 
   const reading = await createPendingLalKitabReading({ memberId: member.id, clientName, birthDate, birthTime, birthPlace, question });
 

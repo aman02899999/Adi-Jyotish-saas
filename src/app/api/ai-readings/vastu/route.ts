@@ -1,3 +1,4 @@
+import { crisisResponse } from "@/lib/crisis-response";
 import { AI_READING_CURRENCY, AI_VASTU_READING_PRICE, attachRazorpayOrder, createPendingVastuReading } from "@/lib/ai-readings";
 import { liveReadingsUnavailable } from "@/lib/gemini";
 import { getCurrentMember } from "@/lib/member-auth";
@@ -28,6 +29,8 @@ export async function POST(request: Request) {
 
   if (!clientName) return Response.json({ error: "Please share your name." }, { status: 400 });
   if (question.length < 15) return Response.json({ error: "Please describe your home/office layout and concern in a bit more detail." }, { status: 400 });
+  const crisis = await crisisResponse(question, { memberId: member.id, where: "the Vastu reading form" });
+  if (crisis) return crisis;
 
   const reading = await createPendingVastuReading({ memberId: member.id, clientName, question });
 

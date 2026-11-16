@@ -2,6 +2,7 @@ import type { Metadata } from "next";
 import { Link } from "@/i18n/navigation";
 import { ArrowRight, CheckCircle2, Clock3, ShieldCheck, Sparkles } from "lucide-react";
 import { AskReadingForm } from "@/components/ask-reading-form";
+import { AiReadingBadge, AiReadingNotice } from "@/components/ai-persona-badge";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { AI_READING_CURRENCY, AI_READING_PRICE, isEligibleForFreeReading } from "@/lib/ai-readings";
@@ -10,9 +11,9 @@ import { isRazorpayConfigured } from "@/lib/razorpay";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
-  title: "Ask Shree Santram Shashtri · Instant Live Reading",
+  title: "Ask Shree Santram Shashtri · Instant AI Reading",
   description: "Get an instant, personal Vedic astrology answer from our Live Jyotish guide, Shree Santram Shashtri — pay once, receive your reading in moments.",
-  openGraph: { title: "Ask Shree Santram Shashtri · Instant Live Reading", description: "Pay once, ask your question, receive an instant personal Jyotish reading.", url: "/ask" },
+  openGraph: { title: "Ask Shree Santram Shashtri · Instant AI Reading", description: "Pay once, ask your question, receive an instant personal Jyotish reading.", url: "/ask" },
 };
 
 export default async function AskPage() {
@@ -38,6 +39,7 @@ export default async function AskPage() {
           <div className="ask-persona-card">
             <div className="ask-persona-avatar"><Sparkles size={26} /></div>
             <strong>Shree Santram Shashtri</strong>
+            <AiReadingBadge />
             <span>Live Jyotish Guide · Available instantly</span>
             <div className="ask-persona-price">{isFreeEligible ? "Free" : `${AI_READING_CURRENCY} ${AI_READING_PRICE}`}<small>{isFreeEligible ? "your first reading" : "per reading"}</small></div>
             <ul>
@@ -49,6 +51,7 @@ export default async function AskPage() {
       </section>
 
       <section className="ask-form-section shell" id="ask-form">
+        <AiReadingNotice name="Shree Santram Shashtri" />
         <AskReadingForm
           member={member ? { name: member.name, email: member.email, birthDate: member.birthDate, birthTime: member.birthTime, birthPlace: member.birthPlace } : null}
           price={AI_READING_PRICE}
