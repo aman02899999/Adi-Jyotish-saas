@@ -88,3 +88,27 @@ describe("source code link", () => {
     }
   });
 });
+
+// The privacy page must name everything a reading really collects and every company that
+// receives it. These lines went missing once: palm and face photos were collected for months
+// without the page saying so.
+describe("privacy page matches what is collected", () => {
+  const privacy = readFileSync(path.join(process.cwd(), "src/app/[locale]/privacy/page.tsx"), "utf8");
+
+  it("says palm and face photos are collected", () => {
+    expect(privacy).toMatch(/photos of your palms/i);
+    expect(privacy).toMatch(/of your face/i);
+  });
+
+  it.each(["Razorpay", "Gemini API", "Resend", "Ably", "Firebase", "Vercel", "Sentry", "Turnstile"])("names %s as a company that receives data", (name) => {
+    expect(privacy).toContain(name);
+  });
+
+  it("does not name a provider the site does not use", () => {
+    expect(privacy).not.toContain("Pusher");
+  });
+
+  it("explains what happens when crisis words are written", () => {
+    expect(privacy).toMatch(/suicide, self-harm, or abuse/);
+  });
+});

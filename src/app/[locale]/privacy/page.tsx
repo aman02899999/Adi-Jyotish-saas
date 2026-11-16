@@ -29,6 +29,8 @@ export default async function PrivacyPage() {
         <ul>
           <li><strong>Account information</strong> — name, email, phone number, and a securely hashed password (or, if you sign in with Google, an identifier from Google — we never see your Google password).</li>
           <li><strong>Birth details</strong> — birth date, time, and place, used to compute your astrological chart, Panchang, matches, and readings. This is the most sensitive information you provide us.</li>
+          <li><strong>Photos you upload</strong> — photos of your palms for a Palm reading and of your face for a Face reading. They are used only to produce that reading, are kept in private storage that only your account and our system can reach, and are deleted when you delete your account.</li>
+          <li><strong>Questions you ask</strong> — the question or concern you type for an AI reading or an AI chat.</li>
           <li><strong>Consultation content</strong> — chat messages, session notes, and reviews created while using the marketplace.</li>
           <li><strong>Payment information</strong> — handled by Razorpay; we store the resulting transaction ID and amount, never your full card, UPI, or bank number.</li>
           <li><strong>Usage information</strong> — pages visited, device/browser type, and IP address, used for security (rate limiting, fraud prevention) and, where analytics is enabled, aggregate product improvement.</li>
@@ -40,6 +42,7 @@ export default async function PrivacyPage() {
           <li>To connect you with a practitioner and process bookings and payments.</li>
           <li>To send you service messages — booking confirmations, payment receipts, and account security notices.</li>
           <li>To protect the Service against abuse, fraud, and unauthorized access.</li>
+          <li>For your safety: if a question or chat message mentions suicide, self-harm, or abuse, we do not produce a reading. We show helpline numbers and alert our support team so a person can check in. The alert says that it happened, not what you wrote.</li>
           <li>To improve the Service, where you have not opted out of analytics.</li>
         </ul>
         <p>We do not sell your personal information, and we do not use your birth details for anything beyond generating the readings and matches you request.</p>
@@ -48,10 +51,13 @@ export default async function PrivacyPage() {
         <p>Your birth details and consultation content are shared only with the practitioner you choose to book or chat with, so they can prepare and deliver your reading. We also share limited data with service providers who help us run Jyotish, each bound to use it only for that purpose:</p>
         <ul>
           <li><strong>Razorpay</strong> — payment processing.</li>
-          <li><strong>Google (Gemini API)</strong> — generates AI reading text from the question and chart context you provide; Google does not use this data to train its own models when accessed via the API.</li>
+          <li><strong>Google (Gemini API)</strong> — generates AI reading and AI chat text from the question, chart context, and, for Palm and Face readings, the photos you provide. Readings marked &ldquo;AI&rdquo; are written by this AI, not by a person.</li>
           <li><strong>Resend</strong> — delivers transactional emails (receipts, confirmations).</li>
-          <li><strong>Pusher / Ably</strong> — powers real-time chat delivery.</li>
-          <li><strong>Firebase (Google)</strong> — if you choose to sign in with Google, authenticates that sign-in.</li>
+          <li><strong>Ably</strong> — powers real-time chat delivery.</li>
+          <li><strong>Firebase (Google)</strong> — stores your account, readings, chats, and uploaded photos, and handles sign-in.</li>
+          <li><strong>Vercel</strong> — hosts the website.</li>
+          <li><strong>Sentry</strong> — receives error reports so we can fix faults.</li>
+          <li><strong>Cloudflare Turnstile</strong> — checks that forms are submitted by people, not bots.</li>
         </ul>
         <p>We may also disclose information if required by law, or to protect the rights, safety, and property of Adi Jyotish Guru, our users, or the public.</p>
 
