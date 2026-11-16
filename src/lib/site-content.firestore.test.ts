@@ -31,7 +31,7 @@ describeFirestore("site content on the live Firestore path", () => {
     expect((await getHomeHeroContent()).headline).toBe("Your stars.");
     await updateHomeHeroContent({ headline: "New headline", primaryCtaHref: "javascript:alert(1)" });
     await updateHomeHeroContent({ lead: "New lead" });
-    expect(await getHomeHeroContent()).toMatchObject({ headline: "New headline", lead: "New lead", primaryCtaHref: "/dashboard" });
+    expect(await getHomeHeroContent()).toMatchObject({ headline: "New headline", lead: "New lead", primaryCtaHref: "/#free-chart" });
     await updateFooterContent({ blurb: "New footer" });
     expect((await getFooterContent()).blurb).toBe("New footer");
   });

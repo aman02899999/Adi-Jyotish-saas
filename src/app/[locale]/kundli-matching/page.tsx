@@ -5,6 +5,7 @@ import { KundliMatchingForm } from "@/components/kundli-matching-form";
 import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { GlossaryStrip } from "@/components/glossary-strip";
+import { NextStep } from "@/components/next-step";
 
 // No server-side data fetching at all — the form below submits to an API route client-side.
 export const metadata: Metadata = {
@@ -47,7 +48,7 @@ export default function KundliMatchingPage() {
       </section>
 
       <section className="ask-form-section shell">
-        <KundliMatchingForm />
+        <KundliMatchingForm afterResult={<NextStep page="kundliMatching" variant="inline" />} />
         <p className="legal-note">Guna Milan is one traditional input among many — it&rsquo;s guidance for reflection, not a guarantee, and not a substitute for the couple&rsquo;s own compatibility, values, and communication.</p>
       </section>
     <SiteFooter />

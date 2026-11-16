@@ -6,7 +6,7 @@ import { TurnstileWidget, isTurnstileEnabled } from "@/components/turnstile-widg
 
 type Result = { lifePathNumber: number; destinyNumber: number; narrative: string };
 
-export function NumerologyForm() {
+export function NumerologyForm({ afterResult }: { afterResult?: React.ReactNode }) {
   const [name, setName] = useState("");
   const [birthDate, setBirthDate] = useState("");
   const [loading, setLoading] = useState(false);
@@ -48,6 +48,7 @@ export function NumerologyForm() {
         <div className="ask-answer__actions">
           <button type="button" className="button button--ghost" onClick={() => setResult(null)}>Get another reading</button>
         </div>
+        {afterResult}
       </div>
     );
   }

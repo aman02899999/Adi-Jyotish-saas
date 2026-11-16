@@ -7,6 +7,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { ZODIAC_SIGNS, getDailyHoroscope, isZodiacSign, todayCivilDate, type ZodiacSignKey } from "@/lib/horoscopes";
 import { getSiteUrl } from "@/lib/site-url";
+import { NextStep } from "@/components/next-step";
 
 export const dynamic = "force-dynamic";
 export const metadata: Metadata = {
@@ -71,11 +72,7 @@ export default async function HoroscopePage({ searchParams }: { searchParams: Pr
             <p>Today&rsquo;s reading for {definition.name} is not available right now. Please check back shortly.</p>
           </div>
         )}
-        <div className="horoscope-panel__cta">
-          <Sparkles size={15} />
-          <span>Want guidance on your own chart?</span>
-          <Link href="/ask" className="button button--small">Ask a personal question <ArrowRight size={14} /></Link>
-        </div>
+        <NextStep page="horoscope" variant="inline" />
         <ShareButtons url={new URL(`/horoscope?sign=${sign}`, getSiteUrl()).toString()} title={`${definition.name} Horoscope Today`} text={`Today's ${definition.name} horoscope on Adi Jyotish Guru:`} />
         <p className="legal-note">This horoscope offers guidance and reflection, not a guarantee of any outcome.</p>
       </section>

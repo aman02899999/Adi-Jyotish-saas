@@ -6,6 +6,7 @@ import { SiteHeader } from "@/components/site-header";
 import { SiteFooter } from "@/components/site-footer";
 import { GlossaryStrip } from "@/components/glossary-strip";
 import { getTodayPanchang, REFERENCE_LOCATION_LABEL } from "@/lib/panchang";
+import { NextStep } from "@/components/next-step";
 
 // Computed data (no Firestore, no auth), same for every visitor — revalidated hourly so the
 // "today" values roll over promptly across the date boundary.
@@ -97,11 +98,7 @@ export default async function PanchangPage() {
           </div>
         </div>
 
-        <div className="horoscope-panel__cta">
-          <Sparkles size={15} />
-          <span>Want guidance on your own chart?</span>
-          <Link href="/kundli" className="button button--small">Get your full Kundli <ArrowRight size={14} /></Link>
-        </div>
+        <NextStep page="panchang" variant="inline" />
       </section>
     <SiteFooter />
     </main>

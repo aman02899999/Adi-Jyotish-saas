@@ -67,7 +67,7 @@ describeCutover("site content, banner and homepage numbers on Postgres", () => {
 
     it("refuses a javascript: link in a call to action", async () => {
       await updateHomeHeroContent({ primaryCtaHref: "javascript:alert(1)", secondaryCtaHref: "/pricing" });
-      expect(await getHomeHeroContent()).toMatchObject({ primaryCtaHref: "/dashboard", secondaryCtaHref: "/pricing" });
+      expect(await getHomeHeroContent()).toMatchObject({ primaryCtaHref: "/#free-chart", secondaryCtaHref: "/pricing" });
     });
 
     it("reads a copied document, which carries its Firestore timestamp too", async () => {

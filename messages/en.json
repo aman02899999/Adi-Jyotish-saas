@@ -24,7 +24,8 @@
     "myAccount": "My account",
     "openYourChart": "Open your chart",
     "createYourChart": "Create your chart",
-    "cart": "{count, plural, =0 {View cart} one {View cart (# item)} other {View cart (# items)}}"
+    "cart": "{count, plural, =0 {View cart} one {View cart (# item)} other {View cart (# items)}}",
+    "freeChart": "Free birth chart"
   },
   "Footer": {
     "about": "About us",
@@ -182,6 +183,56 @@
       "headlineEm": "the moment you arrived.",
       "body": "Discover what it has to say about where you are going.",
       "cta": "Begin your reading"
+    }
+  },
+  "NextStep": {
+    "about": {
+      "title": "See it for yourself",
+      "body": "Your birth chart takes about 10 seconds and needs no sign-up. If you would like a person to read it with you, our astrologers are here.",
+      "primary": "See my free birth chart",
+      "secondary": "Meet our astrologers"
+    },
+    "blogPost": {
+      "title": "Curious what your own chart shows?",
+      "body": "This article is general guidance. Start with your own chart, free. If you want a personal reading after that, book time with an astrologer.",
+      "primary": "See my free birth chart",
+      "secondary": "Book a reading"
+    },
+    "festivals": {
+      "title": "Planning something of your own?",
+      "body": "A festival date is the same for everyone. For a wedding, a new home or a new start, look for a good day in the dates that suit you.",
+      "primary": "Find a good day",
+      "secondary": "See today's Panchang"
+    },
+    "horoscope": {
+      "title": "Want guidance on your own chart?",
+      "body": "A sign horoscope is written for everyone born under that sign. Your own chart is built from your exact birth date, time and place.",
+      "primary": "See my free birth chart",
+      "secondary": "Ask our AI guide · ₹{askPrice}"
+    },
+    "panchang": {
+      "title": "Choosing a day for something important?",
+      "body": "Today's Panchang shows one day. The Muhurat tool compares the days in your date range, free.",
+      "primary": "Find a good day",
+      "secondary": "Full Kundli report · ₹{kundliPrice}"
+    },
+    "numerology": {
+      "title": "Go one step deeper",
+      "body": "Numerology uses your name and birth date. Your birth chart adds the time and place, and shows your Lagna, Moon sign and current dasha.",
+      "primary": "See my free birth chart",
+      "secondary": "Ask our AI guide · ₹{askPrice}"
+    },
+    "muhurat": {
+      "title": "Want a second pair of eyes on the date?",
+      "body": "These days are ranked from the Panchang alone. An astrologer can check them against your own birth chart before you fix the date.",
+      "primary": "Book an astrologer",
+      "secondary": "See today's Panchang"
+    },
+    "kundliMatching": {
+      "title": "Talk the match through",
+      "body": "Guna Milan is one part of matching. An astrologer can look at both charts together and answer your questions.",
+      "primary": "Talk to an astrologer",
+      "secondary": "Full Kundli report · ₹{kundliPrice}"
     }
   }
 }

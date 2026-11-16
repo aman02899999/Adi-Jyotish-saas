@@ -1,17 +1,42 @@
 "use client";
 
-import { FormEvent, useState } from "react";
+import { FormEvent, useState, useSyncExternalStore } from "react";
 import { ArrowRight, CalendarDays, Clock3, Phone, ShieldCheck } from "lucide-react";
 import type { MemberIdentity } from "@/lib/member-auth";
 import { PlaceAutocomplete } from "@/components/place-autocomplete";
+import { FREE_CHART_BIRTH_KEY } from "@/components/free-chart-teaser";
 
+type Prefill = { birthDate?: string; birthTime?: string; birthPlace?: string; timeUnknown?: boolean };
+
+const noSubscription = () => () => {};
+function readFreeChart() {
+  try { return sessionStorage.getItem(FREE_CHART_BIRTH_KEY); } catch { return null; /* private mode: the form simply starts empty */ }
+}
+
+/**
+ * "Save my chart free" on the homepage sends a visitor here through sign-up. The birth details
+ * they already typed for the free chart are waiting in this tab, so they are not asked twice.
+ * The stored value is read after hydration (the server has no sessionStorage) and the fields are
+ * remounted with it, which keeps the first client render identical to the server's.
+ */
 export function MemberOnboardingForm({ member, editing = false }: { member: MemberIdentity; editing?: boolean }) {
-  const [birthDate, setBirthDate] = useState(member.birthDate ?? "");
-  const [birthTime, setBirthTime] = useState(member.birthTime ?? "");
-  const [birthPlace, setBirthPlace] = useState(member.birthPlace ?? "");
+  const stored = useSyncExternalStore(noSubscription, readFreeChart, () => null);
+  let prefill: Prefill | null = null;
+  if (stored && !editing && !member.birthDate) {
+    try { prefill = JSON.parse(stored) as Prefill; } catch { prefill = null; }
+  }
+  return <OnboardingFields key={prefill?.birthDate ? "from-free-chart" : "blank"} member={member} editing={editing} prefill={prefill?.birthDate ? prefill : null} />;
+}
+
+function OnboardingFields({ member, editing, prefill }: { member: MemberIdentity; editing: boolean; prefill: Prefill | null }) {
+  const [birthDate, setBirthDate] = useState(prefill?.birthDate ?? member.birthDate ?? "");
+  // An unknown birth time is left blank on purpose: the profile needs the real one.
+  const [birthTime, setBirthTime] = useState((prefill && !prefill.timeUnknown ? prefill.birthTime : undefined) ?? member.birthTime ?? "");
+  const [birthPlace, setBirthPlace] = useState(prefill?.birthPlace ?? member.birthPlace ?? "");
   const [phone, setPhone] = useState(member.phone ?? "");
   const [error, setError] = useState("");
   const [saving, setSaving] = useState(false);
+
 
   async function submit(event: FormEvent<HTMLFormElement>) {
     event.preventDefault(); setSaving(true); setError("");

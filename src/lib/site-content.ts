@@ -26,10 +26,12 @@ const DEFAULT_HERO: HomeHeroContent = {
   headline: "Your stars.",
   headlineEm: "Your story.",
   lead: "Authentic Vedic astrology translated into thoughtful, personal guidance for the life you are living now.",
-  primaryCtaLabel: "Explore your chart",
-  primaryCtaHref: "/dashboard",
-  secondaryCtaLabel: "How it works",
-  secondaryCtaHref: "#method",
+  // The first tap goes to the free chart on this same page, which needs no account. It used to go
+  // to the dashboard, which meets a new visitor with a sign-in wall.
+  primaryCtaLabel: "See my free birth chart",
+  primaryCtaHref: "/#free-chart",
+  secondaryCtaLabel: "Talk to an astrologer",
+  secondaryCtaHref: "/astrologers",
 };
 
 const DEFAULT_FOOTER: FooterContent = {

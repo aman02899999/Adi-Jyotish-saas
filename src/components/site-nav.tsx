@@ -91,10 +91,14 @@ export function SiteNav() {
         <button type="button" aria-label="Open navigation" aria-expanded={menuOpen} onClick={() => setMenuOpen((open) => !open)}><Menu size={22} /></button>
         {menuOpen && (
           <nav>
+            {/* The header's main button is hidden at this width, so the menu carries the site's
+                first action itself: the free chart, which needs no account. */}
+            <Link href="/#free-chart" className="mobile-menu__cta">{t("freeChart")} <ArrowUpRight size={15} /></Link>
             {NAV_ITEMS.map((item) => (
               <Link key={item.href} href={item.href} className={isNavItemActive(pathname, item.href) ? "active" : undefined}>{t(item.key)}</Link>
             ))}
             <Link href={signedInName ? "/dashboard" : "/account"}>{signedInName ? t("myAccount") : t("signIn")}</Link>
+            {!signedInName && <Link href="/account?mode=register">{t("createYourChart")}</Link>}
             {signedInName && (
               <form action="/api/member/logout" method="post">
                 <button type="submit" className="mobile-nav-signout">{t("signOut")}</button>
