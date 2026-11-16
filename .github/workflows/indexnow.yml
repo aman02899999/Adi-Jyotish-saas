@@ -1,0 +1,37 @@
+name: IndexNow submit
+
+# Manual only (Actions tab -> IndexNow submit -> Run workflow), like the uptime check. Run it after a
+# production deploy that added or changed public pages. It tells Bing, Yandex, Naver, Seznam and Yep
+# to re-crawl them; Google does not take part in IndexNow. No secrets are needed.
+on:
+  workflow_dispatch:
+    inputs:
+      paths:
+        description: "Space-separated paths to submit, e.g. /blog/my-post /festivals/diwali. Leave empty for every URL in the live sitemap."
+        required: false
+        default: ""
+      dry_run:
+        description: "Only list what would be submitted"
+        type: boolean
+        default: false
+
+permissions:
+  contents: read
+
+jobs:
+  submit:
+    runs-on: ubuntu-latest
+    steps:
+      - uses: actions/checkout@v4
+      - uses: actions/setup-node@v4
+        with:
+          node-version: 22
+      - name: Submit URLs to IndexNow
+        env:
+          PATHS: ${{ inputs.paths }}
+          DRY_RUN: ${{ inputs.dry_run }}
+        run: |
+          set -f
+          flags=""
+          if [ "$DRY_RUN" = "true" ]; then flags="--dry-run"; fi
+          node scripts/indexnow-submit.mjs $flags $PATHS
